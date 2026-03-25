@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Positions - Broker App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+  <header class="top-nav">
+    <div class="flex-gap">
+      <a href="dashboard.html" style="color:white;text-decoration:none;">← Back</a>
+      <h2 style="margin:0; font-size: 1.2rem;">Manage Positions</h2>
+    </div>
+  </header>
+  
+  <div class="container mt-20">
+    <div class="card flex-between" style="padding: 15px 20px;">
+      <div class="flex-gap">
+        <button class="btn btn-blue">Open</button>
+        <button class="btn btn-outline-dark">Closed</button>
+        <button class="btn btn-outline-dark">Pending</button>
+      </div>
+      <div>
+        <input type="text" class="form-control" placeholder="Search..." style="padding: 8px;">
+      </div>
+    </div>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Type</th>
+          <th>Volume</th>
+          <th>Open Price</th>
+          <th>Current Price</th>
+          <th>SL / TP</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="positionsData">
+        <tr>
+          <td><strong class="font-bold">EURUSD</strong></td>
+          <td><span class="badge badge-success">BUY</span></td>
+          <td>1.00</td>
+          <td>1.0845</td>
+          <td class="text-success font-bold">1.0892</td>
+          <td style="font-size: 0.8rem; color: var(--text-muted)">SL: 1.0800<br>TP: 1.0950</td>
+          <td><button class="btn btn-danger close-position" data-symbol="EURUSD" style="padding: 6px 12px; font-size: 0.8rem;">Close</button></td>
+        </tr>
+        <tr>
+          <td><strong class="font-bold">BTCUSD</strong></td>
+          <td><span class="badge badge-danger">SELL</span></td>
+          <td>0.50</td>
+          <td>67,240</td>
+          <td class="text-danger font-bold">66,980</td>
+          <td style="font-size: 0.8rem; color: var(--text-muted)">SL: 68,000<br>TP: 66,500</td>
+          <td><button class="btn btn-danger close-position" data-symbol="BTCUSD" style="padding: 6px 12px; font-size: 0.8rem;">Close</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <script type="module" src="/js/positions.js"></script>
+</body>
+</html>

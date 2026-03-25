@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Broker App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+
+<body>
+  <header class="top-nav">
+    <div class="nav-links">
+      <a href="positions.html">Positions</a>
+      <a href="charts.html">Charts</a>
+      <a href="trading.html">Trading</a>
+      <a href="finance.html">Finance</a>
+      <a href="history.html">History</a>
+      <a href="account.html">Account</a>
+      <a href="settings.html">Settings</a>
+    </div>
+    <div class="font-bold text-xl"><a href="dashboard.html" style="color:white; text-decoration:none;">Dashboard</a>
+    </div>
+  </header>
+
+  <div class="container mt-20">
+    <div class="stats-grid mb-20">
+      <div class="card stat-card">
+        <div class="label" style="color: var(--text-secondary)">Balance</div>
+        <div class="value">$0.00</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label" style="color: var(--text-secondary)">Equity</div>
+        <div class="value">$0.00</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label" style="color: var(--text-secondary)">P/L</div>
+        <div class="value text-success">+$0.00</div>
+      </div>
+    </div>
+
+    <div class="grid-2 mb-20" style="grid-template-columns: 2fr 1fr;">
+      <div class="card flex"
+        style="align-items:center; justify-content:center; background: var(--bg-alt); min-height: 250px;">
+        <span class="text-muted">Portfolio Performance Chart Area</span>
+      </div>
+      <div class="card">
+        <h3>Alerts</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li style="padding: 10px 0; border-bottom: 1px solid var(--border-light); font-size: 0.9rem;">
+            <span class="badge badge-success">Success</span> Take Profit triggered for EURUSD
+          </li>
+          <li style="padding: 10px 0; border-bottom: 1px solid var(--border-light); font-size: 0.9rem;">
+            <span class="badge badge-warning" style="color:#000">Info</span> Withdrawal request approved
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flex-between mb-20">
+      <h3>Open Positions</h3>
+      <div class="flex-gap">
+        <a href="trading.html" class="btn btn-blue">New Trade</a>
+        <a href="charts.html" class="btn btn-outline-dark" style="background:#fff">View Charts</a>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Volume</th>
+          <th>Open Price</th>
+          <th>Current Price</th>
+          <th>P/L</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-bold">EURUSD</td>
+          <td>1.00</td>
+          <td>1.0845</td>
+          <td>1.0892</td>
+          <td class="text-success font-bold">+120.00</td>
+          <td><span class="badge badge-success">Open</span></td>
+        </tr>
+        <tr>
+          <td class="font-bold">BTCUSD</td>
+          <td>0.50</td>
+          <td>67,240</td>
+          <td>66,900</td>
+          <td class="text-danger font-bold">-45.00</td>
+          <td><span class="badge badge-danger">Open</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script type="module" src="/js/dashboard.js"></script>
+</body>
+
+</html>
