@@ -1,0 +1,21 @@
+{
+  "name": "broker-ui",
+  "version": "1.0.0",
+  "description": "Broker Trading Platform UI",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src/js scripts public/js --no-error-on-unmatched-pattern"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0",
+    "globals": "^15.12.0",
+    "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "lightweight-charts": "^4.2.0"
+  }
+}

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Admin Dashboard - Full system overview including all database tables, user management, and server controls.">
+  <script src="/js/theme-init.js"></script>
+  <script src="/js/lang-init.js"></script>
+  <title>Admin Dashboard - Broker App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css">
+  <style>
+    /* ════════════════════════════════════════════
+       ADMIN DASHBOARD — PREMIUM COMMAND CENTER
+    ════════════════════════════════════════════ */
+
+    /* Subtle multi-color glow behind everything */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 55% 45% at 8% -8%,  rgba(139,92,246,0.09) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 92% 108%, rgba(234,179,8,0.07)  0%, transparent 55%),
+        radial-gradient(ellipse 40% 35% at 50% 50%, rgba(59,130,246,0.05)  0%, transparent 65%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .container { position: relative; z-index: 1; }
+
+    /* ── Admin identity strip ─────────────────── */
+    .admin-header-bar {
+      background: linear-gradient(135deg,
+        rgba(139,92,246,0.16) 0%,
+        rgba(59,130,246,0.10) 50%,
+        rgba(234,179,8,0.09)  100%);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      padding: 13px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+    .admin-header-left { display: flex; align-items: center; gap: 12px; }
+
+    .admin-badge {
+      background: linear-gradient(135deg, #a78bfa, #6d28d9);
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 50px;
+      box-shadow: 0 0 16px rgba(139,92,246,0.55);
+    }
+    .admin-title-text {
+      font-size: 1.05rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.68) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+    .admin-local-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.3);
+      color: #10b981;
+      font-size: 0.73rem;
+      font-weight: 700;
+      padding: 4px 13px;
+      border-radius: 50px;
+    }
+    .admin-local-pill::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: pulse-dot 1.8s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.35; transform: scale(0.65); }
+    }
+
+    /* ── Stats grid ──────────────────────────── */
+    .admin-stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+      gap: 14px;
+      margin-bottom: 26px;
+    }
+
+    .admin-stat {
+      background: var(--surface-1);
+      border: 1px solid var(--border-light);
+      border-radius: 18px;
+      padding: 20px 22px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.33s cubic-bezier(0.34,1.56,0.64,1),
+                  box-shadow 0.3s ease;
+      cursor: default;
+    }
+    /* Left accent bar */
+    .admin-stat::before {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      inset-inline-start: 0;
+      width: 3px;
+      background: var(--sa-c, var(--accent));
+      border-radius: 0 3px 3px 0;
+      box-shadow: 0 0 14px var(--sa-g, var(--accent-glow));
+    }
+    /* Top shimmer */
+    .admin-stat::after {
+      content: '';
+      position: absolute;
+      top: 0; inset-inline-start: 0; inset-inline-end: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--sa-c, var(--accent)), transparent);
+      opacity: 0.25;
+    }
+
+    .admin-stat:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35), 0 0 0 1px var(--sa-c, var(--accent));
+    }
+
+    /* Per-card colour tokens */
+    .admin-stat:nth-child(1) { --sa-c:#a78bfa; --sa-g:rgba(167,139,250,0.4); }
+    .admin-stat:nth-child(2) { --sa-c:#34d399; --sa-g:rgba(52,211,153,0.4); }
+    .admin-stat:nth-child(3) { --sa-c:#60a5fa; --sa-g:rgba(96,165,250,0.4); }
+    .admin-stat:nth-child(4) { --sa-c:#fbbf24; --sa-g:rgba(251,191,36,0.4); }
+    .admin-stat:nth-child(5) { --sa-c:#f472b6; --sa-g:rgba(244,114,182,0.4); }
+    .admin-stat:nth-child(6) { --sa-c:#fb923c; --sa-g:rgba(251,146,60,0.4); }
+
+    .admin-stat .stat-icon  { font-size: 1.25rem; line-height: 1; }
+    .admin-stat .stat-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .admin-stat .stat-value {
+      font-size: 2.1rem;
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1;
+      color: var(--sa-c, var(--accent));
+      filter: drop-shadow(0 0 8px var(--sa-g, var(--accent-glow)));
+    }
+
+    /* ── Server / MT5 control row ────────────── */
+    .control-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 26px;
+    }
+    @media (max-width: 800px) { .control-row { grid-template-columns: 1fr; } }
+
+    .control-card {
+      border-radius: 18px;
+      padding: 19px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    .server-card {
+      background: linear-gradient(135deg, rgba(244,63,94,0.08), rgba(244,63,94,0.03));
+      border: 1px solid rgba(244,63,94,0.22);
+    }
+    .mt5-card {
+      background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.04));
+      border: 1px solid rgba(59,130,246,0.22);
+    }
+    .control-card-title {
+      font-size: 0.93rem;
+      font-weight: 700;
+      margin-bottom: 3px;
+      color: var(--text-primary);
+    }
+    .control-card-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.45;
+      max-width: 280px;
+    }
+    .control-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* ── Status pill ─────────────────────────── */
+    .server-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 13px;
+      border-radius: 50px;
+      font-size: 0.77rem;
+      font-weight: 700;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .server-status.online  { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4);  color: #10b981; }
+    .server-status.offline { background: rgba(244,63,94,0.12);  border-color: rgba(244,63,94,0.4);   color: #f43f5e; }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse-dot 1.8s ease-in-out infinite;
+    }
+
+    /* ── Compact button ──────────────────────── */
+    .btn-sm {
+      padding: 7px 15px !important;
+      font-size: 0.79rem !important;
+      border-radius: 9px !important;
+    }
+
+    /* ── Tab bar ─────────────────────────────── */
+    .admin-tabs-wrapper {
+      display: flex;
+      gap: 4px;
+      background: rgba(0,0,0,0.22);
+      padding: 5px;
+      border-radius: 16px;
+      border: 1px solid var(--border-light);
+      margin-bottom: 18px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .admin-tabs-wrapper::-webkit-scrollbar { display: none; }
+
+    .admin-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 15px;
+      border-radius: 11px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      font-family: inherit;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .admin-tab .tab-icon { font-size: 0.95rem; }
+    .admin-tab:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); }
+    .admin-tab.active {
+      background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(139,92,246,0.12));
+      color: #c4b5fd;
+      border-color: rgba(139,92,246,0.32);
+      box-shadow: 0 2px 10px rgba(139,92,246,0.2);
+    }
+
+    /* ── Tab panels ──────────────────────────── */
+    .tab-panel         { display: none; }
+    .tab-panel.active  { display: block; animation: fadeUp 0.32s cubic-bezier(0.16,1,0.3,1) both; }
+
+    /* ── Table wrapper ───────────────────────── */
+    .table-scroll {
+      overflow-x: auto;
+      border-radius: 18px;
+      border: 1px solid var(--border-light);
+      background: rgba(8,13,26,0.55);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .table-scroll table { background: transparent; border: none; box-shadow: none; border-radius: 0; }
+    .table-scroll table th  { background: rgba(0,0,0,0.35); color: var(--text-muted); font-size: 0.71rem; letter-spacing: 0.08em; padding: 13px 18px; border-bottom-color: rgba(255,255,255,0.06); }
+    .table-scroll table td  { padding: 13px 18px; font-size: 0.86rem; border-bottom-color: rgba(255,255,255,0.035); }
+    .table-scroll table tr:last-child td { border-bottom: none; }
+    .table-scroll table tr:hover td { background: rgba(139,92,246,0.06); }
+
+    /* ── Empty row ───────────────────────────── */
+    .empty-row td { text-align: center; color: var(--text-muted); padding: 44px !important; font-size: 0.88rem; }
+
+    /* ── Extra badge variants ────────────────── */
+    .badge-blue    { background: rgba(59,130,246,0.15);  color: #60a5fa; border-color: rgba(59,130,246,0.35); }
+    .badge-neutral { background: rgba(255,255,255,0.06); color: var(--text-muted); border-color: var(--border-light); }
+    .badge-purple  { background: rgba(139,92,246,0.15);  color: #a78bfa; border-color: rgba(139,92,246,0.35); }
+
+    /* ── Light theme ─────────────────────────── */
+    html[data-theme="light"] body::before { opacity: 0.4; }
+    html[data-theme="light"] .admin-header-bar { background: linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.06),rgba(234,179,8,0.05)); border-bottom-color: var(--border-light); }
+    html[data-theme="light"] .admin-tabs-wrapper { background: rgba(15,23,42,0.05); }
+    html[data-theme="light"] .admin-tab.active { background: rgba(109,40,217,0.09); color: #6d28d9; border-color: rgba(109,40,217,0.24); box-shadow: none; }
+    html[data-theme="light"] .server-card { background: rgba(244,63,94,0.04); }
+    html[data-theme="light"] .mt5-card    { background: rgba(59,130,246,0.04); }
+    html[data-theme="light"] .table-scroll { background: rgba(255,255,255,0.72); }
+    html[data-theme="light"] .table-scroll table th { background: rgba(241,245,249,0.92); }
+    html[data-theme="light"] .table-scroll table tr:hover td { background: rgba(109,40,217,0.04); }
+    html[data-theme="light"] .admin-stat { background: rgba(255,255,255,0.82); }
+  </style>
+</head>
+<body data-title-i18n="titles.admin">
+
+  <!-- Top navigation -->
+  <header class="top-nav header-centered">
+    <div class="header-leading">
+      <a href="dashboard.html" class="brand-logo-link" aria-label="Broker App">
+        <img src="/images/LOGO.png?v=6" alt="" width="160" height="40" decoding="async">
+      </a>
+      <a href="dashboard.html" class="btn btn-outline header-back">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+        </svg>
+        <span>Back</span>
+      </a>
+    </div>
+    <h2 class="header-page-title">Admin Dashboard</h2>
+  </header>
+
+  <!-- Admin identity strip -->
+  <div class="admin-header-bar">
+    <div class="admin-header-left">
+      <span class="admin-badge">⚡ Admin</span>
+      <span class="admin-title-text">System Control Panel</span>
+    </div>
+    <span class="admin-local-pill">Localhost Only</span>
+  </div>
+
+  <div class="container mt-20" style="max-width: 1340px;">
+
+    <!-- ── Stats ── -->
+    <div class="admin-stats-bar" id="adminStatsBar">
+      <div class="admin-stat"><span class="stat-icon">👥</span><span class="stat-label">Users</span>        <span class="stat-value" id="statUsers">–</span></div>
+      <div class="admin-stat"><span class="stat-icon">📈</span><span class="stat-label">Orders</span>       <span class="stat-value" id="statOrders">–</span></div>
+      <div class="admin-stat"><span class="stat-icon">📊</span><span class="stat-label">Positions</span>    <span class="stat-value" id="statPositions">–</span></div>
+      <div class="admin-stat"><span class="stat-icon">💼</span><span class="stat-label">Accounts</span>     <span class="stat-value" id="statAccounts">–</span></div>
+      <div class="admin-stat"><span class="stat-icon">💳</span><span class="stat-label">Transactions</span> <span class="stat-value" id="statTxns">–</span></div>
+      <div class="admin-stat"><span class="stat-icon">🪪</span><span class="stat-label">KYC Cases</span>    <span class="stat-value" id="statKyc">–</span></div>
+    </div>
+
+    <!-- ── Controls ── -->
+    <div class="control-row">
+
+      <div class="control-card server-card">
+        <div>
+          <div class="control-card-title">🖥️ Server Status</div>
+          <p class="control-card-sub">Backend unresponsive? Restart it — page polls until it's back online.</p>
+        </div>
+        <div class="control-card-actions">
+          <div class="server-status online" id="serverStatusBadge">
+            <span class="status-dot"></span>
+            <span id="serverStatusText">Online</span>
+          </div>
+          <button type="button" id="restartServerBtn" class="btn btn-danger   btn-sm">↻ Restart</button>
+          <button type="button" id="adminReloadBtn"   class="btn btn-outline   btn-sm">⟳ Reload</button>
+          <button type="button" id="adminLogoutBtn"   class="btn btn-outline   btn-sm">→ Logout</button>
+        </div>
+      </div>
+
+      <div class="control-card mt5-card">
+        <div>
+          <div class="control-card-title">📡 MT5 Bridge</div>
+          <p class="control-card-sub">Connect or disconnect the MetaTrader 5 live-trading bridge.</p>
+        </div>
+        <div class="control-card-actions">
+          <div class="server-status offline" id="mt5StatusBadge">
+            <span class="status-dot"></span>
+            <span id="mt5StatusText">Disconnected</span>
+          </div>
+          <button type="button" id="mt5ConnectBtn"    class="btn btn-blue        btn-sm">Connect</button>
+          <button type="button" id="mt5DisconnectBtn" class="btn btn-outline-dark btn-sm">Disconnect</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Tab navigation ── -->
+    <div class="admin-tabs-wrapper" role="tablist">
+      <button class="admin-tab active" data-tab="users"         role="tab"><span class="tab-icon">👥</span> Users</button>
+      <button class="admin-tab"        data-tab="trades"        role="tab"><span class="tab-icon">📈</span> Orders &amp; Positions</button>
+      <button class="admin-tab"        data-tab="accounts"      role="tab"><span class="tab-icon">💼</span> Accounts</button>
+      <button class="admin-tab"        data-tab="transactions"  role="tab"><span class="tab-icon">💳</span> Transactions</button>
+      <button class="admin-tab"        data-tab="kyc"           role="tab"><span class="tab-icon">🪪</span> KYC</button>
+      <button class="admin-tab"        data-tab="notifications" role="tab"><span class="tab-icon">🔔</span> Notifications</button>
+      <button class="admin-tab"        data-tab="audit"         role="tab"><span class="tab-icon">📋</span> Audit Log</button>
+    </div>
+
+    <!-- ── Users ── -->
+    <div class="tab-panel active" id="tab-users">
+      <div class="table-scroll"><table>
+        <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Role</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="adminUserRows"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- ── Orders & Positions ── -->
+    <div class="tab-panel" id="tab-trades">
+      <div class="table-scroll"><table>
+        <thead><tr><th>ID</th><th>Account ID</th><th>Type</th><th>Symbol</th><th>Side</th><th>Quantity</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody id="adminTradeRows"><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- ── Accounts ── -->
+    <div class="tab-panel" id="tab-accounts">
+      <div class="table-scroll"><table>
+        <thead><tr><th>ID</th><th>User ID</th><th>Type</th><th>Currency</th><th>Leverage</th><th>Status</th><th>Balance</th><th>Equity</th><th>Margin Used</th><th>Free Margin</th></tr></thead>
+        <tbody id="adminAccountRows"><tr class="empty-row"><td colspan="10">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- ── Transactions ── -->
+    <div class="tab-panel" id="tab-transactions">
+      <div class="table-scroll"><table>
+        <thead><tr><th>ID</th><th>Account ID</th><th>Type</th><th>Status</th><th>Amount</th><th>Currency</th><th>Method</th><th>Created</th></tr></thead>
+        <tbody id="adminTxnRows"><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- ── KYC ── -->
+    <div class="tab-panel" id="tab-kyc">
+      <div class="table-scroll"><table>
+        <thead><tr><th>ID</th><th>User ID</th><th>Status</th><th>Submitted</th><th>Reviewed</th><th>Note</th></tr></thead>
+        <tbody id="adminKycRows"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- ── Notifications ── -->
+    <div class="tab-panel" id="tab-notifications">
+      <div class="table-scroll"><table>
+        <thead><tr><th>ID</th><th>User ID</th><th>Type</th><th>Title</th><th>Body</th><th>Read</th><th>Created</th></tr></thead>
+        <tbody id="adminNotifRows"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- ── Audit Log ── -->
+    <div class="tab-panel" id="tab-audit">
+      <div class="table-scroll"><table>
+        <thead><tr><th>ID</th><th>User ID</th><th>Action</th><th>Detail</th><th>IP</th><th>Time</th></tr></thead>
+        <tbody id="adminAuditRows"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+
+  </div><!-- /container -->
+  <script type="module" src="/js/pages/admin.js"></script>
+</body>
+</html>

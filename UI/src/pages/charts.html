@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/js/theme-init.js"></script>
+  <script src="/js/lang-init.js"></script>
+
+  <title>Charts - Broker App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body data-title-i18n="titles.charts">
+  <header class="top-nav header-centered">
+    <div class="header-leading">
+      <a href="dashboard.html" class="brand-logo-link" aria-label="Broker App">
+        <img src="/images/LOGO.png?v=6" alt="" width="160" height="40" decoding="async">
+      </a>
+      <a href="dashboard.html" class="btn btn-outline header-back" data-i18n-aria-label="common.back">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+        <span data-i18n="common.back">Back</span>
+      </a>
+    </div>
+    <h2 class="header-page-title" data-i18n="charts.title">Charts</h2>
+  </header>
+
+  <div class="container mt-20">
+    <p class="charts-disclaimer mb-20" data-i18n="charts.dataNote">
+      Charts instrument list matches the Trading Area. Crypto is live via Binance; Forex/Metals are demo candles.
+    </p>
+
+    <div class="flex-gap flex-wrap mb-12" role="tablist" aria-label="Category">
+      <button type="button" class="btn btn-primary charts-cat active" data-category="forex" data-i18n="charts.catForex">Forex</button>
+      <button type="button" class="btn btn-outline-dark charts-cat" data-category="metals" data-i18n="charts.catMetals">Metals</button>
+      <button type="button" class="btn btn-outline-dark charts-cat" data-category="crypto" data-i18n="charts.catCrypto">Crypto</button>
+    </div>
+
+    <div class="flex-gap flex-wrap mb-20" id="chartsInstrumentRow" aria-label="Symbol"></div>
+
+    <div class="flex-between mb-20 flex-wrap gap-12">
+      <div class="flex-gap flex-wrap text-muted text-sm charts-tf-row" id="chartsTfRow" aria-label="Interval">
+        <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="1m">1m</button>
+        <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="5m">5m</button>
+        <button type="button" class="btn btn-primary charts-tf active" style="padding:8px 14px;font-size:0.85rem" data-interval="1h">1H</button>
+        <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="4h">4H</button>
+        <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="1d">1D</button>
+        <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="1w">1W</button>
+        <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="1M">1M</button>
+      </div>
+      <span class="text-sm text-secondary" id="chartsStatus"></span>
+    </div>
+
+    <div class="card chart-preview-area">
+      <div id="chartMount" class="chart-mount"></div>
+    </div>
+
+    <div class="card flex-between mt-20 flex-wrap gap-16">
+      <div>
+        <div class="font-bold text-xl text-primary" id="chartSymbolLabel">—</div>
+        <div class="text-secondary text-sm" id="chartBidAsk">—</div>
+      </div>
+      <div class="flex-gap">
+        <a href="trading.html" class="btn btn-success" style="padding: 12px 35px; font-size: 1.1rem;" data-i18n="trading.buy">BUY</a>
+        <a href="trading.html" class="btn btn-danger" style="padding: 12px 35px; font-size: 1.1rem;" data-i18n="trading.sell">SELL</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/pages/charts.js"></script>
+</body>
+</html>

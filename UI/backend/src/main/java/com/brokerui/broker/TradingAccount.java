@@ -1,0 +1,145 @@
+package com.brokerui.broker;
+
+import com.brokerui.user.AppUser;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import java.math.BigDecimal;
+import java.time.Instant;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+@Entity
+@Table(name = "trading_account")
+public class TradingAccount {
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "user_id", nullable = false)
+  private AppUser user;
+
+  @Column(name = "account_type", nullable = false, length = 16)
+  private String accountType = "DEMO";
+
+  @Column(nullable = false, length = 8)
+  private String currency = "USD";
+
+  @Column(nullable = false)
+  private int leverage = 100;
+
+  @Column(nullable = false, length = 16)
+  private String status = "ACTIVE";
+
+  @Column(nullable = false, precision = 18, scale = 8)
+  private BigDecimal balance = BigDecimal.ZERO;
+
+  @Column(nullable = false, precision = 18, scale = 8)
+  private BigDecimal equity = BigDecimal.ZERO;
+
+  @Column(name = "margin_used", nullable = false, precision = 18, scale = 8)
+  private BigDecimal marginUsed = BigDecimal.ZERO;
+
+  @Column(name = "free_margin", nullable = false, precision = 18, scale = 8)
+  private BigDecimal freeMargin = BigDecimal.ZERO;
+
+  @CreationTimestamp
+  @Column(name = "created_at", nullable = false, updatable = false)
+  private Instant createdAt;
+
+  @UpdateTimestamp
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt;
+
+  public Long getId() {
+    return id;
+  }
+
+  public AppUser getUser() {
+    return user;
+  }
+
+  public void setUser(AppUser user) {
+    this.user = user;
+  }
+
+  public String getAccountType() {
+    return accountType;
+  }
+
+  public void setAccountType(String accountType) {
+    this.accountType = accountType;
+  }
+
+  public String getCurrency() {
+    return currency;
+  }
+
+  public void setCurrency(String currency) {
+    this.currency = currency;
+  }
+
+  public int getLeverage() {
+    return leverage;
+  }
+
+  public void setLeverage(int leverage) {
+    this.leverage = leverage;
+  }
+
+  public String getStatus() {
+    return status;
+  }
+
+  public void setStatus(String status) {
+    this.status = status;
+  }
+
+  public BigDecimal getBalance() {
+    return balance;
+  }
+
+  public void setBalance(BigDecimal balance) {
+    this.balance = balance;
+  }
+
+  public BigDecimal getEquity() {
+    return equity;
+  }
+
+  public void setEquity(BigDecimal equity) {
+    this.equity = equity;
+  }
+
+  public BigDecimal getMarginUsed() {
+    return marginUsed;
+  }
+
+  public void setMarginUsed(BigDecimal marginUsed) {
+    this.marginUsed = marginUsed;
+  }
+
+  public BigDecimal getFreeMargin() {
+    return freeMargin;
+  }
+
+  public void setFreeMargin(BigDecimal freeMargin) {
+    this.freeMargin = freeMargin;
+  }
+
+  public Instant getCreatedAt() {
+    return createdAt;
+  }
+
+  public Instant getUpdatedAt() {
+    return updatedAt;
+  }
+}
+

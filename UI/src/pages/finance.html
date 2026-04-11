@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/js/theme-init.js"></script>
+  <script src="/js/lang-init.js"></script>
+
+  <title>Finance - Broker App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+
+<body data-title-i18n="titles.finance">
+  <header class="top-nav header-centered">
+    <div class="header-leading">
+      <a href="dashboard.html" class="brand-logo-link" aria-label="Broker App">
+        <img src="/images/LOGO.png?v=6" alt="" width="160" height="40" decoding="async">
+      </a>
+      <a href="dashboard.html" class="btn btn-outline header-back" data-i18n-aria-label="common.back">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+        <span data-i18n="common.back">Back</span>
+      </a>
+    </div>
+    <h2 class="header-page-title" data-i18n="finance.title">Funds Management</h2>
+  </header>
+
+  <div class="container mt-20" style="max-width: 800px;">
+    <div class="stats-grid mb-20" style="grid-template-columns: 1fr 1fr;">
+      <div class="card stat-card mb-0">
+        <div class="label" style="color:var(--text-secondary)" data-i18n="finance.available">Available Balance</div>
+        <div class="value text-primary font-bold" id="financeAvailable" style="font-size: 2rem;">$0.00</div>
+      </div>
+      <div class="card stat-card mb-0">
+        <div class="label" style="color:var(--text-secondary)" data-i18n="finance.pending">Pending Withdrawal</div>
+        <div class="value font-bold text-warning" id="financePendingWithdrawal" style="font-size: 2rem;">$0.00</div>
+      </div>
+    </div>
+
+    <div class="grid-2 mb-20">
+      <button class="btn btn-outline" id="depositBtn" style="padding: 16px; font-size: 1.1rem;"><span class="text-success mr-2">●</span> <span data-i18n="finance.deposit">Deposit Funds</span></button>
+      <button class="btn btn-outline" id="withdrawBtn" style="padding: 16px; font-size: 1.1rem;"><span class="text-danger mr-2">●</span> <span data-i18n="finance.withdraw">Withdraw Funds</span></button>
+    </div>
+
+    <div class="text-left" style="margin-top: 40px;">
+      <h3 class="mb-20 text-xl font-bold" data-i18n="finance.ledger">Recent Transactions (Ledger)</h3>
+
+      <div style="overflow-x: auto;">
+        <table class="mt-20">
+          <thead>
+            <tr>
+              <th data-i18n="table.dateTime">Date & Time</th>
+              <th data-i18n="table.type">Type</th>
+              <th data-i18n="table.amount">Amount</th>
+              <th data-i18n="table.method">Method</th>
+              <th data-i18n="table.status">Status</th>
+              <th data-i18n="table.ref">Ref</th>
+            </tr>
+          </thead>
+          <tbody id="financeRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/pages/finance.js"></script>
+</body>
+
+</html>

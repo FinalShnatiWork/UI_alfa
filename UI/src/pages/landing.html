@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Trade Forex, stocks, commodities and crypto on one platform. MetaTrader 5 connected brokerage UI.">
+  <meta name="theme-color" content="#030509">
+  <script src="/js/theme-init.js"></script>
+  <script src="/js/lang-init.js"></script>
+
+  <title>Home - Broker App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body data-title-i18n="titles.landing">
+  <header class="top-nav">
+    <a href="landing.html" class="brand-logo-link" aria-label="Broker App">
+      <img src="/images/LOGO.png?v=6" alt="" width="160" height="40" decoding="async" fetchpriority="high">
+    </a>
+    <div class="flex-gap">
+      <a href="login.html" class="btn btn-outline" data-i18n="landing.logIn">Log In</a>
+      <a href="register.html" class="btn btn-primary" data-i18n="landing.signUp">Sign Up</a>
+    </div>
+  </header>
+  
+  <div class="container text-center mt-20" style="padding: 60px 20px 20px;">
+    <h1 style="font-size: 2.5rem; margin-bottom: 10px;" data-i18n="landing.hero">Trade the World's Markets with One Platform</h1>
+    <p class="landing-sub-en" lang="en" dir="ltr" style="color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 30px;">Trade Forex, Stocks, Commodities &amp; Crypto — Connected to MetaTrader 5</p>
+    
+    <div class="flex flex-gap" style="justify-content: center; margin-bottom: 40px;">
+      <a href="register.html" class="btn btn-primary" style="padding: 15px 30px; font-size: 1.1rem;" data-i18n="landing.openAccount">Open Account</a>
+      <a href="dashboard.html" class="btn btn-primary" style="padding: 15px 30px; font-size: 1.1rem;" data-demo-link data-i18n="landing.demoAccount">Demo Account</a>
+    </div>
+  </div>
+
+  <div style="width: 100%; margin-bottom: 60px; overflow: hidden;">
+    <img src="/images/tradingHomePAGE.png?v=3" alt="" loading="lazy" decoding="async" width="1920" height="1080" style="width: 100%; height: auto; display: block; aspect-ratio: 16 / 9; object-fit: cover;">
+  </div>
+  
+  <div class="container text-center" style="padding: 0 20px 60px;">
+    <div class="stats-grid grid-3 card">
+      <div class="stat-card">
+        <div class="value text-primary">200+</div>
+        <div class="label" style="color: var(--text-secondary)" data-i18n="landing.assets">Trading Assets</div>
+      </div>
+      <div class="stat-card">
+        <div class="value text-primary">0.0</div>
+        <div class="label" style="color: var(--text-secondary)" data-i18n="landing.spread">Minimal Spread</div>
+      </div>
+      <div class="stat-card">
+        <div class="value text-primary">1:500</div>
+        <div class="label" style="color: var(--text-secondary)" data-i18n="landing.leverage">Max Leverage</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="landing-lang-footer" aria-label="Language" data-i18n-aria-label="settings.language">
+    <div class="landing-lang-buttons">
+      <button type="button" class="btn btn-outline landing-lang-btn" data-lang="ru" aria-pressed="false">RUS</button>
+      <button type="button" class="btn btn-outline landing-lang-btn" data-lang="en" aria-pressed="false">ENG</button>
+      <button type="button" class="btn btn-outline landing-lang-btn" data-lang="he" aria-pressed="false">HEB</button>
+    </div>
+  </nav>
+  
+  <script type="module" src="/js/pages/landing.js"></script>
+</body>
+</html>

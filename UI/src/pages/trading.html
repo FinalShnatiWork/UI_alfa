@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/js/theme-init.js"></script>
+  <script src="/js/lang-init.js"></script>
+
+  <title>Trading - Broker App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body data-title-i18n="titles.trading">
+  <header class="top-nav header-centered">
+    <div class="header-leading">
+      <a href="dashboard.html" class="brand-logo-link" aria-label="Broker App">
+        <img src="/images/LOGO.png?v=6" alt="" width="160" height="40" decoding="async">
+      </a>
+      <a href="dashboard.html" class="btn btn-outline header-back" data-i18n-aria-label="common.back">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+        <span data-i18n="common.back">Back</span>
+      </a>
+    </div>
+    <h2 class="header-page-title" data-i18n="trading.title">Trading Area</h2>
+  </header>
+
+  <div class="container mt-20" style="max-width: 500px;">
+    <div class="card text-center">
+      <div class="mb-20">
+        <select id="assetSelect" class="form-control text-center font-bold text-xl trading-asset-select">
+          <optgroup data-i18n-label="trading.optForex" label="Forex Majors">
+            <option value="EURUSD">EURUSD</option>
+            <option value="GBPUSD">GBPUSD</option>
+            <option value="USDJPY">USDJPY</option>
+            <option value="AUDUSD">AUDUSD</option>
+            <option value="USDCAD">USDCAD</option>
+            <option value="USDCHF">USDCHF</option>
+          </optgroup>
+          <optgroup data-i18n-label="trading.optMetals" label="Metals (Spot)">
+            <option value="XAUUSD">XAUUSD (Gold)</option>
+            <option value="XAGUSD">XAGUSD (Silver)</option>
+            <option value="XPTUSD">XPTUSD (Platinum)</option>
+          </optgroup>
+          <optgroup data-i18n-label="trading.optCrypto" label="Crypto">
+            <option value="BTCUSD">BTCUSD</option>
+            <option value="ETHUSD">ETHUSD</option>
+          </optgroup>
+        </select>
+
+        <!-- Live Price Banner -->
+        <div id="livePriceBanner" style="
+          margin-top: 12px;
+          background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(16,185,129,0.1));
+          border: 1px solid rgba(59,130,246,0.3);
+          border-radius: 12px;
+          padding: 14px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        ">
+          <div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">מחיר נוכחי</div>
+            <div id="livePriceValue" style="font-size: 1.6rem; font-weight: 700; color: #60a5fa; letter-spacing: -0.5px;">טוען...</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">שינוי</div>
+            <div id="livePriceChange" style="font-size: 1rem; font-weight: 600; color: var(--text-muted);">—</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-group text-left" style="margin-top:20px;">
+        <label data-i18n="trading.orderType">Order Type</label>
+        <div class="flex-gap">
+          <button type="button" class="btn btn-primary order-type-btn" data-order-type="market" style="flex:1;" data-i18n="trading.market">Market</button>
+          <button type="button" class="btn btn-outline-dark order-type-btn" data-order-type="limit" style="flex:1;" data-i18n="trading.limit">Limit</button>
+          <button type="button" class="btn btn-outline-dark order-type-btn" data-order-type="stop" style="flex:1;" data-i18n="trading.stop">Stop</button>
+        </div>
+      </div>
+
+      <div class="form-group text-left" id="entryPriceGroup" style="display: none;">
+        <label id="entryPriceLabel" data-i18n="trading.entryPrice">Entry Price</label>
+        <input type="number" class="form-control" id="entryPriceInput" data-i18n-placeholder="trading.placeholderPrice" placeholder="Specify Price" step="0.0001">
+      </div>
+      
+      <div class="form-group text-left mt-20">
+        <label data-i18n="trading.volume">Volume (Lots) [1.0 = 100k]</label>
+        <div class="flex" style="gap:10px;">
+          <button type="button" class="btn btn-outline-dark" id="volMinus" style="width: 50px; font-size: 1.2rem;">-</button>
+          <input type="number" id="vol" class="form-control text-center text-xl font-bold" value="1.00" step="0.1">
+          <button type="button" class="btn btn-outline-dark" id="volPlus" style="width: 50px; font-size: 1.2rem;">+</button>
+        </div>
+      </div>
+
+      <div class="mt-20 card" style="background: var(--bg-alt); text-align: left; padding: 15px;">
+        <div class="text-sm text-secondary mb-12 font-bold" data-i18n="trading.portfolio">Portfolio</div>
+        <div class="flex-between gap-12">
+          <div class="text-sm text-secondary" data-i18n="dashboard.balance">Balance</div>
+          <div class="font-bold" id="tradingBalance">—</div>
+        </div>
+        <div class="flex-between gap-12" style="margin-top:8px;">
+          <div class="text-sm text-secondary" data-i18n="trading.position">Position</div>
+          <div class="font-bold" id="tradingPositionQty">—</div>
+        </div>
+        <div class="flex-between gap-12" style="margin-top:8px;">
+          <div class="text-sm text-secondary" data-i18n="trading.avgPrice">Avg Price</div>
+          <div class="font-bold" id="tradingPositionAvg">—</div>
+        </div>
+      </div>
+
+      <div class="form-group text-left">
+        <label data-i18n="trading.stopLoss">Stop Loss</label>
+        <input type="number" class="form-control" placeholder="1.0800" step="0.0001">
+      </div>
+
+      <div class="form-group text-left">
+        <label data-i18n="trading.takeProfit">Take Profit</label>
+        <input type="number" class="form-control" placeholder="1.0950" step="0.0001">
+      </div>
+
+      <div class="flex-gap mt-20" style="margin-top:30px;">
+        <button type="button" class="btn btn-danger" id="sellBtn" style="flex:1; padding: 20px; font-size: 1.3rem;" data-i18n="trading.sell">SELL</button>
+        <button type="button" class="btn btn-success" id="buyBtn" style="flex:1; padding: 20px; font-size: 1.3rem;" data-i18n="trading.buy">BUY</button>
+      </div>
+      
+      <div class="mt-20 card" style="background: var(--bg-alt); text-align: left; padding: 15px;">
+        <div class="text-sm text-secondary mb-20 font-bold" data-i18n="trading.summary">Order Summary</div>
+        <div class="text-sm text-secondary" data-i18n="trading.leverageLine">Leverage: 1:100</div>
+        <div class="text-sm text-secondary" data-i18n="trading.marginLine">Required Margin: $1,089.20</div>
+        <div class="text-sm text-secondary" data-i18n="trading.pipLine">Pip Value: $10.00</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Open Positions Panel -->
+  <div class="container mt-20" style="max-width: 500px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h3 style="margin: 0; font-size: 1rem;">📊 פוזיציות פתוחות</h3>
+      <button class="btn btn-outline-dark" style="font-size: 0.8rem; padding: 6px 12px;" id="refreshPositionsBtn">↻ רענן</button>
+    </div>
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: var(--bg-alt);">
+            <th style="padding: 10px 12px; text-align: left; font-size: 0.78rem; color: var(--text-secondary);">נכס</th>
+            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">כמות</th>
+            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">כניסה</th>
+            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">נוכחי</th>
+            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">P/L</th>
+            <th style="padding: 10px 12px; text-align: center; font-size: 0.78rem; color: var(--text-secondary);">סגור</th>
+          </tr>
+        </thead>
+        <tbody id="inlinePosBody">
+          <tr><td colspan="6" style="padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">טוען...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="module" src="/js/pages/trading.js"></script>
+</body>
+</html>

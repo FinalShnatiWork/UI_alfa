@@ -1,0 +1,32 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: broker-ui-backend
+  profiles:
+    active: postgres
+  datasource:
+    url: jdbc:h2:mem:broker_ui;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+broker:
+  market:
+    finnhub-api-key: ${FINNHUB_API_KEY:}
+  mt5:
+    auto-connect: ${MT5_AUTO_CONNECT:false}
+
+logging:
+  level:
+    org.hibernate.SQL: warn
