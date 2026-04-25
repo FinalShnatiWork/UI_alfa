@@ -86,9 +86,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const balEl = document.getElementById('accountBalance');
       const eqEl  = document.getElementById('accountEquity');
       const fmEl  = document.getElementById('accountFreeMargin');
-      if (balEl && ov?.balance  != null) balEl.textContent  = fmtMoney(ov.balance);
-      if (eqEl  && ov?.equity   != null) eqEl.textContent   = fmtMoney(ov.equity);
-      if (fmEl  && ov?.freeMargin != null) fmEl.textContent = fmtMoney(ov.freeMargin);
+      if (balEl && ov?.balance    != null) { const v = fmtMoney(ov.balance);    balEl.textContent = v; balEl.title = v; }
+      if (eqEl  && ov?.equity     != null) { const v = fmtMoney(ov.equity);     eqEl.textContent  = v; eqEl.title  = v; }
+      if (fmEl  && ov?.freeMargin != null) { const v = fmtMoney(ov.freeMargin); fmEl.textContent  = v; fmEl.title  = v; }
     } catch {
       // keep local demo profile fallback
     }

@@ -273,12 +273,13 @@ h1 {
 }
 .stat-card:hover { transform: translateY(-3px) scale(1.02); }
 .stat-card .value {
-  font-size: clamp(0.85rem, 2.2vw, 1.5rem);
+  font-size: 1.25rem;
   font-weight: 800;
   margin-top: 12px;
   letter-spacing: -0.5px;
-  word-break: break-all;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   min-width: 0;
 }
 

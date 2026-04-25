@@ -45,14 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const overview = await apiGet('/api/broker/overview');
       currency = overview.currency || 'USD';
-      if (availableEl) availableEl.textContent = fmtMoney(overview.balance, currency);
+      if (availableEl) { const v = fmtMoney(overview.balance, currency); availableEl.textContent = v; availableEl.title = v; }
 
       const tx = await apiGet('/api/broker/transactions');
       const list = Array.isArray(tx) ? tx : [];
       const pendingWithdraw = list
         .filter((r) => String(r.txType).toUpperCase() === 'WITHDRAWAL' && String(r.status).toUpperCase() === 'PENDING')
         .reduce((s, r) => s + Number(r.amount ?? 0), 0);
-      if (pendingEl) pendingEl.textContent = fmtMoney(pendingWithdraw, currency);
+      if (pendingEl) { const v = fmtMoney(pendingWithdraw, currency); pendingEl.textContent = v; pendingEl.title = v; }
 
       if (tbody) {
         tbody.replaceChildren();
