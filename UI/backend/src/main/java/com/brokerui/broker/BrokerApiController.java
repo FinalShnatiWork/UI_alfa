@@ -186,6 +186,7 @@ public class BrokerApiController {
   public record CreateTransactionRequest(String txType, BigDecimal amount, String method, String note) {}
 
   @PostMapping("/transactions")
+  @Transactional
   public ResponseEntity<?> createTransaction(Authentication auth, @RequestBody CreateTransactionRequest body) {
     try {
       AppUser u = requireUser(auth);
@@ -486,7 +487,13 @@ public class BrokerApiController {
       return ResponseEntity.ok(
           kycRepo
               .findByUserId(u.getId())
-              .map(k -> Map.of("status", k.getStatus(), "submittedAt", k.getSubmittedAt(), "reviewedAt", k.getReviewedAt()))
+              .<Object>map(k -> {
+                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("status", k.getStatus());
+                m.put("submittedAt", k.getSubmittedAt() != null ? k.getSubmittedAt().toString() : null);
+                m.put("reviewedAt", k.getReviewedAt() != null ? k.getReviewedAt().toString() : null);
+                return m;
+              })
               .orElse(Map.of("status", "NOT_STARTED")));
     } catch (IllegalStateException e) {
       if ("unauthorized".equals(e.getMessage())) {

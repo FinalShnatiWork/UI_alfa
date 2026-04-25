@@ -427,15 +427,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (volPlus && volInput) {
     volPlus.addEventListener('click', () => {
       const current = parseFloat(volInput.value);
-      volInput.value = (current + 0.1).toFixed(2);
+      volInput.value = ((isNaN(current) ? 0 : current) + 0.1).toFixed(2);
     });
   }
 
   if (volMinus && volInput) {
     volMinus.addEventListener('click', () => {
       const current = parseFloat(volInput.value);
-      if (current > 0.1) {
-        volInput.value = (current - 0.1).toFixed(2);
+      const safe = isNaN(current) ? 0.1 : current;
+      if (safe > 0.1) {
+        volInput.value = (safe - 0.1).toFixed(2);
       }
     });
   }
@@ -466,7 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const active = list.filter(p => Number(p.quantity ?? 0) !== 0);
 
       if (!active.length) {
-        inlinePosBody.innerHTML = `<tr><td colspan="6" style="padding: 1.2rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">אין פוזיציות פתוחות. לחץ BUY כדי לפתוח!</td></tr>`;
+        inlinePosBody.innerHTML = `<tr><td colspan="6" style="padding: 1.2rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">${t('trading.noPositions')}</td></tr>`;
         return;
       }
 
@@ -508,10 +509,10 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', async (e) => {
           const sym = e.currentTarget.getAttribute('data-symbol');
           const qty = parseFloat(e.currentTarget.getAttribute('data-qty'));
-          if (!confirm(`סגור פוזיציה על ${sym} (${fmtP(qty)} יחידות)?`)) return;
+          if (!confirm(t('confirm.closePosition', { symbol: sym }))) return;
 
           e.currentTarget.disabled = true;
-          e.currentTarget.textContent = 'סוגר...';
+          e.currentTarget.textContent = t('common.closing');
           try {
             const res = await apiPostJson('/api/broker/orders', {
               side: 'SELL',
@@ -521,23 +522,23 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await res.json();
             if (data.ok) {
-              showToast(`✅ פוזיציה על ${sym} נסגרה @ ${data.fillPrice}`, { variant: 'success', duration: 3000 });
+              showToast(t('alerts.closeOk', { symbol: sym }) + ` @ ${data.fillPrice}`, { variant: 'success', duration: 3000 });
               setTimeout(() => { loadInlinePositions(); refreshPortfolio(assetSelect?.value ?? ''); }, 500);
             } else {
-              showToast(`❌ שגיאה: ${data.error}`, { variant: 'error' });
+              showToast(t('alerts.closeFail'), { variant: 'error' });
               e.currentTarget.disabled = false;
-              e.currentTarget.textContent = '✕ סגור';
+              e.currentTarget.textContent = '✕';
             }
           } catch {
-            showToast('שגיאה בסגירת הפוזיציה', { variant: 'error' });
+            showToast(t('alerts.closeFail'), { variant: 'error' });
             e.currentTarget.disabled = false;
-            e.currentTarget.textContent = '✕ סגור';
+            e.currentTarget.textContent = '✕';
           }
         });
       });
 
     } catch {
-      if (inlinePosBody) inlinePosBody.innerHTML = `<tr><td colspan="6" style="padding:1rem; text-align:center; color:var(--text-secondary);">לא ניתן לטעון פוזיציות</td></tr>`;
+      if (inlinePosBody) inlinePosBody.innerHTML = `<tr><td colspan="6" style="padding:1rem; text-align:center; color:var(--text-secondary);">${t('trading.loadFail')}</td></tr>`;
     }
   }
 

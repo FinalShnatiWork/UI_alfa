@@ -79,6 +79,16 @@ document.addEventListener('DOMContentLoaded', () => {
         curLine.textContent = t('account.currencyDynamic', { currency: String(ov.currency) });
         curLine.hidden = false;
       }
+
+      const cur = ov?.currency || 'USD';
+      const fmtMoney = (n) =>
+        new Intl.NumberFormat(undefined, { style: 'currency', currency: cur, maximumFractionDigits: 2 }).format(Number(n ?? 0));
+      const balEl = document.getElementById('accountBalance');
+      const eqEl  = document.getElementById('accountEquity');
+      const fmEl  = document.getElementById('accountFreeMargin');
+      if (balEl && ov?.balance  != null) balEl.textContent  = fmtMoney(ov.balance);
+      if (eqEl  && ov?.equity   != null) eqEl.textContent   = fmtMoney(ov.equity);
+      if (fmEl  && ov?.freeMargin != null) fmEl.textContent = fmtMoney(ov.freeMargin);
     } catch {
       // keep local demo profile fallback
     }

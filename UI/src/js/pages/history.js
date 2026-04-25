@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!trades.length) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="9" class="text-muted text-sm" style="padding:24px;text-align:center;">${t('alerts.comingSoon')}</td>`;
+      tr.innerHTML = `<td colspan="9" class="text-muted text-sm" style="padding:24px;text-align:center;">${t('history.noTrades') || '—'}</td>`;
       tbody.appendChild(tr);
       return;
     }

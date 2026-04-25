@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const li = document.createElement('li');
           li.className = 'text-muted text-sm';
           li.style.padding = '10px 0';
-          li.textContent = t('alerts.comingSoon');
+          li.textContent = t('dashboard.noNotifications') || '—';
           alertsEl.appendChild(li);
         } else {
           for (const n of list.slice(0, 5)) {
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = Array.isArray(positions) ? positions : [];
         if (!list.length) {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td colspan="6" class="text-muted text-sm">${escapeHtml(t('alerts.comingSoon'))}</td>`;
+          tr.innerHTML = `<td colspan="6" class="text-muted text-sm" style="padding:16px;text-align:center;">${escapeHtml(t('positions.empty'))}</td>`;
           posBody.appendChild(tr);
         } else {
           for (const p of list.slice(0, 10)) {
