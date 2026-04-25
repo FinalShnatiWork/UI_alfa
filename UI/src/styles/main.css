@@ -272,7 +272,16 @@ h1 {
   transition: transform 0.3s ease;
 }
 .stat-card:hover { transform: translateY(-3px) scale(1.02); }
-.stat-card .value { font-size: 2rem; font-weight: 800; margin-top: 12px; letter-spacing: -1px; }
+.stat-card .value {
+  font-size: clamp(1rem, 3.5vw, 2rem);
+  font-weight: 800;
+  margin-top: 12px;
+  letter-spacing: -0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 
 /* Premium Buttons - The Focus of Movement Fixes */
 .btn {
@@ -508,7 +517,8 @@ table tr:active { transform: scale(0.995); }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 24px; }
+.stats-grid > * { min-width: 0; }
 
 .dir-ltr { direction: ltr; }
 .dir-rtl { direction: rtl; }
