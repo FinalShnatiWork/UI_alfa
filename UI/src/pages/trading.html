@@ -29,25 +29,43 @@
   <div class="container mt-20" style="max-width: 500px;">
     <div class="card text-center">
       <div class="mb-20">
-        <select id="assetSelect" class="form-control text-center font-bold text-xl trading-asset-select">
-          <optgroup data-i18n-label="trading.optForex" label="Forex Majors">
+        <!-- hidden native select keeps JS compatibility -->
+        <select id="assetSelect" style="display:none;">
+          <optgroup label="Forex Majors">
             <option value="EURUSD">EURUSD</option>
             <option value="GBPUSD">GBPUSD</option>
-            <option value="USDJPY">USDJPY</option>
-            <option value="AUDUSD">AUDUSD</option>
             <option value="USDCAD">USDCAD</option>
-            <option value="USDCHF">USDCHF</option>
+            <option value="EURNOK">EURNOK</option>
+            <option value="GBPJPY">GBPJPY</option>
+            <option value="USDJPY">USDJPY</option>
+            <option value="NZDUSD">NZDUSD</option>
+            <option value="CADJPY">CADJPY</option>
           </optgroup>
-          <optgroup data-i18n-label="trading.optMetals" label="Metals (Spot)">
-            <option value="XAUUSD">XAUUSD (Gold)</option>
-            <option value="XAGUSD">XAGUSD (Silver)</option>
-            <option value="XPTUSD">XPTUSD (Platinum)</option>
+          <optgroup label="Metals">
+            <option value="XAGUSD">XAGUSD</option>
+            <option value="XAUUSD">XAUUSD</option>
           </optgroup>
-          <optgroup data-i18n-label="trading.optCrypto" label="Crypto">
+          <optgroup label="Crypto">
+            <option value="SOLUSD">SOLUSD</option>
             <option value="BTCUSD">BTCUSD</option>
             <option value="ETHUSD">ETHUSD</option>
+            <option value="XRPUSD">XRPUSD</option>
           </optgroup>
         </select>
+
+        <!-- Custom searchable dropdown -->
+        <div id="customSelectWrap" class="custom-select-wrap">
+          <button type="button" id="customSelectBtn" class="custom-select-btn form-control font-bold text-xl" aria-haspopup="listbox" aria-expanded="false">
+            <span id="customSelectLabel">EURUSD</span>
+            <svg class="custom-select-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div id="customSelectDropdown" class="custom-select-dropdown" role="listbox" style="display:none;">
+            <div class="custom-select-search-wrap">
+              <input id="customSelectSearch" class="custom-select-search" type="text" placeholder="Search..." autocomplete="off" spellcheck="false">
+            </div>
+            <div id="customSelectList" class="custom-select-list"></div>
+          </div>
+        </div>
 
         <!-- Live Price Banner -->
         <div id="livePriceBanner" style="
@@ -61,11 +79,11 @@
           align-items: center;
         ">
           <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">מחיר נוכחי</div>
-            <div id="livePriceValue" style="font-size: 1.6rem; font-weight: 700; color: #60a5fa; letter-spacing: -0.5px;">טוען...</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;" data-i18n="trading.livePriceLabel">Current price</div>
+            <div id="livePriceValue" style="font-size: 1.6rem; font-weight: 700; color: #60a5fa; letter-spacing: -0.5px;" data-i18n="common.loading">Loading...</div>
           </div>
           <div style="text-align: right;">
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;">שינוי</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px;" data-i18n="trading.changeLabel">Change</div>
             <div id="livePriceChange" style="font-size: 1rem; font-weight: 600; color: var(--text-muted);">—</div>
           </div>
         </div>
@@ -141,15 +159,15 @@
       <button class="btn btn-outline-dark" style="font-size: 0.8rem; padding: 6px 12px;" id="refreshPositionsBtn">↻ רענן</button>
     </div>
     <div class="card" style="padding: 0; overflow: hidden;">
-      <table style="width: 100%; border-collapse: collapse;">
+      <table class="positions-table" style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background: var(--bg-alt);">
-            <th style="padding: 10px 12px; text-align: left; font-size: 0.78rem; color: var(--text-secondary);">נכס</th>
-            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">כמות</th>
-            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">כניסה</th>
-            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">נוכחי</th>
-            <th style="padding: 10px 12px; text-align: right; font-size: 0.78rem; color: var(--text-secondary);">P/L</th>
-            <th style="padding: 10px 12px; text-align: center; font-size: 0.78rem; color: var(--text-secondary);">סגור</th>
+            <th>נכס</th>
+            <th class="num">כמות</th>
+            <th class="num">כניסה</th>
+            <th class="num">נוכחי</th>
+            <th class="num">P/L</th>
+            <th class="center">סגור</th>
           </tr>
         </thead>
         <tbody id="inlinePosBody">

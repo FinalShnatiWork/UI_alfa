@@ -38,36 +38,36 @@
       </div>
     </div>
     
-    <table>
+    <table class="positions-table">
       <thead>
         <tr>
           <th data-i18n="table.symbol">Symbol</th>
-          <th data-i18n="table.type">Type</th>
-          <th data-i18n="table.volume">Volume</th>
-          <th data-i18n="table.openPrice">Open Price</th>
-          <th data-i18n="table.currentPrice">Current Price</th>
+          <th class="center" data-i18n="table.type">Type</th>
+          <th class="num" data-i18n="table.volume">Volume</th>
+          <th class="num" data-i18n="table.openPrice">Open Price</th>
+          <th class="num" data-i18n="table.currentPrice">Current Price</th>
           <th data-i18n="table.slTp">SL / TP</th>
-          <th data-i18n="table.action">Action</th>
+          <th class="center" data-i18n="table.action">Action</th>
         </tr>
       </thead>
       <tbody id="positionsData">
         <tr>
           <td><strong class="font-bold">EURUSD</strong></td>
           <td><span class="badge badge-success" data-i18n="badge.buy">BUY</span></td>
-          <td>1.00</td>
-          <td>1.0845</td>
-          <td class="text-success font-bold">1.0892</td>
+          <td class="num">1.00</td>
+          <td class="num">1.0845</td>
+          <td class="num text-success font-bold">1.0892</td>
           <td style="font-size: 0.8rem; color: var(--text-muted)">SL: 1.0800<br>TP: 1.0950</td>
-          <td><button type="button" class="btn btn-danger close-position" data-symbol="EURUSD" style="padding: 6px 12px; font-size: 0.8rem;" data-i18n="common.close">Close</button></td>
+          <td class="center"><button type="button" class="btn btn-danger close-position" data-symbol="EURUSD" style="padding: 6px 12px; font-size: 0.8rem;" data-i18n="common.close">Close</button></td>
         </tr>
         <tr>
           <td><strong class="font-bold">BTCUSD</strong></td>
           <td><span class="badge badge-danger" data-i18n="badge.sell">SELL</span></td>
-          <td>0.50</td>
-          <td>67,240</td>
-          <td class="text-danger font-bold">66,980</td>
+          <td class="num">0.50</td>
+          <td class="num">67,240</td>
+          <td class="num text-danger font-bold">66,980</td>
           <td style="font-size: 0.8rem; color: var(--text-muted)">SL: 68,000<br>TP: 66,500</td>
-          <td><button type="button" class="btn btn-danger close-position" data-symbol="BTCUSD" style="padding: 6px 12px; font-size: 0.8rem;" data-i18n="common.close">Close</button></td>
+          <td class="center"><button type="button" class="btn btn-danger close-position" data-symbol="BTCUSD" style="padding: 6px 12px; font-size: 0.8rem;" data-i18n="common.close">Close</button></td>
         </tr>
       </tbody>
     </table>

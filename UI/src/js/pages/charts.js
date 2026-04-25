@@ -1,5 +1,7 @@
 import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
 import { applyI18n, t } from '../lib/i18n.js';
+import { apiGet, apiPostJson } from '../lib/api.js';
+import { showToast } from '../lib/toast.js';
 
 /** Dev: vite proxy `/binance` → Binance REST. WebSocket always uses stream.binance.com. */
 const BINANCE_PREFIX = import.meta.env.DEV ? '/binance' : 'https://api.binance.com';
@@ -23,15 +25,17 @@ function mapToBinanceSymbol(symbol) {
   const s = String(symbol || '').trim().toUpperCase();
   if (s === 'BTCUSD') return 'BTCUSDT';
   if (s === 'ETHUSD') return 'ETHUSDT';
+  if (s === 'SOLUSD') return 'SOLUSDT';
+  if (s === 'XRPUSD') return 'XRPUSDT';
   // Use Binance spot/stablecoin pairs as "FX-like" realtime quotes without API keys.
   if (s === 'EURUSD') return 'EURUSDT';
   if (s === 'GBPUSD') return 'GBPUSDT';
+  if (s === 'NZDUSD') return 'NZDUSDT';
   if (s === 'USDJPY') return 'JPYUSDT'; // inverted vs USDJPY; still realtime, labeled as proxy
-  if (s === 'AUDUSD') return 'AUDUSDT';
   if (s === 'USDCAD') return 'USDCUSDT'; // proxy; Binance doesn't provide USDCAD spot
-  if (s === 'USDCHF') return 'FDUSDUSDT'; // proxy; no USDCHF spot
   // Metals proxies (tokenized / commodity-linked where available)
   if (s === 'XAUUSD') return 'XAUTUSDT'; // Tether Gold, not spot XAUUSD
+  if (s === 'XAGUSD') return 'XAGUSDT';
   return s;
 }
 
@@ -40,25 +44,28 @@ const CATEGORY_CONFIG = {
     instruments: [
       { id: 'EURUSD', title: 'EURUSD', decimals: 5 },
       { id: 'GBPUSD', title: 'GBPUSD', decimals: 5 },
-      { id: 'USDJPY', title: 'USDJPY', decimals: 3 },
-      { id: 'AUDUSD', title: 'AUDUSD', decimals: 5 },
       { id: 'USDCAD', title: 'USDCAD', decimals: 5 },
-      { id: 'USDCHF', title: 'USDCHF', decimals: 5 },
+      { id: 'EURNOK', title: 'EURNOK', decimals: 5 },
+      { id: 'GBPJPY', title: 'GBPJPY', decimals: 3 },
+      { id: 'USDJPY', title: 'USDJPY', decimals: 3 },
+      { id: 'NZDUSD', title: 'NZDUSD', decimals: 5 },
+      { id: 'CADJPY', title: 'CADJPY', decimals: 3 },
     ],
     source: 'binance',
   },
   metals: {
     instruments: [
-      { id: 'XAUUSD', title: 'XAUUSD (via XAUTUSDT)', decimals: 2, source: 'binance' },
-      { id: 'XAGUSD', title: 'XAGUSD (demo)', decimals: 2, source: 'synthetic_live' },
-      { id: 'XPTUSD', title: 'XPTUSD (demo)', decimals: 2, source: 'synthetic_live' },
+      { id: 'XAGUSD', title: 'XAGUSD', decimals: 2, source: 'binance' },
+      { id: 'XAUUSD', title: 'XAUUSD', decimals: 2, source: 'binance' },
     ],
     source: 'binance',
   },
   crypto: {
     instruments: [
+      { id: 'SOLUSD', title: 'SOLUSD', decimals: 2 },
       { id: 'BTCUSD', title: 'BTCUSD', decimals: 2 },
       { id: 'ETHUSD', title: 'ETHUSD', decimals: 2 },
+      { id: 'XRPUSD', title: 'XRPUSD', decimals: 4 },
     ],
     source: 'binance',
   },
@@ -464,6 +471,108 @@ async function loadChart() {
 
 document.addEventListener('DOMContentLoaded', () => {
   applyI18n();
+
+  // --- Inline Open Positions Panel (same behavior as Trading) ---
+  const inlinePosBody = document.getElementById('inlinePosBody');
+  const refreshPositionsBtn = document.getElementById('refreshPositionsBtn');
+
+  function fmtP(n) {
+    const v = Number(n ?? 0);
+    if (!Number.isFinite(v)) return '—';
+    if (Math.abs(v) > 1000) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  }
+
+  async function loadInlinePositions() {
+    if (!inlinePosBody) return;
+    try {
+      const rows = await apiGet('/api/broker/positions');
+      const list = Array.isArray(rows) ? rows : [];
+      const active = list.filter((p) => Number(p.quantity ?? 0) !== 0);
+
+      if (!active.length) {
+        inlinePosBody.innerHTML =
+          `<tr><td colspan="6" style="padding: 1.2rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">אין פוזיציות פתוחות. לחץ BUY כדי לפתוח!</td></tr>`;
+        return;
+      }
+
+      const rows2 = await Promise.all(
+        active.map(async (p) => {
+          const sym = p.symbolCode ?? '';
+          const avg = Number(p.avgPrice ?? 0);
+          const qty = Number(p.quantity ?? 0);
+          let curPrice = null;
+          try {
+            const pd = await apiGet(`/api/market/price/${encodeURIComponent(sym)}`);
+            curPrice = pd?.price != null ? Number(pd.price) : null;
+          } catch {
+            /* ignore */
+          }
+
+          const curHtml = curPrice != null ? fmtP(curPrice) : '—';
+          let pnlHtml = '—';
+          if (curPrice != null) {
+            const pnl = (curPrice - avg) * qty;
+            const cls = pnl >= 0 ? 'color:#10b981' : 'color:#ef4444';
+            const sign = pnl >= 0 ? '+' : '';
+            pnlHtml = `<span style="font-weight:600;${cls}">${sign}$${fmtP(Math.abs(pnl))}</span>`;
+          }
+
+          return `<tr style="border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));">
+            <td style="font-weight: 600;">${sym}</td>
+            <td class="num">${fmtP(qty)}</td>
+            <td class="num" style="color: var(--text-secondary);">${fmtP(avg)}</td>
+            <td class="num">${curHtml}</td>
+            <td class="num">${pnlHtml}</td>
+            <td class="center">
+              <button class="btn btn-danger inline-close-pos" data-symbol="${sym}" data-qty="${qty}">✕</button>
+            </td>
+          </tr>`;
+        })
+      );
+
+      inlinePosBody.innerHTML = rows2.join('');
+
+      inlinePosBody.querySelectorAll('.inline-close-pos').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          const sym = e.currentTarget.getAttribute('data-symbol');
+          const qty = parseFloat(e.currentTarget.getAttribute('data-qty'));
+          if (!confirm(`סגור פוזיציה על ${sym} (${fmtP(qty)} יחידות)?`)) return;
+
+          e.currentTarget.disabled = true;
+          e.currentTarget.textContent = 'סוגר...';
+          try {
+            const res = await apiPostJson('/api/broker/orders', {
+              side: 'SELL',
+              symbolCode: sym,
+              quantity: qty,
+              orderType: 'MARKET',
+            });
+            const data = await res.json();
+            if (data.ok) {
+              showToast(`✅ פוזיציה על ${sym} נסגרה @ ${data.fillPrice}`, { variant: 'success', duration: 3000 });
+              setTimeout(loadInlinePositions, 500);
+            } else {
+              showToast(`❌ שגיאה: ${data.error}`, { variant: 'error' });
+              e.currentTarget.disabled = false;
+              e.currentTarget.textContent = '✕ סגור';
+            }
+          } catch {
+            showToast('שגיאה בסגירת הפוזיציה', { variant: 'error' });
+            e.currentTarget.disabled = false;
+            e.currentTarget.textContent = '✕ סגור';
+          }
+        });
+      });
+    } catch {
+      inlinePosBody.innerHTML =
+        `<tr><td colspan="6" style="padding:1rem; text-align:center; color:var(--text-secondary);">לא ניתן לטעון פוזיציות</td></tr>`;
+    }
+  }
+
+  if (refreshPositionsBtn) refreshPositionsBtn.addEventListener('click', loadInlinePositions);
+  loadInlinePositions();
+  setInterval(loadInlinePositions, 8000);
 
   const mount = document.getElementById('chartMount');
   if (mount) {

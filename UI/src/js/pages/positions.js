@@ -80,12 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong class="font-bold">${escapeHtml(symbol)}</strong></td>
-          <td><span class="badge badge-success">BUY</span></td>
-          <td>${fmtQty(qty)}</td>
-          <td>${fmtPrice(avgPrice)}</td>
-          <td>${currentPriceHtml}</td>
+          <td class="center"><span class="badge badge-success">BUY</span></td>
+          <td class="num">${fmtQty(qty)}</td>
+          <td class="num">${fmtPrice(avgPrice)}</td>
+          <td class="num">${currentPriceHtml}</td>
           <td>${pnlHtml}</td>
-          <td><button type="button" class="btn btn-danger close-position"
+          <td class="center"><button type="button" class="btn btn-danger close-position"
               data-symbol="${escapeAttr(symbol)}"
               data-qty="${escapeAttr(String(qty))}"
               style="padding: 6px 12px; font-size: 0.8rem;">${t('common.close')}</button></td>

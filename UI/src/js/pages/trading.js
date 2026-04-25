@@ -51,7 +51,15 @@ async function loadSymbolsIntoSelect(assetSelect) {
   }
 
   const kindLabel = (k) =>
-    k === 'FX' ? t('trading.optForex') : k === 'CRYPTO' ? t('trading.optCrypto') : k === 'STOCK' ? 'Stocks' : k;
+    k === 'FX'
+      ? t('trading.optForex')
+      : k === 'METALS'
+        ? t('trading.optMetals')
+        : k === 'CRYPTO'
+          ? t('trading.optCrypto')
+          : k === 'STOCK'
+            ? 'Stocks'
+            : k;
 
   assetSelect.innerHTML = '';
   for (const [kind, arr] of groups.entries()) {
@@ -193,8 +201,103 @@ document.addEventListener('DOMContentLoaded', () => {
   const entryPriceLabel = document.getElementById('entryPriceLabel');
   const entryPriceInput = document.getElementById('entryPriceInput');
 
+  // ── Custom searchable dropdown ──────────────────────────────────────────────
+  const customBtn      = document.getElementById('customSelectBtn');
+  const customDropdown = document.getElementById('customSelectDropdown');
+  const customSearch   = document.getElementById('customSelectSearch');
+  const customList     = document.getElementById('customSelectList');
+  const customLabel    = document.getElementById('customSelectLabel');
+
+  const SYMBOLS = [
+    { group: 'Forex', items: ['EURUSD','GBPUSD','USDCAD','EURNOK','GBPJPY','USDJPY','NZDUSD','CADJPY'] },
+    { group: 'Metals', items: ['XAGUSD','XAUUSD'] },
+    { group: 'Crypto', items: ['SOLUSD','BTCUSD','ETHUSD','XRPUSD'] },
+  ];
+
+  function setSymbol(sym) {
+    if (customLabel) customLabel.textContent = sym;
+    if (assetSelect) {
+      // sync with hidden native select (create option if missing)
+      let opt = assetSelect.querySelector(`option[value="${sym}"]`);
+      if (!opt) { opt = document.createElement('option'); opt.value = sym; opt.textContent = sym; assetSelect.appendChild(opt); }
+      assetSelect.value = sym;
+      assetSelect.dispatchEvent(new Event('change'));
+    }
+    closeDropdown();
+  }
+
+  function renderList(filter) {
+    if (!customList) return;
+    customList.innerHTML = '';
+    const q = (filter || '').trim().toLowerCase();
+    let count = 0;
+    for (const { group, items } of SYMBOLS) {
+      const matched = items.filter(s => s.toLowerCase().includes(q));
+      if (!matched.length) continue;
+      const lbl = document.createElement('div');
+      lbl.className = 'custom-select-group-label';
+      lbl.textContent = group;
+      customList.appendChild(lbl);
+      for (const sym of matched) {
+        const opt = document.createElement('div');
+        opt.className = 'custom-select-option' + (sym === assetSelect?.value ? ' selected' : '');
+        opt.textContent = sym;
+        opt.addEventListener('mousedown', (e) => { e.preventDefault(); setSymbol(sym); });
+        customList.appendChild(opt);
+        count++;
+      }
+    }
+    if (!count) {
+      const empty = document.createElement('div');
+      empty.className = 'custom-select-no-results';
+      empty.textContent = 'No results';
+      customList.appendChild(empty);
+    }
+  }
+
+  function openDropdown() {
+    if (!customDropdown || !customBtn) return;
+    customDropdown.style.display = 'block';
+    customBtn.setAttribute('aria-expanded', 'true');
+    renderList('');
+    if (customSearch) { customSearch.value = ''; customSearch.focus(); }
+  }
+
+  function closeDropdown() {
+    if (!customDropdown || !customBtn) return;
+    customDropdown.style.display = 'none';
+    customBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  if (customBtn) customBtn.addEventListener('click', () => {
+    customBtn.getAttribute('aria-expanded') === 'true' ? closeDropdown() : openDropdown();
+  });
+
+  if (customSearch) customSearch.addEventListener('input', () => renderList(customSearch.value));
+
+  document.addEventListener('mousedown', (e) => {
+    const wrap = document.getElementById('customSelectWrap');
+    if (wrap && !wrap.contains(e.target)) closeDropdown();
+  });
+
+  // Keyboard navigation
+  if (customSearch) {
+    customSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { closeDropdown(); customBtn?.focus(); }
+      if (e.key === 'Enter') {
+        const first = customList?.querySelector('.custom-select-option');
+        if (first) first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      }
+    });
+  }
+
+  // init label from native select value
+  if (assetSelect && customLabel) customLabel.textContent = assetSelect.value || 'EURUSD';
+  // ────────────────────────────────────────────────────────────────────────────
+
   if (assetSelect) {
     loadSymbolsIntoSelect(assetSelect).then(() => {
+      if (customLabel) customLabel.textContent = assetSelect.value;
       startPricePolling(assetSelect.value);
     }).catch(() => {
       showToast(t('alerts.adminLoadFail'), { variant: 'error' });
@@ -387,15 +490,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         return `<tr style="border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));">
-          <td style="padding: 10px 12px; font-weight: 600;">${sym}</td>
-          <td style="padding: 10px 12px; text-align: right;">${fmtP(qty)}</td>
-          <td style="padding: 10px 12px; text-align: right; color: var(--text-secondary);">${fmtP(avg)}</td>
-          <td style="padding: 10px 12px; text-align: right;">${curHtml}</td>
-          <td style="padding: 10px 12px; text-align: right;">${pnlHtml}</td>
-          <td style="padding: 10px 12px; text-align: center;">
-            <button class="btn btn-danger inline-close-pos"
-              data-symbol="${sym}" data-qty="${qty}"
-              style="padding: 5px 10px; font-size: 0.78rem;">✕ סגור</button>
+          <td style="font-weight: 600;">${sym}</td>
+          <td class="num">${fmtP(qty)}</td>
+          <td class="num" style="color: var(--text-secondary);">${fmtP(avg)}</td>
+          <td class="num">${curHtml}</td>
+          <td class="num">${pnlHtml}</td>
+          <td class="center">
+            <button class="btn btn-danger inline-close-pos" data-symbol="${sym}" data-qty="${qty}">✕</button>
           </td>
         </tr>`;
       }));

@@ -65,6 +65,33 @@ public class FinnhubMarketService {
     return finnhubCandles("/forex/candle", mapped, intervalKey);
   }
 
+  /** Quote (last price) for Forex/Metals via Finnhub using OANDA symbols. */
+  public double oandaQuote(String uiSymbol) throws JsonProcessingException {
+    if (!isConfigured()) {
+      throw new IllegalStateException("finnhub_not_configured");
+    }
+    if (uiSymbol == null || uiSymbol.isBlank()) {
+      throw new IllegalArgumentException("symbol");
+    }
+    String s = uiSymbol.trim().toUpperCase();
+    String mapped;
+    if (s.startsWith("XAU") || s.startsWith("XAG") || s.startsWith("XPT")) {
+      mapped = mapMetalsSymbol(s);
+    } else {
+      mapped = mapForexSymbol(s);
+    }
+
+    String path =
+        "/quote?symbol="
+            + URLEncoder.encode(mapped, StandardCharsets.UTF_8)
+            + "&token="
+            + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
+    String json = http.get().uri(path).retrieve().body(String.class);
+    JsonNode root = objectMapper.readTree(json == null ? "{}" : json);
+    // Finnhub: {"c": current, ...}
+    return root.path("c").asDouble(0.0);
+  }
+
   private List<CandleBar> finnhubCandles(String endpoint, String finnhubSymbol, String intervalKey)
       throws JsonProcessingException {
     if (!isConfigured()) {
@@ -124,9 +151,11 @@ public class FinnhubMarketService {
       case "EURUSD" -> "OANDA:EUR_USD";
       case "GBPUSD" -> "OANDA:GBP_USD";
       case "USDJPY" -> "OANDA:USD_JPY";
-      case "AUDUSD" -> "OANDA:AUD_USD";
       case "USDCAD" -> "OANDA:USD_CAD";
-      case "USDCHF" -> "OANDA:USD_CHF";
+      case "NZDUSD" -> "OANDA:NZD_USD";
+      case "EURNOK" -> "OANDA:EUR_NOK";
+      case "GBPJPY" -> "OANDA:GBP_JPY";
+      case "CADJPY" -> "OANDA:CAD_JPY";
       default -> throw new IllegalArgumentException("unsupported_symbol");
     };
   }
@@ -136,7 +165,6 @@ public class FinnhubMarketService {
     return switch (s) {
       case "XAUUSD" -> "OANDA:XAU_USD";
       case "XAGUSD" -> "OANDA:XAG_USD";
-      case "XPTUSD" -> "OANDA:XPT_USD";
       default -> throw new IllegalArgumentException("unsupported_symbol");
     };
   }
