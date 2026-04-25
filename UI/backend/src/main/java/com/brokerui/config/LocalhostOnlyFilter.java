@@ -36,14 +36,15 @@ public class LocalhostOnlyFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        if (path.startsWith("/api/admin")) {
+        // Restrict both ADMIN API and the ADMIN HTML page to localhost
+        if (path.startsWith("/api/admin") || path.endsWith("/admin.html") || path.contains("/pages/admin")) {
             String remoteAddr = request.getRemoteAddr();
 
             if (!LOCALHOST_ADDRESSES.contains(remoteAddr)) {
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 response.setContentType("application/json;charset=UTF-8");
                 response.getWriter().write(
-                    "{\"ok\":false,\"error\":\"admin access is restricted to localhost only\"}"
+                    "{\"ok\":false,\"error\":\"admin access is restricted to localhost only (from this machine only)\"}"
                 );
                 return; // DROP the request – do not continue the filter chain
             }

@@ -158,10 +158,9 @@ public class AdminTradeController {
 
   @PostMapping("/mt5/connect")
   public Map<String, Boolean> connectMt5() {
-      // In a real scenario, this might initiate the socket connection test.
-      // Here, we just toggle the state to indicate the bridge is active.
-      mt5ConnectionManager.setConnected(true);
-      return Map.of("connected", true);
+      // Perform a real connectivity check (ping socket and verify file paths)
+      boolean success = mt5ConnectionManager.attemptConnect();
+      return Map.of("connected", success);
   }
 
   @PostMapping("/mt5/disconnect")

@@ -19,6 +19,7 @@ public class OrderExecutionService {
   private final BinancePriceService prices;
   private final SymbolRepository symbolRepo;
   private final MT5ConnectionManager mt5ConnectionManager;
+  private final MT5IntegrationService mt5Service;
 
   public OrderExecutionService(
       TradingAccountRepository accountRepo,
@@ -28,7 +29,8 @@ public class OrderExecutionService {
       NotificationRepository notificationRepo,
       SymbolRepository symbolRepo,
       BinancePriceService prices,
-      MT5ConnectionManager mt5ConnectionManager) {
+      MT5ConnectionManager mt5ConnectionManager,
+      MT5IntegrationService mt5Service) {
     this.accountRepo = accountRepo;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
@@ -37,6 +39,7 @@ public class OrderExecutionService {
     this.symbolRepo = symbolRepo;
     this.prices = prices;
     this.mt5ConnectionManager = mt5ConnectionManager;
+    this.mt5Service = mt5Service;
   }
 
 
@@ -188,7 +191,7 @@ public class OrderExecutionService {
             double sl = order.getStopLoss() != null ? order.getStopLoss().doubleValue() : 0.0;
             double lotSize = qty.doubleValue(); 
 
-            MT5JavaTradeWriter.sendTradeToMT5(
+            mt5Service.sendTrade(
                 order.getSymbolCode(), 
                 order.getSide(), 
                 reqPrice, 

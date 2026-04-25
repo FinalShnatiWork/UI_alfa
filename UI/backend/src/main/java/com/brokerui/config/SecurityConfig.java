@@ -108,12 +108,10 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers("/api/broker/**")
                     .authenticated()
-                    // Admin APIs: localhost only (127.0.0.1 / ::1).
-                    // LocalhostOnlyFilter is the first line of defence;
-                    // hasIpAddress here is the second layer.
+                    // Admin APIs: LocalhostOnlyFilter restricts this to 127.0.0.1.
+                    // We permitAll here so the admin doesn't need to log in when on localhost.
                     .requestMatchers("/api/admin/**")
-                    .access(new WebExpressionAuthorizationManager(
-                        "hasIpAddress('127.0.0.1') or hasIpAddress('::1') or hasIpAddress('0:0:0:0:0:0:0:1')"))
+                    .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/auth/me")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/api/auth/logout")

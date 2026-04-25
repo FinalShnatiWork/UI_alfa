@@ -26,6 +26,7 @@ broker:
     finnhub-api-key: ${FINNHUB_API_KEY:}
   mt5:
     auto-connect: ${MT5_AUTO_CONNECT:false}
+    base-path: "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\"
 
 logging:
   level:
