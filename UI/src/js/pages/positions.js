@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadPositions() {
     if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="text-align:center; padding: 2rem;">Loading positions...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="text-align:center; padding: 2rem;">${t('positions.loading')}</td></tr>`;
     try {
       const rows = await apiGet('/api/broker/positions');
       const list = Array.isArray(rows) ? rows : [];
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const activePositions = list.filter(p => Number(p.quantity ?? 0) !== 0);
 
       if (!activePositions.length) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="text-align:center; padding:2rem;">No open positions yet. Go to Trading to place an order!</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="text-align:center; padding:2rem;">${t('positions.empty')}</td></tr>`;
         return;
       }
 
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong class="font-bold">${escapeHtml(symbol)}</strong></td>
-          <td class="center"><span class="badge badge-success">BUY</span></td>
+          <td class="center"><span class="badge ${qty >= 0 ? 'badge-success' : 'badge-danger'}">${qty >= 0 ? 'BUY' : 'SELL'}</span></td>
           <td class="num">${fmtQty(qty)}</td>
           <td class="num">${fmtPrice(avgPrice)}</td>
           <td class="num">${currentPriceHtml}</td>
@@ -96,10 +96,13 @@ document.addEventListener('DOMContentLoaded', () => {
       wireCloseButtons();
     } catch (err) {
       console.error('Positions load error:', err);
-      tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="text-align:center; padding:2rem;">
-        ${t('alerts.authNeedLogin')}
-      </td></tr>`;
-      setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+      const msg = String(err?.message || '');
+      if (msg.includes('401')) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="text-align:center; padding:2rem;">${t('alerts.authNeedLogin')}</td></tr>`;
+        setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+      } else {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-muted text-sm" style="text-align:center; padding:2rem;">${t('trading.loadFail')}</td></tr>`;
+      }
     }
   }
 
@@ -129,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(`Error: ${data.error}`, { variant: 'error' });
           }
         } catch {
-          showToast('Failed to close position', { variant: 'error' });
+          showToast(t('alerts.closeFail'), { variant: 'error' });
         }
       });
     });

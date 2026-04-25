@@ -5,6 +5,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,10 @@ public class OrderExecutionService {
   private final SymbolRepository symbolRepo;
   private final MT5ConnectionManager mt5ConnectionManager;
   private final MT5IntegrationService mt5Service;
+
+  // Self-injection via proxy so @Transactional on tryExecute is honoured (avoids self-invocation bypass).
+  @Autowired @Lazy
+  private OrderExecutionService self;
 
   public OrderExecutionService(
       TradingAccountRepository accountRepo,
@@ -45,10 +51,13 @@ public class OrderExecutionService {
 
   @Scheduled(fixedDelay = 2000)
   public void tick() {
-    // Keep it small and simple for demo; run transactional per order.
     List<BrokerOrder> open = orderRepo.findTop50ByStatusOrderByCreatedAtAsc("NEW");
     for (BrokerOrder o : open) {
-      tryExecute(o.getId());
+      try {
+        self.tryExecute(o.getId()); // call through proxy so @Transactional is active
+      } catch (Exception ignored) {
+        // order stays NEW and retries on the next tick
+      }
     }
   }
 
@@ -114,6 +123,9 @@ public class OrderExecutionService {
     Position pos =
         positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), order.getSymbolCode()).orElse(null);
 
+    BigDecimal orderEntryPrice = price;
+    BigDecimal orderRealizedPnl = null;
+
     if ("BUY".equalsIgnoreCase(order.getSide())) {
       if (balance.compareTo(notional) < 0) {
         order.setStatus("REJECTED");
@@ -158,6 +170,9 @@ public class OrderExecutionService {
         pos.setAvgPrice(null);
       }
       positionRepo.save(pos);
+
+      orderEntryPrice = avg;
+      orderRealizedPnl = realizedDelta;
     }
 
     ta.setEquity(ta.getBalance());
@@ -167,6 +182,8 @@ public class OrderExecutionService {
 
     order.setStatus("FILLED");
     order.setFilledAt(Instant.now());
+    order.setEntryPrice(orderEntryPrice);
+    order.setRealizedPnl(orderRealizedPnl);
     orderRepo.save(order);
 
     TradeFill fill = new TradeFill();

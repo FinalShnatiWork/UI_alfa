@@ -70,23 +70,23 @@
     <!-- Open Positions Panel (merged into Charts) -->
     <div class="mt-20">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="margin: 0; font-size: 1rem;">📊 פוזיציות פתוחות</h3>
-        <button class="btn btn-outline-dark" style="font-size: 0.8rem; padding: 6px 12px;" id="refreshPositionsBtn">↻ רענן</button>
+        <h3 style="margin: 0; font-size: 1rem;" data-i18n="trading.openPositions">Open Positions</h3>
+        <button class="btn btn-outline-dark" style="font-size: 0.8rem; padding: 6px 12px;" id="refreshPositionsBtn" data-i18n="common.refresh">Refresh</button>
       </div>
       <div class="card" style="padding: 0; overflow: hidden;">
         <table class="positions-table" style="width: 100%; border-collapse: collapse;">
           <thead>
             <tr style="background: var(--bg-alt);">
-              <th>נכס</th>
-              <th class="num">כמות</th>
-              <th class="num">כניסה</th>
-              <th class="num">נוכחי</th>
-              <th class="num">P/L</th>
-              <th class="center">סגור</th>
+              <th data-i18n="table.symbol">Symbol</th>
+              <th class="num" data-i18n="table.volume">Qty</th>
+              <th class="num" data-i18n="table.openPrice">Entry</th>
+              <th class="num" data-i18n="table.currentPrice">Current</th>
+              <th class="num" data-i18n="table.pl">P/L</th>
+              <th class="center" data-i18n="common.close">Close</th>
             </tr>
           </thead>
           <tbody id="inlinePosBody">
-            <tr><td colspan="6" style="padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">טוען...</td></tr>
+            <tr><td colspan="6" style="padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;" data-i18n="common.loading">Loading...</td></tr>
           </tbody>
         </table>
       </div>

@@ -66,6 +66,12 @@ public class BrokerOrder {
   @Column(name = "filled_at")
   private Instant filledAt;
 
+  @Column(name = "entry_price", precision = 18, scale = 8)
+  private BigDecimal entryPrice;
+
+  @Column(name = "realized_pnl", precision = 18, scale = 8)
+  private BigDecimal realizedPnl;
+
   public Long getId() {
     return id;
   }
@@ -172,6 +178,22 @@ public class BrokerOrder {
 
   public void setFilledAt(Instant filledAt) {
     this.filledAt = filledAt;
+  }
+
+  public BigDecimal getEntryPrice() {
+    return entryPrice;
+  }
+
+  public void setEntryPrice(BigDecimal entryPrice) {
+    this.entryPrice = entryPrice;
+  }
+
+  public BigDecimal getRealizedPnl() {
+    return realizedPnl;
+  }
+
+  public void setRealizedPnl(BigDecimal realizedPnl) {
+    this.realizedPnl = realizedPnl;
   }
 }
 
