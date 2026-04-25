@@ -1029,3 +1029,170 @@ html.confirm-modal-open {
 html[data-theme="light"] .confirm-modal-overlay {
   background: rgba(15, 23, 42, 0.4);
 }
+
+/* ── Transaction Modal (Finance page) ─────────────────────────────────────── */
+.tx-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.tx-modal-box {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 28px 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+  animation: fadeUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.tx-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.tx-modal-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0;
+}
+.tx-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.tx-modal-close:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
+}
+.tx-modal-icon-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 6px;
+}
+.tx-modal-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+.deposit-icon {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 2px solid rgba(16, 185, 129, 0.3);
+}
+.withdraw-icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 2px solid rgba(239, 68, 68, 0.3);
+}
+.tx-modal-icon-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tx-preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.tx-preset-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.tx-preset-btn:hover,
+.tx-preset-btn.active {
+  background: rgba(255,255,255,0.1);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.tx-label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.tx-amount-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.tx-currency-sign {
+  position: absolute;
+  left: 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.tx-amount-input {
+  padding-left: 30px !important;
+  font-size: 1.2rem !important;
+  font-weight: 700 !important;
+}
+.tx-modal-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+  line-height: 1.5;
+  text-align: center;
+}
+.tx-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+.tx-cancel-btn {
+  flex: 1;
+}
+.tx-confirm-btn {
+  flex: 2;
+}
+
+html[data-theme="light"] .tx-modal-box {
+  background: #fff;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .tx-preset-btn {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+html[data-theme="light"] .tx-preset-btn:hover,
+html[data-theme="light"] .tx-preset-btn.active {
+  background: rgba(15, 23, 42, 0.06);
+}
+html[data-theme="light"] .tx-modal-close:hover {
+  background: rgba(15, 23, 42, 0.06);
+}

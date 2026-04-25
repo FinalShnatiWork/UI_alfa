@@ -204,14 +204,29 @@ public class BrokerApiController {
       AccountTransaction tx = new AccountTransaction();
       tx.setTradingAccount(ta);
       tx.setTxType(type);
-      tx.setStatus("PENDING");
       tx.setAmount(body.amount());
       tx.setCurrency(ta.getCurrency());
       tx.setMethod(body.method());
       tx.setNote(body.note());
-      txRepo.save(tx);
 
-      return ResponseEntity.ok(Map.of("ok", true, "id", tx.getId()));
+      if ("DEPOSIT".equals(type)) {
+        // Demo mode: deposits are approved instantly and balance is updated.
+        tx.setStatus("APPROVED");
+        tx.setProcessedAt(Instant.now());
+        txRepo.save(tx);
+
+        BigDecimal bal = ta.getBalance() == null ? BigDecimal.ZERO : ta.getBalance();
+        ta.setBalance(bal.add(body.amount()));
+        ta.setEquity(ta.getBalance());
+        ta.setFreeMargin(ta.getBalance());
+        accountRepo.save(ta);
+      } else {
+        // Withdrawal: stays PENDING until admin approves.
+        tx.setStatus("PENDING");
+        txRepo.save(tx);
+      }
+
+      return ResponseEntity.ok(Map.of("ok", true, "id", tx.getId(), "status", tx.getStatus(), "newBalance", ta.getBalance()));
     } catch (IllegalStateException e) {
       if ("unauthorized".equals(e.getMessage())) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -306,6 +321,9 @@ public class BrokerApiController {
       Position pos =
           positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), symbolCode).orElse(null);
 
+      BigDecimal orderEntryPrice = price;
+      BigDecimal orderRealizedPnl = null;
+
       if ("BUY".equals(side)) {
         if (balance.compareTo(notional) < 0) {
           return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -348,6 +366,10 @@ public class BrokerApiController {
           pos.setAvgPrice(null);
         }
         positionRepo.save(pos);
+
+        // Record on the order for history
+        orderEntryPrice = avg;
+        orderRealizedPnl = realizedDelta;
       }
 
       // In this MVP, equity/free margin track balance.
@@ -364,6 +386,8 @@ public class BrokerApiController {
       order.setStatus("FILLED");
       order.setQuantity(qty);
       order.setFilledAt(Instant.now());
+      order.setEntryPrice(orderEntryPrice);
+      order.setRealizedPnl(orderRealizedPnl);
       order = orderRepo.save(order);
 
       TradeFill fill = new TradeFill();
@@ -464,6 +488,36 @@ public class BrokerApiController {
               .findByUserId(u.getId())
               .map(k -> Map.of("status", k.getStatus(), "submittedAt", k.getSubmittedAt(), "reviewedAt", k.getReviewedAt()))
               .orElse(Map.of("status", "NOT_STARTED")));
+    } catch (IllegalStateException e) {
+      if ("unauthorized".equals(e.getMessage())) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(Map.of("ok", false, "error", "unauthorized"));
+      }
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+          .body(Map.of("ok", false, "error", e.getMessage()));
+    }
+  }
+
+  @GetMapping("/history")
+  public ResponseEntity<?> history(Authentication auth) {
+    try {
+      AppUser u = requireUser(auth);
+      TradingAccount ta = ensurePrimaryAccount(u);
+      List<BrokerOrder> filled =
+          orderRepo.findByTradingAccountIdAndStatusOrderByFilledAtDesc(ta.getId(), "FILLED");
+      List<ClosedTradeDto> result = filled.stream()
+          .map(o -> new ClosedTradeDto(
+              o.getId(),
+              o.getSymbolCode(),
+              o.getSide(),
+              o.getOrderType(),
+              o.getQuantity(),
+              o.getEntryPrice(),
+              o.getRealizedPnl(),
+              o.getCreatedAt(),
+              o.getFilledAt()))
+          .toList();
+      return ResponseEntity.ok(result);
     } catch (IllegalStateException e) {
       if ("unauthorized".equals(e.getMessage())) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
