@@ -8,11 +8,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles/main.css">
+  <script src="/js/prefs-init.js"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <header class="top-nav">
     <div class="flex-gap">
-      <a href="dashboard.html" style="color:white;text-decoration:none;">← Back</a>
+      <a href="dashboard.html" style="color:white;text-decoration:none;">â† Back</a>
       <h2 style="margin:0; font-size: 1.2rem;">Charts</h2>
     </div>
   </header>
@@ -20,30 +22,26 @@
   <div class="container mt-20">
     <div class="flex-between mb-20">
       <div class="flex-gap">
-        <button class="btn btn-blue">EURUSD</button>
-        <button class="btn btn-outline-dark">BTCUSD</button>
-        <button class="btn btn-outline-dark">AAPL</button>
+        <button class="btn btn-blue symbol-btn">EURUSD</button>
+        <button class="btn btn-outline-dark symbol-btn">GBPUSD</button>
+        <button class="btn btn-outline-dark symbol-btn">XAUUSD</button>
       </div>
       <div class="flex-gap text-muted text-sm">
-        <span style="cursor:pointer;">1m</span>
-        <span style="cursor:pointer;">5m</span>
-        <span class="text-primary font-bold" style="cursor:pointer;">1H</span>
-        <span style="cursor:pointer;">4H</span>
-        <span style="cursor:pointer;">1D</span>
+        <span class="interval-btn" data-interval="1m" style="cursor:pointer;">1m</span>
+        <span class="interval-btn" data-interval="5m" style="cursor:pointer;">5m</span>
+        <span class="interval-btn text-primary font-bold" data-interval="1h" style="cursor:pointer;">1H</span>
+        <span class="interval-btn" data-interval="1d" style="cursor:pointer;">1D</span>
       </div>
     </div>
     
-    <div class="card" style="height: 450px; display:flex; align-items:center; justify-content:center; background: #fff; position: relative;">
-      <div style="text-align:center; color: var(--text-muted);">
-        <h3 style="color:var(--text-muted)">Chart View Area (Canvas / TradingView API)</h3>
-        <p>Contains candlestick data and indicators like MA, RSI</p>
-      </div>
+    <div class="card" id="chartContainer" style="height: 450px; background: #fff; position: relative; overflow: hidden;">
+      <!-- Chart will be rendered here -->
     </div>
     
     <div class="card flex-between mt-20">
       <div>
-        <div class="font-bold text-xl text-primary">EURUSD</div>
-        <div class="text-secondary text-sm">Bid: 1.0889 | Ask: 1.0892</div>
+        <div class="font-bold text-xl text-primary" id="symbolDisplay">EURUSD</div>
+        <div class="text-secondary text-sm" id="priceDisplay">Loading price...</div>
       </div>
       <div class="flex-gap">
         <a href="trading.html" class="btn btn-success" style="padding: 12px 35px; font-size: 1.1rem;">BUY</a>
@@ -55,3 +53,4 @@
   <script type="module" src="/js/charts.js"></script>
 </body>
 </html>
+

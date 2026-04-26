@@ -1,69 +1,88 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Positions - Broker App</title>
+  <title>Open Positions - Broker App</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles/main.css">
+  <link rel="stylesheet" href="/styles/main.css">`n  <script src="/js/prefs-init.js"></script>
 </head>
 <body>
   <header class="top-nav">
     <div class="flex-gap">
-      <a href="dashboard.html" style="color:white;text-decoration:none;">← Back</a>
-      <h2 style="margin:0; font-size: 1.2rem;">Manage Positions</h2>
+      <a href="dashboard.html" style="color:white;text-decoration:none;">â† Back</a>
+      <h2 style="margin:0; font-size: 1.2rem;">Open Positions</h2>
+    </div>
+    <div class="flex-gap">
+      <span style="font-size: 0.8rem; color: var(--text-muted);" id="lastRefresh"></span>
+      <button id="refreshBtn" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.8rem;">âŸ³ Refresh</button>
     </div>
   </header>
   
   <div class="container mt-20">
-    <div class="card flex-between" style="padding: 15px 20px;">
-      <div class="flex-gap">
-        <button class="btn btn-blue">Open</button>
-        <button class="btn btn-outline-dark">Closed</button>
-        <button class="btn btn-outline-dark">Pending</button>
+    <!-- Summary Cards -->
+    <div class="stats-grid grid-3 mb-20" style="margin-bottom: 20px;">
+      <div class="card stat-card mb-0">
+        <div class="label text-secondary text-sm">Open Positions</div>
+        <div class="value font-bold text-primary text-xl" id="posCount">â€”</div>
       </div>
-      <div>
-        <input type="text" class="form-control" placeholder="Search..." style="padding: 8px;">
+      <div class="card stat-card mb-0">
+        <div class="label text-secondary text-sm">Total Unrealized P/L</div>
+        <div class="value font-bold text-xl" id="totalUnrealizedPnl">â€”</div>
+      </div>
+      <div class="card stat-card mb-0">
+        <div class="label text-secondary text-sm">MT5 Status</div>
+        <div class="value font-bold text-xl" id="mt5Status">â€”</div>
       </div>
     </div>
+
+    <!-- Filter Tabs -->
+    <div class="card flex-between" style="padding: 12px 20px; margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none;">
+      <div class="flex-gap">
+        <button class="btn btn-blue" style="padding: 6px 16px; font-size: 0.85rem;">Open</button>
+        <a href="history.html" class="btn btn-outline-dark" style="padding: 6px 16px; font-size: 0.85rem; text-decoration: none;">Closed History</a>
+      </div>
+      <input type="text" id="searchInput" class="form-control" placeholder="Search symbol..." style="padding: 7px; max-width: 200px;">
+    </div>
     
-    <table>
+    <div id="loadingMsg" style="text-align: center; padding: 40px; color: var(--text-muted);">Loading positions...</div>
+    <div id="emptyMsg" style="display:none; text-align: center; padding: 40px; color: var(--text-muted);">No open positions found.</div>
+
+    <table id="positionsTable" style="display:none; border-radius: 0 0 14px 14px;">
       <thead>
         <tr>
           <th>Symbol</th>
-          <th>Type</th>
           <th>Volume</th>
           <th>Open Price</th>
           <th>Current Price</th>
-          <th>SL / TP</th>
+          <th>Unrealized P/L</th>
+          <th>Realized P/L</th>
           <th>Action</th>
         </tr>
       </thead>
-      <tbody id="positionsData">
-        <tr>
-          <td><strong class="font-bold">EURUSD</strong></td>
-          <td><span class="badge badge-success">BUY</span></td>
-          <td>1.00</td>
-          <td>1.0845</td>
-          <td class="text-success font-bold">1.0892</td>
-          <td style="font-size: 0.8rem; color: var(--text-muted)">SL: 1.0800<br>TP: 1.0950</td>
-          <td><button class="btn btn-danger close-position" data-symbol="EURUSD" style="padding: 6px 12px; font-size: 0.8rem;">Close</button></td>
-        </tr>
-        <tr>
-          <td><strong class="font-bold">BTCUSD</strong></td>
-          <td><span class="badge badge-danger">SELL</span></td>
-          <td>0.50</td>
-          <td>67,240</td>
-          <td class="text-danger font-bold">66,980</td>
-          <td style="font-size: 0.8rem; color: var(--text-muted)">SL: 68,000<br>TP: 66,500</td>
-          <td><button class="btn btn-danger close-position" data-symbol="BTCUSD" style="padding: 6px 12px; font-size: 0.8rem;">Close</button></td>
-        </tr>
-      </tbody>
+      <tbody id="positionsData"></tbody>
     </table>
   </div>
-  
+
+  <!-- Close Confirmation Modal -->
+  <div id="closeModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+    <style>#closeModal { display: none; }</style>
+    <div class="card" style="max-width: 400px; width: 90%; text-align: center;">
+      <h3 style="margin-bottom: 10px;">Close Position</h3>
+      <p id="modalText" style="color: var(--text-secondary); margin-bottom: 20px;"></p>
+      <div class="flex-gap" style="justify-content: center;">
+        <button id="confirmClose" class="btn btn-danger" style="min-width: 120px;">Confirm Close</button>
+        <button id="cancelClose" class="btn btn-outline-dark" style="min-width: 120px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" style="display:none; position:fixed; bottom:30px; right:30px; background: var(--surface-2); border: 1px solid var(--border-light); border-radius: 10px; padding: 14px 22px; font-size: 0.9rem; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 200; transition: opacity 0.3s;"></div>
+
   <script type="module" src="/js/positions.js"></script>
 </body>
 </html>
+

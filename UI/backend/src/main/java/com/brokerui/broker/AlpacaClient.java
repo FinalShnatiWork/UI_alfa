@@ -20,10 +20,10 @@ import org.json.*;
 
 public class AlpacaClient {
 
-	   private static final String REQUEST_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\request_candles.txt";
-	    private static final String CANDLE_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\candles_data.json";
-	    private static final String REQUEST_PRICE_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\request_price.txt";
-	    private static final String PRICE_FILE   = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\currentPrice.json";
+	   private static final String REQUEST_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\request_candles.txt";
+	    private static final String CANDLE_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\candles_data.json";
+	    private static final String REQUEST_PRICE_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\request_price.txt";
+	    private static final String PRICE_FILE   = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\currentPrice.json";
 
 	    public static Candle[] getRecentCandles(String symbol, int count, String timeframe) throws Exception {
 	        File candleFile = new File(CANDLE_FILE);
@@ -44,7 +44,7 @@ public class AlpacaClient {
 
 	        // ✍️ כתיבה לקובץ הבקשה
 	        StringBuilder request = new StringBuilder();
-	        request.append("SYMBOL=").append(symbol).append(System.lineSeparator());
+	        request.append("SYMBOL=").append(symbol).append(".m").append(System.lineSeparator());
 	        request.append("TIMEFRAME=").append(timeframe).append(System.lineSeparator());
 	        request.append("FROM=").append(fromDate).append(System.lineSeparator());
 
@@ -126,7 +126,7 @@ public class AlpacaClient {
 
 	        // ✍️ כתיבה לקובץ הבקשה
 	        StringBuilder request = new StringBuilder();
-	        request.append("SYMBOL=").append(symbol).append(System.lineSeparator());
+	        request.append("SYMBOL=").append(symbol).append(".m").append(System.lineSeparator());
 	        request.append("TIMEFRAME=").append(timeframe).append(System.lineSeparator());
 	        request.append("FROM=").append(fromDateStr).append(System.lineSeparator());
 
@@ -191,7 +191,7 @@ public static double getExchangeRate(String symbol) throws Exception {
 
     // 📝 שלב 2: כתיבת בקשה ל־request_price.txt
     Files.writeString(requestFile.toPath(),
-            "SYMBOL=" + symbol + System.lineSeparator(),
+            "SYMBOL=" + symbol + ".m" + System.lineSeparator(),
             StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
     System.out.println("📨 Request sent to MetaTrader for price of " + symbol);

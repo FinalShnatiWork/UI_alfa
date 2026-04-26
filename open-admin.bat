@@ -30,21 +30,13 @@ set /p FE_CODE=<"%TEMP%\fe_code.txt"
 del "%TEMP%\fe_code.txt" 2>nul
 
 :: ─── Open admin page ─────────────────────────────────────────────────────────
-if "%FE_CODE%"=="200" (
-    echo  [OK] Frontend running - opening via Vite dev server.
-    echo.
-    echo  Opening: http://localhost:3000/pages/admin.html
-    echo.
-    start "" "http://localhost:3000/pages/admin.html"
-) else (
-    echo  [INFO] Vite dev server not running.
-    echo         Opening admin.html directly from the filesystem.
-    echo         NOTE: API calls require the backend to be running.
-    echo.
-    set ADMIN_PATH=%~dp0UI\src\pages\admin.html
-    echo  Opening: !ADMIN_PATH!
-    start "" "%~dp0UI\src\pages\admin.html"
-)
+echo.
+echo  Opening Centralized Local Admin Dashboard...
+echo.
+set ADMIN_FILE=%~dp0AdminDashboard_Local.html
+echo  Target: %ADMIN_FILE%
+echo.
+start "" "%ADMIN_FILE%"
 
 echo.
 echo  ============================================

@@ -1,6 +1,5 @@
 package com.brokerui.broker;
 
-import com.brokerui.market.BinancePriceService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -18,12 +17,9 @@ public class OrderExecutionService {
   private final BrokerOrderRepository orderRepo;
   private final TradeFillRepository fillRepo;
   private final NotificationRepository notificationRepo;
-  private final BinancePriceService prices;
   private final SymbolRepository symbolRepo;
-  private final MT5ConnectionManager mt5ConnectionManager;
   private final MT5IntegrationService mt5Service;
 
-  // Self-injection via proxy so @Transactional on tryExecute is honoured (avoids self-invocation bypass).
   @Autowired @Lazy
   private OrderExecutionService self;
 
@@ -34,8 +30,6 @@ public class OrderExecutionService {
       TradeFillRepository fillRepo,
       NotificationRepository notificationRepo,
       SymbolRepository symbolRepo,
-      BinancePriceService prices,
-      MT5ConnectionManager mt5ConnectionManager,
       MT5IntegrationService mt5Service) {
     this.accountRepo = accountRepo;
     this.positionRepo = positionRepo;
@@ -43,21 +37,16 @@ public class OrderExecutionService {
     this.fillRepo = fillRepo;
     this.notificationRepo = notificationRepo;
     this.symbolRepo = symbolRepo;
-    this.prices = prices;
-    this.mt5ConnectionManager = mt5ConnectionManager;
     this.mt5Service = mt5Service;
   }
-
 
   @Scheduled(fixedDelay = 2000)
   public void tick() {
     List<BrokerOrder> open = orderRepo.findTop50ByStatusOrderByCreatedAtAsc("NEW");
     for (BrokerOrder o : open) {
       try {
-        self.tryExecute(o.getId()); // call through proxy so @Transactional is active
-      } catch (Exception ignored) {
-        // order stays NEW and retries on the next tick
-      }
+        self.tryExecute(o.getId());
+      } catch (Exception ignored) {}
     }
   }
 
@@ -77,15 +66,15 @@ public class OrderExecutionService {
 
     BigDecimal last;
     try {
-      last = prices.getLastPrice(symbolCode);
+      last = BigDecimal.valueOf(mt5Service.getPrice(symbolCode));
     } catch (Exception e) {
-      return; // keep NEW; try later
+      return; // keep NEW
     }
 
     String side = order.getSide() == null ? "" : order.getSide().trim().toUpperCase();
     String type = order.getOrderType() == null ? "" : order.getOrderType().trim().toUpperCase();
 
-    boolean shouldFill =
+    boolean shouldFill = (type.equals("MARKET")) ||
         switch (type) {
           case "LIMIT" -> shouldFillLimit(order, side, last);
           case "STOP" -> shouldFillStop(order, side, last);
@@ -117,23 +106,14 @@ public class OrderExecutionService {
     ta = accountRepo.findById(ta.getId()).orElseThrow();
 
     BigDecimal qty = order.getQuantity();
-    BigDecimal notional = price.multiply(qty);
     BigDecimal balance = ta.getBalance() == null ? BigDecimal.ZERO : ta.getBalance();
 
-    Position pos =
-        positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), order.getSymbolCode()).orElse(null);
-
+    // Local DB update logic
+    Position pos = positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), order.getSymbolCode()).orElse(null);
     BigDecimal orderEntryPrice = price;
     BigDecimal orderRealizedPnl = null;
 
     if ("BUY".equalsIgnoreCase(order.getSide())) {
-      if (balance.compareTo(notional) < 0) {
-        order.setStatus("REJECTED");
-        orderRepo.save(order);
-        return;
-      }
-      ta.setBalance(balance.subtract(notional));
-
       if (pos == null) {
         pos = new Position();
         pos.setTradingAccount(ta);
@@ -144,10 +124,8 @@ public class OrderExecutionService {
       BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
       BigDecimal prevAvg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
       BigDecimal newQty = prevQty.add(qty);
-      BigDecimal newAvg =
-          prevQty.compareTo(BigDecimal.ZERO) == 0
-              ? price
-              : prevAvg.multiply(prevQty).add(price.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
+      BigDecimal newAvg = prevQty.compareTo(BigDecimal.ZERO) == 0 ? price : 
+          prevAvg.multiply(prevQty).add(price.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
       pos.setQuantity(newQty);
       pos.setAvgPrice(newAvg);
       positionRepo.save(pos);
@@ -158,27 +136,17 @@ public class OrderExecutionService {
         orderRepo.save(order);
         return;
       }
-      ta.setBalance(balance.add(notional));
-
       BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
       BigDecimal realizedDelta = price.subtract(avg).multiply(qty);
       BigDecimal realized = pos.getRealizedPnl() == null ? BigDecimal.ZERO : pos.getRealizedPnl();
       pos.setRealizedPnl(realized.add(realizedDelta));
       BigDecimal newQty = prevQty.subtract(qty);
       pos.setQuantity(newQty);
-      if (newQty.compareTo(BigDecimal.ZERO) == 0) {
-        pos.setAvgPrice(null);
-      }
+      if (newQty.compareTo(BigDecimal.ZERO) == 0) pos.setAvgPrice(null);
       positionRepo.save(pos);
-
       orderEntryPrice = avg;
       orderRealizedPnl = realizedDelta;
     }
-
-    ta.setEquity(ta.getBalance());
-    ta.setMarginUsed(BigDecimal.ZERO);
-    ta.setFreeMargin(ta.getBalance());
-    accountRepo.save(ta);
 
     order.setStatus("FILLED");
     order.setFilledAt(Instant.now());
@@ -193,35 +161,18 @@ public class OrderExecutionService {
     fill.setLiquidity("TAKER");
     fillRepo.save(fill);
 
-    Notification n = new Notification();
-    n.setUser(ta.getUser());
-    n.setNotifType("TRADE");
-    n.setTitle("Trade filled");
-    n.setBody(order.getSide() + " " + qty.stripTrailingZeros().toPlainString() + " " + order.getSymbolCode());
-    notificationRepo.save(n);
-
-    // Forward the trade to MT5 if the admin has enabled the MT5 Connection
-    if (mt5ConnectionManager.isConnected()) {
-        try {
-            double reqPrice = price.doubleValue();
-            double tp = order.getTakeProfit() != null ? order.getTakeProfit().doubleValue() : 0.0;
-            double sl = order.getStopLoss() != null ? order.getStopLoss().doubleValue() : 0.0;
-            double lotSize = qty.doubleValue(); 
-
-            mt5Service.sendTrade(
-                order.getSymbolCode(), 
-                order.getSide(), 
-                reqPrice, 
-                tp, 
-                sl, 
-                lotSize
-            );
-        } catch (Exception ex) {
-            System.err.println("Failed to forward trade to MT5: " + ex.getMessage());
-            ex.printStackTrace();
-        }
+    // Forward to MT5
+    try {
+        mt5Service.sendTrade(
+            order.getSymbolCode(), 
+            order.getSide(), 
+            price.doubleValue(), 
+            order.getTakeProfit() != null ? order.getTakeProfit().doubleValue() : 0.0, 
+            order.getStopLoss() != null ? order.getStopLoss().doubleValue() : 0.0, 
+            qty.doubleValue()
+        );
+    } catch (Exception ex) {
+        System.err.println("Failed to forward trade to MT5: " + ex.getMessage());
     }
   }
 }
-
-

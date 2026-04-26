@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
+@CrossOrigin
 @RequestMapping("/api/admin")
 public class AdminTradeController {
   
@@ -152,8 +153,19 @@ public class AdminTradeController {
   }
 
   @GetMapping("/mt5/status")
-  public Map<String, Boolean> getMt5Status() {
-      return Map.of("connected", mt5ConnectionManager.isConnected());
+  public Map<String, Object> getMt5Status() {
+      boolean reachable = mt5ConnectionManager.getMt5Service().checkHealth();
+      if (reachable && !mt5ConnectionManager.isConnected()) {
+          mt5ConnectionManager.attemptConnect();
+      }
+      
+      boolean connected = mt5ConnectionManager.isConnected();
+      String path = mt5ConnectionManager.getMt5Service().getBasePath();
+      return Map.of(
+          "connected", connected,
+          "path", path,
+          "bridgeReachable", reachable
+      );
   }
 
   @PostMapping("/mt5/connect")
@@ -167,6 +179,17 @@ public class AdminTradeController {
   public Map<String, Boolean> disconnectMt5() {
       mt5ConnectionManager.setConnected(false);
       return Map.of("connected", false);
+  }
+
+  public record UpdateBalanceRequest(BigDecimal balance) {}
+
+  @PostMapping("/accounts/{id}/balance")
+  public Map<String, Object> updateBalance(@PathVariable Long id, @RequestBody UpdateBalanceRequest req) {
+      var acc = accountRepo.findById(id).orElseThrow();
+      acc.setBalance(req.balance());
+      acc.setEquity(req.balance());
+      accountRepo.save(acc);
+      return Map.of("ok", true);
   }
 }
 

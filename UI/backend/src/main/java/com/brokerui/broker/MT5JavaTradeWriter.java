@@ -29,7 +29,7 @@ public class MT5JavaTradeWriter {
 
             String command = String.format(
                     "TRADE|%s|%s|%.5f|%.5f|%.5f|%.2f",
-                    cleanSymbol, cleanAction, entry, tp, sl, lot
+                    cleanSymbol + ".m", cleanAction, entry, tp, sl, lot
             );
 
             writer.println(command);

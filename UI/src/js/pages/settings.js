@@ -5,14 +5,6 @@ import { showToast } from '../lib/toast.js';
 document.addEventListener('DOMContentLoaded', () => {
   applyI18n();
 
-  apiGet('/api/auth/me')
-    .then((me) => {
-      if (me?.role === 'ADMIN') {
-        const card = document.getElementById('adminPanelCard');
-        if (card) card.style.display = 'block';
-      }
-    })
-    .catch(() => {});
 
   const themeSelect = document.getElementById('themeSelect');
   if (themeSelect && window.BrokerTheme) {

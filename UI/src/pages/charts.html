@@ -39,7 +39,7 @@
 
     <div class="flex-gap flex-wrap mb-20" id="chartsInstrumentRow" aria-label="Symbol"></div>
 
-    <div class="flex-between mb-20 flex-wrap gap-12">
+    <div class="flex-between mb-16 flex-wrap gap-12">
       <div class="flex-gap flex-wrap text-muted text-sm charts-tf-row" id="chartsTfRow" aria-label="Interval">
         <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="1m">1m</button>
         <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="5m">5m</button>
@@ -49,21 +49,76 @@
         <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="1w">1W</button>
         <button type="button" class="btn btn-outline-dark charts-tf" style="padding:8px 14px;font-size:0.85rem" data-interval="1M">1M</button>
       </div>
-      <span class="text-sm text-secondary" id="chartsStatus"></span>
     </div>
 
-    <div class="card chart-preview-area">
-      <div id="chartMount" class="chart-mount"></div>
-    </div>
+    <div class="charts-main-layout">
+      <div class="charts-left-col">
+        <div class="card chart-preview-area">
+          <div id="chartMount" class="chart-mount"></div>
+        </div>
 
-    <div class="card flex-between mt-20 flex-wrap gap-16">
-      <div>
-        <div class="font-bold text-xl text-primary" id="chartSymbolLabel">—</div>
-        <div class="text-secondary text-sm" id="chartBidAsk">—</div>
+        <div class="card flex-between mt-20 flex-wrap gap-16">
+          <div>
+            <div class="font-bold text-xl text-primary" id="chartSymbolLabel">—</div>
+            <div class="text-secondary text-sm" id="chartBidAsk">—</div>
+          </div>
+          <div class="text-sm text-secondary" id="chartsStatus"></div>
+        </div>
       </div>
-      <div class="flex-gap">
-        <a href="trading.html" class="btn btn-success" style="padding: 12px 35px; font-size: 1.1rem;" data-i18n="trading.buy">BUY</a>
-        <a href="trading.html" class="btn btn-danger" style="padding: 12px 35px; font-size: 1.1rem;" data-i18n="trading.sell">SELL</a>
+
+      <div class="charts-right-col">
+        <div class="card trading-panel-card">
+          <div class="mb-20">
+            <div id="livePriceBanner" class="live-price-banner">
+              <div>
+                <div class="text-xs text-muted mb-4" data-i18n="trading.livePriceLabel">Current price</div>
+                <div id="livePriceValue" class="live-price-text" data-i18n="common.loading">Loading...</div>
+              </div>
+              <div class="text-right">
+                <div class="text-xs text-muted mb-4" data-i18n="trading.changeLabel">Change</div>
+                <div id="livePriceChange" class="live-change-text">—</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label data-i18n="trading.orderType">Order Type</label>
+            <div class="flex-gap">
+              <button type="button" class="btn btn-primary order-type-btn" data-order-type="market" style="flex:1;" data-i18n="trading.market">Market</button>
+              <button type="button" class="btn btn-outline-dark order-type-btn" data-order-type="limit" style="flex:1;" data-i18n="trading.limit">Limit</button>
+            </div>
+          </div>
+
+          <div class="form-group" id="entryPriceGroup" style="display: none;">
+            <label id="entryPriceLabel" data-i18n="trading.entryPrice">Entry Price</label>
+            <input type="number" class="form-control" id="entryPriceInput" data-i18n-placeholder="trading.placeholderPrice" placeholder="Specify Price" step="0.0001">
+          </div>
+          
+          <div class="form-group mt-16">
+            <label data-i18n="trading.volume">Volume (Lots)</label>
+            <div class="flex-gap">
+              <button type="button" class="btn btn-outline-dark" id="volMinus" style="width: 44px;">-</button>
+              <input type="number" id="vol" class="form-control text-center font-bold" value="1.00" step="0.1">
+              <button type="button" class="btn btn-outline-dark" id="volPlus" style="width: 44px;">+</button>
+            </div>
+          </div>
+
+          <div class="mt-16 portfolio-summary-card">
+            <div class="flex-between mb-8">
+              <span class="text-sm text-secondary" data-i18n="dashboard.balance">Balance</span>
+              <span class="font-bold" id="tradingBalance">—</span>
+            </div>
+            <div class="flex-between">
+              <span class="text-sm text-secondary" data-i18n="trading.position">Position</span>
+              <span class="font-bold" id="tradingPositionQty">—</span>
+            </div>
+          </div>
+
+          <div class="flex-gap mt-20">
+            <button type="button" class="btn btn-danger" id="sellBtn" style="flex:1; padding: 14px;" data-i18n="trading.sell">SELL</button>
+            <button type="button" class="btn btn-success" id="buyBtn" style="flex:1; padding: 14px;" data-i18n="trading.buy">BUY</button>
+          </div>
+        </div>
       </div>
     </div>
 

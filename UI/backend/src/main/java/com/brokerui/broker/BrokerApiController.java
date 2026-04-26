@@ -2,7 +2,6 @@ package com.brokerui.broker;
 
 import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
-import com.brokerui.market.BinancePriceService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -31,8 +30,7 @@ public class BrokerApiController {
   private final AccountTransactionRepository txRepo;
   private final NotificationRepository notificationRepo;
   private final KycCaseRepository kycRepo;
-  private final BinancePriceService binancePrices;
-  private final MT5ConnectionManager mt5ConnectionManager;
+  private final MT5IntegrationService mt5Service;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -44,8 +42,7 @@ public class BrokerApiController {
       AccountTransactionRepository txRepo,
       NotificationRepository notificationRepo,
       KycCaseRepository kycRepo,
-      BinancePriceService binancePrices,
-      MT5ConnectionManager mt5ConnectionManager) {
+      MT5IntegrationService mt5Service) {
     this.userRepo = userRepo;
     this.accountRepo = accountRepo;
     this.symbolRepo = symbolRepo;
@@ -55,30 +52,17 @@ public class BrokerApiController {
     this.txRepo = txRepo;
     this.notificationRepo = notificationRepo;
     this.kycRepo = kycRepo;
-    this.binancePrices = binancePrices;
-    this.mt5ConnectionManager = mt5ConnectionManager;
+    this.mt5Service = mt5Service;
   }
 
   private AppUser requireUser(Authentication auth) {
-    if (auth == null || auth.getName() == null) {
-      throw new IllegalStateException("unauthorized");
-    }
-    return userRepo
-        .findByEmailIgnoreCase(auth.getName())
-        .orElseThrow(() -> new IllegalStateException("unauthorized"));
-  }
-
-  private TradingAccount requirePrimaryAccount(Long userId) {
-    return accountRepo.findFirstByUserIdOrderByIdAsc(userId).orElse(null);
+    if (auth == null || auth.getName() == null) throw new IllegalStateException("unauthorized");
+    return userRepo.findByEmailIgnoreCase(auth.getName()).orElseThrow(() -> new IllegalStateException("unauthorized"));
   }
 
   private TradingAccount ensurePrimaryAccount(AppUser user) {
-    TradingAccount existing = requirePrimaryAccount(user.getId());
-    if (existing != null) {
-      return existing;
-    }
-
-    // Demo-friendly: auto-provision a DEMO trading account for any user (including ADMIN)
+    TradingAccount existing = accountRepo.findFirstByUserIdOrderByIdAsc(user.getId()).orElse(null);
+    if (existing != null) return existing;
     TradingAccount ta = new TradingAccount();
     ta.setUser(user);
     ta.setAccountType("DEMO");
@@ -89,45 +73,14 @@ public class BrokerApiController {
     ta.setEquity(new BigDecimal("100000"));
     ta.setMarginUsed(BigDecimal.ZERO);
     ta.setFreeMargin(new BigDecimal("100000"));
-    ta = accountRepo.save(ta);
-
-    AccountTransaction tx = new AccountTransaction();
-    tx.setTradingAccount(ta);
-    tx.setTxType("DEPOSIT");
-    tx.setStatus("APPROVED");
-    tx.setAmount(new BigDecimal("100000"));
-    tx.setCurrency(ta.getCurrency());
-    tx.setMethod("internal");
-    tx.setNote("Auto-provisioned demo balance");
-    tx.setProcessedAt(Instant.now());
-    txRepo.save(tx);
-
-    return ta;
+    return accountRepo.save(ta);
   }
 
   @GetMapping("/overview")
   public ResponseEntity<?> overview(Authentication auth) {
-    try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
-      return ResponseEntity.ok(
-          new BrokerOverviewDto(
-              ta.getId(),
-              ta.getAccountType(),
-              ta.getCurrency(),
-              ta.getLeverage(),
-              ta.getBalance(),
-              ta.getEquity(),
-              ta.getMarginUsed(),
-              ta.getFreeMargin()));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(), ta.getBalance(), ta.getEquity(), ta.getMarginUsed(), ta.getFreeMargin()));
   }
 
   @GetMapping("/symbols")
@@ -137,402 +90,154 @@ public class BrokerApiController {
 
   @GetMapping("/positions")
   public ResponseEntity<?> positions(Authentication auth) {
-    try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
-      return ResponseEntity.ok(positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    return ResponseEntity.ok(positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()));
   }
 
   @GetMapping("/orders")
   public ResponseEntity<?> orders(Authentication auth) {
-    try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
-      return ResponseEntity.ok(orderRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    return ResponseEntity.ok(orderRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
   }
 
   @GetMapping("/transactions")
   public ResponseEntity<?> transactions(Authentication auth) {
-    try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
-      return ResponseEntity.ok(txRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    return ResponseEntity.ok(txRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
   }
-
-  public record CreateTransactionRequest(String txType, BigDecimal amount, String method, String note) {}
 
   @PostMapping("/transactions")
   @Transactional
-  public ResponseEntity<?> createTransaction(Authentication auth, @RequestBody CreateTransactionRequest body) {
-    try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
-      if (body == null || body.txType() == null || body.amount() == null) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_request"));
-      }
-      String type = body.txType().trim().toUpperCase();
-      if (!List.of("DEPOSIT", "WITHDRAWAL").contains(type)) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_tx_type"));
-      }
-      if (body.amount().compareTo(BigDecimal.ZERO) <= 0) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_amount"));
-      }
+  public ResponseEntity<?> createTransaction(Authentication auth, @RequestBody Map<String, Object> body) {
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    String type = String.valueOf(body.get("txType")).toUpperCase();
+    BigDecimal amount = new BigDecimal(String.valueOf(body.get("amount")));
+    
+    AccountTransaction tx = new AccountTransaction();
+    tx.setTradingAccount(ta);
+    tx.setTxType(type);
+    tx.setAmount(amount);
+    tx.setCurrency(ta.getCurrency());
+    tx.setStatus("APPROVED");
+    tx.setProcessedAt(Instant.now());
+    txRepo.save(tx);
 
-      AccountTransaction tx = new AccountTransaction();
-      tx.setTradingAccount(ta);
-      tx.setTxType(type);
-      tx.setAmount(body.amount());
-      tx.setCurrency(ta.getCurrency());
-      tx.setMethod(body.method());
-      tx.setNote(body.note());
+    if ("DEPOSIT".equals(type)) ta.setBalance(ta.getBalance().add(amount));
+    else ta.setBalance(ta.getBalance().subtract(amount));
+    ta.setEquity(ta.getBalance());
+    accountRepo.save(ta);
 
-      if ("DEPOSIT".equals(type)) {
-        // Demo mode: deposits are approved instantly and balance is updated.
-        tx.setStatus("APPROVED");
-        tx.setProcessedAt(Instant.now());
-        txRepo.save(tx);
-
-        BigDecimal bal = ta.getBalance() == null ? BigDecimal.ZERO : ta.getBalance();
-        ta.setBalance(bal.add(body.amount()));
-        ta.setEquity(ta.getBalance());
-        ta.setFreeMargin(ta.getBalance());
-        accountRepo.save(ta);
-      } else {
-        // Withdrawal: stays PENDING until admin approves.
-        tx.setStatus("PENDING");
-        txRepo.save(tx);
-      }
-
-      return ResponseEntity.ok(Map.of("ok", true, "id", tx.getId(), "status", tx.getStatus(), "newBalance", ta.getBalance()));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
+    return ResponseEntity.ok(Map.of("ok", true, "newBalance", ta.getBalance()));
   }
 
-  public record PlaceOrderRequest(
-      String symbolCode, String side, String orderType, BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopPrice) {}
+  public record PlaceOrderRequest(String symbolCode, String side, String orderType, BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopPrice) {}
 
   @PostMapping("/orders")
   @Transactional
   public ResponseEntity<?> placeOrder(Authentication auth, @RequestBody PlaceOrderRequest body) {
-    try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
 
-      if (body == null || body.symbolCode() == null || body.side() == null || body.quantity() == null) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_request"));
-      }
+    String symbolCode = body.symbolCode().trim().toUpperCase();
+    String side = body.side().trim().toUpperCase();
+    String orderType = body.orderType() == null ? "MARKET" : body.orderType().trim().toUpperCase();
+    BigDecimal qty = body.quantity();
 
-      String symbolCode = body.symbolCode().trim().toUpperCase();
-      String side = body.side().trim().toUpperCase();
-      String orderType = body.orderType() == null ? "MARKET" : body.orderType().trim().toUpperCase();
-      BigDecimal qty = body.quantity();
-
-      if (symbolCode.isEmpty()) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "symbol_required"));
-      }
-      if (!List.of("BUY", "SELL").contains(side)) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_side"));
-      }
-      if (!List.of("MARKET", "LIMIT", "STOP").contains(orderType)) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_order_type"));
-      }
-      if (qty.compareTo(BigDecimal.ZERO) <= 0) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_quantity"));
-      }
-
-      Symbol sym =
-          symbolRepo
-              .findByCode(symbolCode)
-              .orElse(null);
-      if (sym == null || !sym.isEnabled()) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(Map.of("ok", false, "error", "symbol_disabled"));
-      }
-
-      if (!"MARKET".equals(orderType)) {
-        // Create NEW order; it will be filled by OrderExecutionService when trigger conditions met.
-        if ("LIMIT".equals(orderType) && body.limitPrice() == null) {
-          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "limit_price_required"));
-        }
-        if ("STOP".equals(orderType) && body.stopPrice() == null) {
-          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "stop_price_required"));
-        }
-        if (body.limitPrice() != null && body.limitPrice().compareTo(BigDecimal.ZERO) <= 0) {
-          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_limit_price"));
-        }
-        if (body.stopPrice() != null && body.stopPrice().compareTo(BigDecimal.ZERO) <= 0) {
-          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "bad_stop_price"));
-        }
-
-        BrokerOrder order = new BrokerOrder();
-        order.setTradingAccount(ta);
-        order.setSymbolCode(symbolCode);
-        order.setSide(side);
-        order.setOrderType(orderType);
-        order.setStatus("NEW");
-        order.setQuantity(qty);
-        order.setLimitPrice(body.limitPrice());
-        order.setStopPrice(body.stopPrice());
-        order = orderRepo.save(order);
-        return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", order.getStatus()));
-      }
-
-      // MARKET: execute immediately at current price.
-      BigDecimal price;
-      try {
-        price = binancePrices.getLastPrice(symbolCode);
-      } catch (Exception e) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
-      }
-
-      // Balance updates (SPOT model)
-      BigDecimal notional = price.multiply(qty);
-      BigDecimal balance = ta.getBalance() == null ? BigDecimal.ZERO : ta.getBalance();
-
-      Position pos =
-          positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), symbolCode).orElse(null);
-
-      BigDecimal orderEntryPrice = price;
-      BigDecimal orderRealizedPnl = null;
-
-      if ("BUY".equals(side)) {
-        if (balance.compareTo(notional) < 0) {
-          return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-              .body(Map.of("ok", false, "error", "insufficient_funds"));
-        }
-        ta.setBalance(balance.subtract(notional));
-
-        if (pos == null) {
-          pos = new Position();
-          pos.setTradingAccount(ta);
-          pos.setSymbolCode(symbolCode);
-          pos.setQuantity(BigDecimal.ZERO);
-          pos.setOpenedAt(Instant.now());
-        }
-        BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
-        BigDecimal prevAvg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-        BigDecimal newQty = prevQty.add(qty);
-        BigDecimal newAvg =
-            prevQty.compareTo(BigDecimal.ZERO) == 0
-                ? price
-                : prevAvg.multiply(prevQty).add(price.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
-        pos.setQuantity(newQty);
-        pos.setAvgPrice(newAvg);
-        positionRepo.save(pos);
-      } else { // SELL
-        BigDecimal prevQty = pos == null || pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
-        if (prevQty.compareTo(qty) < 0) {
-          return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-              .body(Map.of("ok", false, "error", "insufficient_position"));
-        }
-        ta.setBalance(balance.add(notional));
-
-        BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-        BigDecimal realizedDelta = price.subtract(avg).multiply(qty);
-        BigDecimal realized = pos.getRealizedPnl() == null ? BigDecimal.ZERO : pos.getRealizedPnl();
-        pos.setRealizedPnl(realized.add(realizedDelta));
-        BigDecimal newQty = prevQty.subtract(qty);
-        pos.setQuantity(newQty);
-        if (newQty.compareTo(BigDecimal.ZERO) == 0) {
-          pos.setAvgPrice(null);
-        }
-        positionRepo.save(pos);
-
-        // Record on the order for history
-        orderEntryPrice = avg;
-        orderRealizedPnl = realizedDelta;
-      }
-
-      // In this MVP, equity/free margin track balance.
-      ta.setEquity(ta.getBalance());
-      ta.setMarginUsed(BigDecimal.ZERO);
-      ta.setFreeMargin(ta.getBalance());
-      accountRepo.save(ta);
-
+    if (!"MARKET".equals(orderType)) {
       BrokerOrder order = new BrokerOrder();
       order.setTradingAccount(ta);
       order.setSymbolCode(symbolCode);
       order.setSide(side);
-      order.setOrderType("MARKET");
-      order.setStatus("FILLED");
+      order.setOrderType(orderType);
+      order.setStatus("NEW");
       order.setQuantity(qty);
-      order.setFilledAt(Instant.now());
-      order.setEntryPrice(orderEntryPrice);
-      order.setRealizedPnl(orderRealizedPnl);
+      order.setLimitPrice(body.limitPrice());
+      order.setStopPrice(body.stopPrice());
       order = orderRepo.save(order);
-
-      TradeFill fill = new TradeFill();
-      fill.setOrder(order);
-      fill.setPrice(price);
-      fill.setQuantity(qty);
-      fill.setLiquidity("TAKER");
-      fillRepo.save(fill);
-
-      Notification n = new Notification();
-      n.setUser(u);
-      n.setNotifType("TRADE");
-      n.setTitle("Trade filled");
-      n.setBody(
-          side
-              + " "
-              + qty.stripTrailingZeros().toPlainString()
-              + " "
-              + symbolCode
-              + " @ "
-              + price.stripTrailingZeros().toPlainString());
-      notificationRepo.save(n);
-
-      // Forward MARKET order to MT5 if admin enabled the bridge
-      if (mt5ConnectionManager.isConnected()) {
-        try {
-          MT5JavaTradeWriter.sendTradeToMT5(
-              symbolCode, side, price.doubleValue(), 0.0, 0.0, qty.doubleValue());
-        } catch (Exception ex) {
-          System.err.println("[MT5] Failed to forward MARKET order: " + ex.getMessage());
-        }
-      }
-
-      return ResponseEntity.ok(
-          Map.of(
-              "ok", true,
-              "orderId", order.getId(),
-              "fillPrice", price,
-              "notional", notional,
-              "newBalance", ta.getBalance()));
-
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("ok", false, "error", e.getMessage()));
+      return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW"));
     }
-  }
 
-  @PostMapping("/orders/{id}/cancel")
-  @Transactional
-  public ResponseEntity<?> cancelOrder(Authentication auth, @PathVariable Long id) {
+    // MARKET execution via MT5
+    double price;
     try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
-      BrokerOrder o = orderRepo.findById(id).orElse(null);
-      if (o == null) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "not_found"));
-      }
-      if (!o.getTradingAccount().getId().equals(ta.getId())) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("ok", false, "error", "forbidden"));
-      }
-      if (!"NEW".equalsIgnoreCase(o.getStatus())) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "not_cancelable"));
-      }
-      o.setStatus("CANCELED");
-      orderRepo.save(o);
-      return ResponseEntity.ok(Map.of("ok", true));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("ok", false, "error", e.getMessage()));
+      price = mt5Service.getPrice(symbolCode);
+    } catch (Exception e) {
+      return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "mt5_price_unavailable"));
     }
+
+    BigDecimal bdPrice = BigDecimal.valueOf(price);
+    BigDecimal notional = bdPrice.multiply(qty);
+
+    if ("BUY".equals(side) && ta.getBalance().compareTo(notional) < 0) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
+    }
+
+    // Update local DB for immediate UI feedback (will be synced later by background task if needed)
+    Position pos = positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), symbolCode).orElse(null);
+    if ("BUY".equals(side)) {
+      ta.setBalance(ta.getBalance().subtract(notional));
+      if (pos == null) {
+        pos = new Position();
+        pos.setTradingAccount(ta);
+        pos.setSymbolCode(symbolCode);
+        pos.setQuantity(BigDecimal.ZERO);
+        pos.setOpenedAt(Instant.now());
+      }
+      BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
+      BigDecimal prevAvg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
+      BigDecimal newQty = prevQty.add(qty);
+      BigDecimal newAvg = prevQty.compareTo(BigDecimal.ZERO) == 0 ? bdPrice : 
+          prevAvg.multiply(prevQty).add(bdPrice.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
+      pos.setQuantity(newQty);
+      pos.setAvgPrice(newAvg);
+      positionRepo.save(pos);
+    } else {
+      ta.setBalance(ta.getBalance().add(notional));
+      if (pos != null) {
+        BigDecimal newQty = pos.getQuantity().subtract(qty);
+        pos.setQuantity(newQty);
+        if (newQty.compareTo(BigDecimal.ZERO) <= 0) positionRepo.delete(pos);
+        else positionRepo.save(pos);
+      }
+    }
+    ta.setEquity(ta.getBalance());
+    accountRepo.save(ta);
+
+    BrokerOrder order = new BrokerOrder();
+    order.setTradingAccount(ta);
+    order.setSymbolCode(symbolCode);
+    order.setSide(side);
+    order.setOrderType("MARKET");
+    order.setStatus("FILLED");
+    order.setQuantity(qty);
+    order.setFilledAt(Instant.now());
+    order.setEntryPrice(bdPrice);
+    orderRepo.save(order);
+
+    // Forward to MT5
+    try {
+      mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue());
+    } catch (Exception ex) {
+      System.err.println("MT5 Send Failed: " + ex.getMessage());
+    }
+
+    return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "fillPrice", bdPrice, "newBalance", ta.getBalance()));
   }
 
   @GetMapping("/notifications")
   public ResponseEntity<?> notifications(Authentication auth) {
-    try {
-      AppUser u = requireUser(auth);
-      return ResponseEntity.ok(notificationRepo.findTop20ByUserIdOrderByCreatedAtDesc(u.getId()));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
-  }
-
-  @GetMapping("/kyc")
-  public ResponseEntity<?> kyc(Authentication auth) {
-    try {
-      AppUser u = requireUser(auth);
-      return ResponseEntity.ok(
-          kycRepo
-              .findByUserId(u.getId())
-              .<Object>map(k -> {
-                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
-                m.put("status", k.getStatus());
-                m.put("submittedAt", k.getSubmittedAt() != null ? k.getSubmittedAt().toString() : null);
-                m.put("reviewedAt", k.getReviewedAt() != null ? k.getReviewedAt().toString() : null);
-                return m;
-              })
-              .orElse(Map.of("status", "NOT_STARTED")));
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
+    AppUser u = requireUser(auth);
+    return ResponseEntity.ok(notificationRepo.findTop20ByUserIdOrderByCreatedAtDesc(u.getId()));
   }
 
   @GetMapping("/history")
   public ResponseEntity<?> history(Authentication auth) {
-    try {
-      AppUser u = requireUser(auth);
-      TradingAccount ta = ensurePrimaryAccount(u);
-      List<BrokerOrder> filled =
-          orderRepo.findByTradingAccountIdAndStatusOrderByFilledAtDesc(ta.getId(), "FILLED");
-      List<ClosedTradeDto> result = filled.stream()
-          .map(o -> new ClosedTradeDto(
-              o.getId(),
-              o.getSymbolCode(),
-              o.getSide(),
-              o.getOrderType(),
-              o.getQuantity(),
-              o.getEntryPrice(),
-              o.getRealizedPnl(),
-              o.getCreatedAt(),
-              o.getFilledAt()))
-          .toList();
-      return ResponseEntity.ok(result);
-    } catch (IllegalStateException e) {
-      if ("unauthorized".equals(e.getMessage())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-            .body(Map.of("ok", false, "error", "unauthorized"));
-      }
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-          .body(Map.of("ok", false, "error", e.getMessage()));
-    }
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    return ResponseEntity.ok(orderRepo.findByTradingAccountIdAndStatusOrderByFilledAtDesc(ta.getId(), "FILLED"));
   }
 }
-

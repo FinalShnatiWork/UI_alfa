@@ -50,12 +50,6 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
-      // Public Binance REST (OHLC) — dev-only proxy to avoid browser CORS issues.
-      '/binance': {
-        target: 'https://api.binance.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/binance/, ''),
-      },
     },
   },
   build: {
@@ -69,13 +63,11 @@ export default defineConfig({
         dashboard: resolve(__dirname, 'src/pages/dashboard.html'),
         positions: resolve(__dirname, 'src/pages/positions.html'),
         charts: resolve(__dirname, 'src/pages/charts.html'),
-        trading: resolve(__dirname, 'src/pages/trading.html'),
         finance: resolve(__dirname, 'src/pages/finance.html'),
         history: resolve(__dirname, 'src/pages/history.html'),
         account: resolve(__dirname, 'src/pages/account.html'),
         settings: resolve(__dirname, 'src/pages/settings.html'),
-        broker: resolve(__dirname, 'src/pages/broker.html'),
-        admin: resolve(__dirname, 'src/pages/admin.html'),
+        demoRegister: resolve(__dirname, 'src/pages/demo-register.html'),
       },
     },
   },

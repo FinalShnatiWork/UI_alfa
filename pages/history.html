@@ -1,103 +1,84 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trade History - Broker App</title>
+  <title>Closed Trade History - Broker App</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles/main.css">
+  <link rel="stylesheet" href="/styles/main.css">`n  <script src="/js/prefs-init.js"></script>
 </head>
 <body>
   <header class="top-nav">
     <div class="flex-gap">
-      <a href="dashboard.html" style="color:white;text-decoration:none;">← Back</a>
-      <h2 style="margin:0; font-size: 1.2rem;">Closed Trades History</h2>
+      <a href="dashboard.html" style="color:white;text-decoration:none;">â† Back</a>
+      <h2 style="margin:0; font-size: 1.2rem;">Closed Trade History</h2>
+    </div>
+    <div class="flex-gap">
+      <a href="positions.html" class="btn btn-outline" style="padding: 6px 16px; font-size: 0.85rem; text-decoration: none;">Open Positions</a>
     </div>
   </header>
   
   <div class="container mt-20">
-    <div class="card flex-gap text-left align-items-center" style="align-items: center; justify-content: flex-start; padding: 15px;">
-      <div class="form-group mb-0" style="margin-bottom:0;"><label style="margin:0 0 5px 0;">From:</label><input type="date" class="form-control" style="padding: 8px;"></div>
-      <div class="form-group mb-0" style="margin-bottom:0;"><label style="margin:0 0 5px 0;">To:</label><input type="date" class="form-control" style="padding: 8px;"></div>
-      <div class="form-group mb-0" style="margin-bottom:0;"><label style="margin:0 0 5px 0;">Symbol:</label><input type="text" class="form-control" placeholder="e.g. EURUSD" style="padding: 8px;"></div>
+    <!-- Filters -->
+    <div class="card flex-gap text-left align-items-center" style="align-items: center; justify-content: flex-start; padding: 15px; flex-wrap: wrap; gap: 12px;">
+      <div class="form-group mb-0" style="margin-bottom:0;">
+        <label style="margin:0 0 5px 0;">From:</label>
+        <input type="date" id="filterFrom" class="form-control" style="padding: 8px;">
+      </div>
+      <div class="form-group mb-0" style="margin-bottom:0;">
+        <label style="margin:0 0 5px 0;">To:</label>
+        <input type="date" id="filterTo" class="form-control" style="padding: 8px;">
+      </div>
+      <div class="form-group mb-0" style="margin-bottom:0;">
+        <label style="margin:0 0 5px 0;">Symbol:</label>
+        <input type="text" id="filterSymbol" class="form-control" placeholder="e.g. BTCUSDT" style="padding: 8px;">
+      </div>
       <div class="flex-gap" style="margin-top: 25px;">
-        <button class="btn btn-blue" style="padding: 10px 25px;">Filter</button>
-        <button class="btn btn-outline-dark" style="padding: 10px 25px;">Export to CSV / PDF</button>
+        <button id="filterBtn" class="btn btn-blue" style="padding: 10px 25px;">Filter</button>
+        <button id="clearFilterBtn" class="btn btn-outline-dark" style="padding: 10px 25px;">Clear</button>
       </div>
     </div>
 
-    <div class="stats-grid mb-20" style="margin-bottom:30px;">
+    <!-- Summary Stats -->
+    <div class="stats-grid mb-20" style="margin-bottom: 20px;">
       <div class="card stat-card mb-0">
         <div class="label text-secondary text-sm">Total Closed Trades</div>
-        <div class="value font-bold text-primary text-xl">0</div>
+        <div class="value font-bold text-primary text-xl" id="statTotal">0</div>
       </div>
       <div class="card stat-card mb-0">
-        <div class="label text-secondary text-sm">Net P/L</div>
-        <div class="value text-success font-bold text-xl">+$0.00</div>
+        <div class="label text-secondary text-sm">Total Volume (units)</div>
+        <div class="value text-primary font-bold text-xl" id="statVolume">0.0</div>
       </div>
       <div class="card stat-card mb-0">
-        <div class="label text-secondary text-sm">Win Rate</div>
-        <div class="value text-primary font-bold text-xl">0.0%</div>
+        <div class="label text-secondary text-sm">Buy Orders</div>
+        <div class="value text-success font-bold text-xl" id="statBuy">0</div>
       </div>
       <div class="card stat-card mb-0">
-        <div class="label text-secondary text-sm">Total Volume (Lots)</div>
-        <div class="value text-primary font-bold text-xl">0.0</div>
+        <div class="label text-secondary text-sm">Sell Orders</div>
+        <div class="value text-danger font-bold text-xl" id="statSell">0</div>
       </div>
     </div>
 
     <div class="card text-left">
-      <h3 class="mb-20 text-xl font-bold border-bottom" style="padding-bottom:10px; border-bottom: 2px solid var(--border-light)">Closed Orders</h3>
-      <table class="mt-20">
+      <h3 class="mb-20 text-xl font-bold" style="padding-bottom:10px; border-bottom: 2px solid var(--border-light)">Closed Orders</h3>
+      <div id="loadingMsg" style="text-align: center; padding: 30px; color: var(--text-muted);">Loading history...</div>
+      <div id="emptyMsg" style="display:none; text-align: center; padding: 30px; color: var(--text-muted);">No closed trades yet.</div>
+      <table id="historyTable" style="display:none;" class="mt-20">
         <thead>
           <tr>
-            <th>Ticket ID</th>
+            <th>Order ID</th>
             <th>Open Time</th>
             <th>Close Time</th>
             <th>Symbol</th>
             <th>Direction</th>
-            <th>Lots</th>
-            <th>Open Price</th>
-            <th>Close Price</th>
-            <th>P/L ($)</th>
+            <th>Quantity</th>
+            <th>Fill Price</th>
+            <th>Type</th>
           </tr>
         </thead>
-        <tbody>
-          <tr>
-            <td class="text-sm dir-ltr">#3849120</td>
-            <td>15/03/2026 10:20</td>
-            <td>15/03/2026 12:45</td>
-            <td class="font-bold">EURUSD</td>
-            <td><span class="badge badge-success">BUY</span></td>
-            <td>1.0</td>
-            <td>1.0820</td>
-            <td>1.0850</td>
-            <td class="text-success font-bold">+$300.00</td>
-          </tr>
-          <tr>
-            <td class="text-sm dir-ltr">#3849115</td>
-            <td>14/03/2026 14:10</td>
-            <td>14/03/2026 16:30</td>
-            <td class="font-bold">BTCUSD</td>
-            <td><span class="badge badge-danger">SELL</span></td>
-            <td>0.5</td>
-            <td>68,000</td>
-            <td>68,500</td>
-            <td class="text-danger font-bold">-$250.00</td>
-          </tr>
-          <tr>
-            <td class="text-sm dir-ltr">#3849090</td>
-            <td>13/03/2026 09:00</td>
-            <td>13/03/2026 18:00</td>
-            <td class="font-bold">XAUUSD</td>
-            <td><span class="badge badge-success">BUY</span></td>
-            <td>2.0</td>
-            <td>2,015.50</td>
-            <td>2,018.40</td>
-            <td class="text-success font-bold">+$580.00</td>
-          </tr>
-        </tbody>
+        <tbody id="historyData"></tbody>
       </table>
     </div>
   </div>
@@ -105,3 +86,4 @@
   <script type="module" src="/js/history.js"></script>
 </body>
 </html>
+

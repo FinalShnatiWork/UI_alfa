@@ -38,4 +38,8 @@ public class MT5ConnectionManager {
     public void setConnected(boolean connected) {
         this.isConnected = connected;
     }
+
+    public MT5IntegrationService getMt5Service() {
+        return mt5Service;
+    }
 }

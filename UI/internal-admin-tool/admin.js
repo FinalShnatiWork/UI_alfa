@@ -466,19 +466,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   applyI18n();
   initTabs();
 
-  // Auth guard
-  try {
-    const me = await apiGet('/api/auth/me');
-    if (me.role !== 'ADMIN') {
-      showToast('Access denied – admins only', { variant: 'warning' });
-      setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
-      return;
-    }
-  } catch {
-    showToast('Please log in first', { variant: 'warning' });
-    setTimeout(() => { window.location.href = 'login.html'; }, 900);
-    return;
-  }
+  // No auth guard here - the backend's LocalhostOnlyFilter ensures 
+  // that ONLY the local machine can access the admin APIs and page.
+  // This allows entering "straight" without a password.
 
   await loadAllData();
 
@@ -506,10 +496,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // MT5
   document.getElementById('mt5ConnectBtn')?.addEventListener('click', async () => {
     try {
-      await apiPostJson('/api/admin/mt5/connect', {});
-      showToast('MT5 bridge connected', { variant: 'success' });
+      const data = await apiPostJson('/api/admin/mt5/connect', {});
+      if (data.connected) {
+        showToast('✅ MT5 bridge connected successfully', { variant: 'success' });
+      } else {
+        showToast('❌ Failed to reach MT5. Ensure MT5 Terminal is running and EA is active on port 5555.', { variant: 'error' });
+      }
       await loadMt5Status();
-    } catch { showToast('Failed to connect MT5', { variant: 'error' }); }
+    } catch { showToast('Network error while connecting MT5', { variant: 'error' }); }
   });
   document.getElementById('mt5DisconnectBtn')?.addEventListener('click', async () => {
     try {

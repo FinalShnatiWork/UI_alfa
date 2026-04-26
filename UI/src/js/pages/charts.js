@@ -51,14 +51,14 @@ const CATEGORY_CONFIG = {
       { id: 'NZDUSD', title: 'NZDUSD', decimals: 5 },
       { id: 'CADJPY', title: 'CADJPY', decimals: 3 },
     ],
-    source: 'binance',
+    source: 'yahoo',
   },
   metals: {
     instruments: [
-      { id: 'XAGUSD', title: 'XAGUSD', decimals: 2, source: 'binance' },
-      { id: 'XAUUSD', title: 'XAUUSD', decimals: 2, source: 'binance' },
+      { id: 'XAGUSD', title: 'XAGUSD', decimals: 2, source: 'yahoo' },
+      { id: 'XAUUSD', title: 'XAUUSD', decimals: 2, source: 'yahoo' },
     ],
-    source: 'binance',
+    source: 'yahoo',
   },
   crypto: {
     instruments: [
@@ -119,14 +119,26 @@ function stopLiveUpdates() {
 }
 
 function updateBidAskRow(bidAskEl, instr, close) {
-  if (!bidAskEl || !instr || close == null) return;
+  if (!instr || close == null) return;
   const d = instr.decimals;
   const mid = close;
   const spread = mid * 0.00015;
-  bidAskEl.textContent = t('charts.bidAskFormatted', {
-    bid: (mid - spread).toFixed(d),
-    ask: (mid + spread).toFixed(d),
-  });
+  const bid = mid - spread;
+  const ask = mid + spread;
+
+  if (bidAskEl) {
+    bidAskEl.textContent = t('charts.bidAskFormatted', {
+      bid: bid.toFixed(d),
+      ask: ask.toFixed(d),
+    });
+  }
+
+  // Update trading panel labels if they exist
+  const livePriceValue = document.getElementById('livePriceValue');
+  if (livePriceValue) {
+    livePriceValue.textContent = mid > 100 ? mid.toFixed(2) : mid.toFixed(d);
+    // Simple color logic based on previous state if we wanted to add it
+  }
 }
 
 function connectBinanceKlineStream(symbol, intervalKey, gen, instr, bidAskEl, statusEl) {
@@ -271,6 +283,21 @@ async function fetchBinanceKlines(symbol, intervalKey) {
     low: parseFloat(k[3]),
     close: parseFloat(k[4]),
   }));
+}
+
+async function fetchYahooCandles(symbol, intervalKey, category) {
+  const url = `/api/market/${category}/candles?symbol=${encodeURIComponent(symbol)}&interval=${intervalKey}`;
+  const res = await fetchWithTimeout(url);
+  if (!res.ok) throw new Error(`Yahoo backend error: ${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data)) throw new Error('Invalid candle data');
+  return data.map(d => ({
+    time: d.time,
+    open: d.open,
+    high: d.high,
+    low: d.low,
+    close: d.close
+  })).sort((a, b) => a.time - b.time);
 }
 
 function isLightTheme() {
@@ -442,6 +469,59 @@ async function loadChart() {
         updateBidAskRow(bidAsk, instr, last.close);
       }
       connectBinanceKlineStream(instr.id, state.interval, gen, instr, bidAsk, status);
+    } else if (source === 'yahoo') {
+      try {
+        data = await fetchYahooCandles(instr.id, state.interval, state.category);
+      } catch (e) {
+        if (gen !== liveGen) return;
+        data = syntheticCandles(instr.id, state.interval);
+        series.setData(data);
+        chart.timeScale().fitContent();
+        const last = data[data.length - 1];
+        if (last) updateBidAskRow(bidAsk, instr, last.close);
+        status.textContent = t('charts.demoData');
+        return;
+      }
+      if (gen !== liveGen) return;
+      series.setData(data);
+      chart.timeScale().fitContent();
+      const last = data[data.length - 1];
+      if (last) updateBidAskRow(bidAsk, instr, last.close);
+      status.textContent = t('charts.liveYahoo') || 'Live — Yahoo Finance';
+
+      // Start polling for live price update
+      let currentBar = last ? { ...last } : null;
+      stockPollTimer = setInterval(async () => {
+        if (gen !== liveGen) return;
+        try {
+          const pd = await apiGet(`/api/market/price/${encodeURIComponent(instr.id)}`);
+          if (pd && pd.price) {
+            const price = Number(pd.price);
+            updateBidAskRow(bidAsk, instr, price);
+            
+            const now = Math.floor(Date.now() / 1000);
+            const sec = INTERVAL_SECONDS[state.interval] ?? 3600;
+            const bucket = Math.floor(now / sec) * sec;
+
+            if (!currentBar || bucket > currentBar.time) {
+              // New candle
+              currentBar = {
+                time: bucket,
+                open: price,
+                high: price,
+                low: price,
+                close: price
+              };
+            } else {
+              // Update existing candle
+              currentBar.high = Math.max(currentBar.high, price);
+              currentBar.low = Math.min(currentBar.low, price);
+              currentBar.close = price;
+            }
+            series.update(currentBar);
+          }
+        } catch { /* ignore */ }
+      }, 2000); // 2 seconds for faster feel
     } else if (source === 'synthetic_live') {
       data = syntheticCandles(instr.id, state.interval);
       if (gen !== liveGen) return;
@@ -466,6 +546,84 @@ async function loadChart() {
     if (gen !== liveGen) return;
     status.textContent = t('charts.errorLoad');
     series.setData([]);
+  }
+  refreshPortfolio();
+}
+
+async function refreshPortfolio() {
+  const balEl = document.getElementById('tradingBalance');
+  const qtyEl = document.getElementById('tradingPositionQty');
+  const sym = state.instrumentId;
+
+  try {
+    const ov = await apiGet('/api/broker/overview');
+    if (balEl) balEl.textContent = '$' + Number(ov?.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  } catch { /* ignore */ }
+
+  try {
+    const pos = await apiGet('/api/broker/positions');
+    const list = Array.isArray(pos) ? pos : [];
+    const p = list.find((x) => String(x?.symbolCode || '').toUpperCase() === String(sym || '').toUpperCase());
+    if (qtyEl) qtyEl.textContent = p ? Number(p.quantity).toFixed(2) : '0.00';
+  } catch { /* ignore */ }
+}
+
+async function placeOrder(side) {
+  const symbolCode = state.instrumentId;
+  const volInput = document.getElementById('vol');
+  const quantity = volInput ? Number(volInput.value) : 0;
+  
+  const activeTypeBtn = document.querySelector('.order-type-btn.btn-primary');
+  const orderType = activeTypeBtn?.dataset.orderType?.toUpperCase() || 'MARKET';
+  const entryPriceInput = document.getElementById('entryPriceInput');
+  const entryPrice = entryPriceInput ? Number(entryPriceInput.value) : null;
+
+  if (!symbolCode || !quantity || quantity <= 0) {
+    showToast(t('trading.errBadOrder'), { variant: 'warning' });
+    return;
+  }
+
+  if (orderType !== 'MARKET' && (!entryPrice || entryPrice <= 0)) {
+    showToast(t('trading.errEntryPriceRequired'), { variant: 'warning' });
+    return;
+  }
+
+  const btn = document.getElementById(side.toLowerCase() + 'Btn');
+  if (btn) btn.disabled = true;
+
+  try {
+    const payload = { side, symbolCode, quantity, orderType };
+    if (orderType === 'LIMIT') payload.limitPrice = entryPrice;
+    if (orderType === 'STOP') payload.stopPrice = entryPrice;
+
+    const res = await apiPostJson('/api/broker/orders', payload);
+    const data = await res.json();
+
+    if (res.ok) {
+      if (data.status === 'NEW') {
+        showToast(t('trading.orderPlaced', { side, symbol: symbolCode }), { variant: 'success' });
+      } else {
+        showToast(t('trading.orderFilled', { 
+          side, 
+          symbol: symbolCode, 
+          price: data.fillPrice, 
+          balance: Number(data.newBalance).toFixed(2) 
+        }), { variant: 'success' });
+      }
+      refreshPortfolio();
+      // Wait a bit then refresh positions list
+      setTimeout(() => {
+        const refreshPos = document.getElementById('refreshPositionsBtn');
+        if (refreshPos) refreshPos.click();
+      }, 800);
+    } else {
+      const errCode = data?.error || 'unknown';
+      showToast(t('trading.errOrderFailed') + ': ' + errCode, { variant: 'error' });
+    }
+  } catch (e) {
+    showToast(t('trading.errOrderFailed'), { variant: 'error' });
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -600,6 +758,48 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // --- Trading Panel Logic ---
+  const volInput = document.getElementById('vol');
+  const volPlus = document.getElementById('volPlus');
+  const volMinus = document.getElementById('volMinus');
+  if (volPlus && volInput) {
+    volPlus.addEventListener('click', () => {
+      const v = parseFloat(volInput.value) || 0;
+      volInput.value = (v + 0.1).toFixed(2);
+    });
+  }
+  if (volMinus && volInput) {
+    volMinus.addEventListener('click', () => {
+      const v = parseFloat(volInput.value) || 0.1;
+      if (v > 0.1) volInput.value = (v - 0.1).toFixed(2);
+    });
+  }
+
+  const orderTypeBtns = document.querySelectorAll('.order-type-btn');
+  const entryPriceGroup = document.getElementById('entryPriceGroup');
+  orderTypeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      orderTypeBtns.forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline-dark');
+      });
+      btn.classList.add('btn-primary');
+      btn.classList.remove('btn-outline-dark');
+      
+      const type = btn.dataset.orderType;
+      if (entryPriceGroup) {
+        entryPriceGroup.style.display = (type === 'market') ? 'none' : 'block';
+      }
+    });
+  });
+
+  const buyBtn = document.getElementById('buyBtn');
+  const sellBtn = document.getElementById('sellBtn');
+  if (buyBtn) buyBtn.addEventListener('click', () => placeOrder('BUY'));
+  if (sellBtn) sellBtn.addEventListener('click', () => placeOrder('SELL'));
+
   renderInstrumentButtons();
   loadChart();
+  refreshPortfolio();
+  setInterval(refreshPortfolio, 10000);
 });

@@ -3,6 +3,8 @@ package com.brokerui.broker;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.Locale;
+import java.util.List;
+import java.util.ArrayList;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -40,13 +42,11 @@ public class MT5IntegrationService {
      * Verifies if the MT5 bridge is actually reachable.
      */
     public boolean checkHealth() {
-        // 1. Check if the file bridge directory exists
         File dir = new File(basePath);
         if (!dir.exists() || !dir.isDirectory()) {
             return false;
         }
 
-        // 2. Try to ping the MT5 socket (port 5555)
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(MT5_HOST, MT5_PORT), 2000);
             return true;
@@ -56,15 +56,13 @@ public class MT5IntegrationService {
         }
     }
 
-    /* ─── Execution Logic ─── */
-
     public String sendTrade(String symbol, String action, double price, double tp, double sl, double lot) {
         try (Socket socket = new Socket(MT5_HOST, MT5_PORT);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
 
             String command = String.format(Locale.US,
                     "TRADE|%s|%s|%.5f|%.5f|%.5f|%.2f",
-                    symbol.trim().toUpperCase(), action.trim().toUpperCase(), price, tp, sl, lot
+                    symbol.trim().toUpperCase() + ".m", action.trim().toUpperCase(), price, tp, sl, lot
             );
 
             writer.println(command);
@@ -74,8 +72,6 @@ public class MT5IntegrationService {
         }
     }
 
-    /* ─── File-Bridge Logic (based on AlpacaClient.java) ─── */
-
     public double getPrice(String symbol) throws Exception {
         File priceFile = new File(basePath, "currentPrice.json");
         File requestFile = new File(basePath, "request_price.txt");
@@ -83,7 +79,7 @@ public class MT5IntegrationService {
         if (priceFile.exists()) new FileWriter(priceFile, false).close();
 
         Files.writeString(requestFile.toPath(),
-                "SYMBOL=" + symbol + System.lineSeparator(),
+                "SYMBOL=" + symbol + ".m" + System.lineSeparator(),
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
         int waited = 0;
@@ -114,7 +110,7 @@ public class MT5IntegrationService {
         ZonedDateTime from = ZonedDateTime.now(ZoneOffset.UTC).minusDays(14);
         String fromDate = from.format(fileFmt);
 
-        String request = String.format(Locale.US, "SYMBOL=%s\nTIMEFRAME=%s\nFROM=%s\n", symbol, timeframe, fromDate);
+        String request = String.format(Locale.US, "SYMBOL=%s.m\nTIMEFRAME=%s\nFROM=%s\n", symbol, timeframe, fromDate);
         Files.writeString(requestFile.toPath(), request, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
         int waited = 0;
@@ -146,5 +142,44 @@ public class MT5IntegrationService {
         new FileWriter(candleFile, false).close();
         new FileWriter(requestFile, false).close();
         return candles;
+    }
+
+    public List<com.brokerui.market.CandleBar> getCandlesForUi(String symbol, int count, String timeframe) throws Exception {
+        Candle[] candles = getRecentCandles(symbol, count, timeframe);
+        List<com.brokerui.market.CandleBar> list = new ArrayList<>();
+        for (Candle c : candles) {
+            list.add(new com.brokerui.market.CandleBar(c.timestamp, c.open, c.high, c.low, c.close));
+        }
+        return list;
+    }
+
+    public JSONArray getOpenPositions() throws Exception {
+        File posFile = new File(basePath, "positions_data.json");
+        File requestFile = new File(basePath, "request_positions.txt");
+
+        if (posFile.exists()) new FileWriter(posFile, false).close();
+
+        Files.writeString(requestFile.toPath(), "ACTION=GET_POSITIONS\n", 
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+        int waited = 0;
+        while (waited < 10) {
+            if (posFile.exists() && posFile.length() > 5) break;
+            TimeUnit.SECONDS.sleep(1);
+            waited++;
+        }
+
+        if (waited >= 10) return new JSONArray();
+
+        String content = Files.readString(posFile.toPath()).trim();
+        JSONArray arr = new JSONArray(content);
+
+        new FileWriter(posFile, false).close();
+        new FileWriter(requestFile, false).close();
+        return arr;
+    }
+
+    public String getBasePath() {
+        return basePath;
     }
 }

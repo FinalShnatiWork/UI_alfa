@@ -83,6 +83,23 @@
           <mainClass>com.brokerui.BackendApplication</mainClass>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.flywaydb</groupId>
+        <artifactId>flyway-maven-plugin</artifactId>
+        <version>10.10.0</version>
+        <configuration>
+          <url>jdbc:postgresql://127.0.0.1:5433/broker_ui</url>
+          <user>broker</user>
+          <password>broker</password>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.3</version>
+          </dependency>
+        </dependencies>
+      </plugin>
     </plugins>
   </build>
 </project>

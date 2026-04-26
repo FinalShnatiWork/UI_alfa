@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Broker Admin | Local Controller</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #030509;
+      --card-bg: #0d1117;
+      --primary: #00c8ff;
+      --primary-glow: rgba(0, 200, 255, 0.3);
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+      --border: rgba(255, 255, 255, 0.08);
+      --success: #23d160;
+      --danger: #f85149;
+      --warning: #e3b341;
+      --sidebar-w: 260px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar Styling */
+    aside {
+      width: var(--sidebar-w);
+      background: var(--card-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 30px 15px;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 15px 40px;
+    }
+    .logo-text { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px; }
+
+    .nav-menu { flex: 1; list-style: none; padding: 0; margin: 0; }
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-radius: 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 4px;
+    }
+    .nav-link:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+    .nav-link.active { background: var(--primary); color: #000; box-shadow: 0 4px 15px var(--primary-glow); }
+
+    /* Main Content */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      height: 80px;
+      padding: 0 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: rgba(3, 5, 9, 0.5);
+      backdrop-filter: blur(10px);
+    }
+
+    .page-title { font-size: 1.5rem; font-weight: 600; }
+    
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      background: rgba(255,255,255,0.03);
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+    .dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+    .scroll-area {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 30px;
+    }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+    .card-title { font-size: 1.25rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 10px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 15px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+    td { padding: 18px 15px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 0.95rem; }
+
+    .badge { padding: 5px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .badge-success { background: rgba(35, 209, 96, 0.1); color: var(--success); }
+    .badge-danger { background: rgba(248, 81, 73, 0.1); color: var(--danger); }
+    .badge-info { background: rgba(0, 200, 255, 0.1); color: var(--primary); }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
+    .btn-primary { background: var(--primary); color: #000; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { background: rgba(255,255,255,0.05); }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(5px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: var(--card-bg);
+      width: 100%;
+      max-width: 450px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      padding: 35px;
+    }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px; }
+    .form-control {
+      width: 100%;
+      background: #030509;
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      border-radius: 10px;
+      color: #fff;
+      font-family: inherit;
+    }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+    }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(0,200,255,0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div id="loader">
+    <div class="spinner"></div>
+    <p style="margin-top: 20px; color: var(--text-muted);">Syncing with Local Server...</p>
+  </div>
+
+  <!-- EDIT USER MODAL -->
+  <div id="edit-user-modal" class="modal-backdrop">
+    <div class="modal">
+      <h2 style="margin-top:0">Edit User Profile</h2>
+      <input type="hidden" id="edit-user-id">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="edit-user-name" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="edit-user-email" class="form-control">
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 30px;">
+        <button class="btn btn-primary" style="flex:1" onclick="saveUserEdit()">Save Changes</button>
+        <button class="btn btn-outline" onclick="closeModals()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT BALANCE MODAL -->
+  <div id="edit-balance-modal" class="modal-backdrop">
+    <div class="modal">
+      <h2 style="margin-top:0">Update Balance</h2>
+      <input type="hidden" id="edit-acc-id">
+      <div class="form-group">
+        <label>New Balance (USD)</label>
+        <input type="number" id="edit-acc-balance" class="form-control" step="0.01">
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 30px;">
+        <button class="btn btn-primary" style="flex:1" onclick="saveBalanceEdit()">Update Funds</button>
+        <button class="btn btn-outline" onclick="closeModals()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="logo-area">
+      <img src="./UI/public/images/LOGO.png?v=6" alt="Logo" style="height: 32px;">
+      <div class="logo-text">Admin Hub</div>
+    </div>
+    <div class="nav-menu">
+      <div class="nav-link active" onclick="showTab('dashboard', this)">Overview</div>
+      <div class="nav-link" onclick="showTab('users', this)">User Management</div>
+      <div class="nav-link" onclick="showTab('trades', this)">Trades & Activity</div>
+      <div class="nav-link" onclick="showTab('finance', this)">Financial Data</div>
+      <div class="nav-link" onclick="showTab('system', this)">System Status</div>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div class="page-title" id="active-tab-title">Dashboard</div>
+      <div class="status-badge">
+        <div class="dot" id="server-status-dot"></div>
+        <span id="server-status-text">Connecting...</span>
+      </div>
+    </header>
+
+    <div class="scroll-area">
+      
+      <!-- TAB: DASHBOARD -->
+      <div id="tab-dashboard" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">MetaTrader 5 Integration Health</h3>
+            <div id="mt5-status-badge" class="badge">Checking...</div>
+          </div>
+          <div id="mt5-details" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
+            <p>Bridge Path: <code id="mt5-path-display">...</code></p>
+            <p>Bridge Reachable: <span id="mt5-reachable-display">...</span></p>
+          </div>
+          <div style="display: flex; gap: 15px;">
+            <button class="btn btn-primary" onclick="mt5Connect()">Initialize Bridge</button>
+            <button class="btn btn-outline" onclick="refreshData()">Re-check Health</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: USERS -->
+      <div id="tab-users" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">Users List</h3></div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="table-users-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB: TRADES -->
+      <div id="tab-trades" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">All Activity</h3></div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Volume</th>
+                <th>Type</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="table-trades-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB: FINANCE -->
+      <div id="tab-finance" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">Accounts Balance</h3></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Acc ID</th>
+                <th>User ID</th>
+                <th>Balance</th>
+                <th style="text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="table-accounts-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB: SYSTEM -->
+      <div id="tab-system" class="tab-content" style="display:none;">
+        <div class="card" style="border-color: var(--danger);">
+          <h3 style="color: var(--danger);">Critical Operations</h3>
+          <button class="btn btn-danger" onclick="restartServer()">Restart Backend Process</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = "http://localhost:8080/api/admin";
+    
+    function getUrl(endpoint) {
+      // Ensure no double slashes
+      const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+      const path = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+      return base + path;
+    }
+
+    async function fetchData(endpoint) {
+      try {
+        const res = await fetch(getUrl(endpoint));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) { 
+        console.error("Fetch Error:", err);
+        return null; 
+      }
+    }
+
+    async function postData(endpoint, body = {}) {
+      try {
+        const res = await fetch(getUrl(endpoint), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error(`Action failed: ${res.status}`);
+        return await res.json();
+      } catch (err) { 
+        alert("Action Failed: " + err.message);
+        return null; 
+      }
+    }
+
+    function showTab(tabName, el) {
+      document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+      document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+      document.getElementById(`tab-${tabName}`).style.display = 'block';
+      el.classList.add('active');
+      document.getElementById('active-tab-title').innerText = el.innerText.trim();
+    }
+
+    async function refreshData() {
+      const loader = document.getElementById('loader');
+      loader.style.display = 'flex';
+      
+      const healthCheck = await fetch("http://localhost:8080/api/health").catch(() => null);
+      const isOnline = healthCheck && healthCheck.ok;
+      document.getElementById('server-status-dot').className = `dot ${isOnline ? 'online' : ''}`;
+      document.getElementById('server-status-text').innerText = isOnline ? "Server Online" : "Server Offline";
+
+      if (isOnline) {
+        const mt5 = await fetchData("/mt5/status");
+        if (mt5) {
+          const badge = document.getElementById('mt5-status-badge');
+          badge.innerText = mt5.connected ? "ACTIVE" : "INACTIVE";
+          badge.className = "badge " + (mt5.connected ? "badge-success" : "badge-danger");
+          document.getElementById('mt5-path-display').innerText = mt5.path || "Not Defined in application.yml";
+          document.getElementById('mt5-reachable-display').innerText = mt5.bridgeReachable ? "YES (Files Detected)" : "NO (Check Path/Terminal)";
+          document.getElementById('mt5-reachable-display').style.color = mt5.bridgeReachable ? "var(--success)" : "var(--danger)";
+        }
+
+        const users = await fetchData("/users") || [];
+        document.getElementById('table-users-body').innerHTML = users.map(u => `
+          <tr>
+            <td>#${u.id}</td>
+            <td class="font-bold">${u.displayName}</td>
+            <td>${u.email}</td>
+            <td><span class="badge ${u.banned ? 'badge-danger' : 'badge-success'}">${u.banned ? 'Banned' : 'Active'}</span></td>
+            <td style="text-align:right">
+              <button class="btn btn-sm btn-outline" onclick="openEditUser(${u.id}, '${u.displayName}', '${u.email}')">Edit</button>
+              <button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteUser(${u.id})">Delete</button>
+            </td>
+          </tr>
+        `).join('');
+
+        const trades = await fetchData("/trades") || [];
+        document.getElementById('table-trades-body').innerHTML = trades.map(t => `
+          <tr>
+            <td>#${t.id}</td>
+            <td class="font-bold">${t.symbol}</td>
+            <td><b style="color:${t.side==='BUY'?'var(--success)':'var(--danger)'}">${t.side}</b></td>
+            <td>${t.quantity}</td>
+            <td><span class="badge badge-info">${t.type}</span></td>
+            <td>${t.status}</td>
+          </tr>
+        `).join('');
+
+        const accounts = await fetchData("/accounts") || [];
+        document.getElementById('table-accounts-body').innerHTML = accounts.map(a => `
+          <tr>
+            <td>#${a.id}</td>
+            <td>#${a.userId}</td>
+            <td class="font-bold text-primary">$${a.balance.toFixed(2)}</td>
+            <td style="text-align:right">
+              <button class="btn btn-sm btn-outline" onclick="openEditBalance(${a.id}, ${a.balance})">Adjust Balance</button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      setTimeout(() => loader.style.display = 'none', 400);
+    }
+
+    function openEditUser(id, name, email) {
+      document.getElementById('edit-user-id').value = id;
+      document.getElementById('edit-user-name').value = name;
+      document.getElementById('edit-user-email').value = email;
+      document.getElementById('edit-user-modal').style.display = 'flex';
+    }
+    function openEditBalance(id, current) {
+      document.getElementById('edit-acc-id').value = id;
+      document.getElementById('edit-acc-balance').value = current;
+      document.getElementById('edit-balance-modal').style.display = 'flex';
+    }
+    function closeModals() { document.querySelectorAll('.modal-backdrop').forEach(m => m.style.display = 'none'); }
+
+    async function saveUserEdit() {
+      const id = document.getElementById('edit-user-id').value;
+      const res = await postData(`/users/${id}/update`, {
+        displayName: document.getElementById('edit-user-name').value,
+        email: document.getElementById('edit-user-email').value
+      });
+      if (res && res.ok) { closeModals(); refreshData(); }
+    }
+    async function saveBalanceEdit() {
+      const id = document.getElementById('edit-acc-id').value;
+      const res = await postData(`/accounts/${id}/balance`, { balance: parseFloat(document.getElementById('edit-acc-balance').value) });
+      if (res && res.ok) { closeModals(); refreshData(); }
+    }
+    async function deleteUser(id) {
+      if (confirm(`Permanently delete User #${id}?`)) {
+        const res = await postData(`/users/${id}/delete`);
+        if (res && res.ok) refreshData();
+      }
+    }
+    async function mt5Connect() { await postData("/mt5/connect"); refreshData(); }
+    async function restartServer() { if (confirm("Restart backend?")) await postData("/server/restart"); }
+
+    document.addEventListener('DOMContentLoaded', refreshData);
+  </script>
+</body>
+</html>
