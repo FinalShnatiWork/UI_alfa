@@ -38,10 +38,15 @@ public class MT5IntegrationService {
 
     private final DateTimeFormatter fileFmt = DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm");
 
+    public boolean isConfigured() {
+        return basePath != null && !basePath.isBlank();
+    }
+
     /**
      * Verifies if the MT5 bridge is actually reachable.
      */
     public boolean checkHealth() {
+        if (!isConfigured()) return false;
         File dir = new File(basePath);
         if (!dir.exists() || !dir.isDirectory()) {
             return false;

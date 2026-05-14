@@ -29,7 +29,7 @@ broker:
     rapidapi-key: ${RAPIDAPI_KEY:e25c43efa8mshe883d075fa34603p1190a9jsn75eaed0783c2}
   mt5:
     auto-connect: ${MT5_AUTO_CONNECT:false}
-    base-path: "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\"
+    base-path: ${MT5_BASE_PATH:}
 
 logging:
   level:

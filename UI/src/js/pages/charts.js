@@ -3,8 +3,7 @@ import { applyI18n, t } from '../lib/i18n.js';
 import { apiGet, apiPostJson } from '../lib/api.js';
 import { showToast } from '../lib/toast.js';
 
-/** Dev: vite proxy `/binance` → Binance REST. WebSocket always uses stream.binance.com. */
-const BINANCE_PREFIX = import.meta.env.DEV ? '/binance' : 'https://api.binance.com';
+const BINANCE_PREFIX = 'https://api.binance.com';
 const BINANCE_WS = 'wss://stream.binance.com:443/ws';
 
 const STOCK_POLL_MS = 15_000;

@@ -26,6 +26,7 @@ public class MT5PositionSyncService {
     @Scheduled(fixedDelay = 10000) // Every 10 seconds
     @Transactional
     public void sync() {
+        if (!mt5Service.isConfigured()) return;
         try {
             JSONArray mt5Positions = mt5Service.getOpenPositions();
             if (mt5Positions == null) return;
