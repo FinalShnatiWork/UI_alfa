@@ -5,7 +5,7 @@ import { showToast } from '../lib/toast.js';
 
 /** Dev: vite proxy `/binance` → Binance REST. WebSocket always uses stream.binance.com. */
 const BINANCE_PREFIX = import.meta.env.DEV ? '/binance' : 'https://api.binance.com';
-const BINANCE_WS = 'wss://stream.binance.com:9443/ws';
+const BINANCE_WS = 'wss://stream.binance.com:443/ws';
 
 const STOCK_POLL_MS = 15_000;
 const SYNTH_TICK_MS = 1000;
@@ -149,8 +149,11 @@ function connectBinanceKlineStream(symbol, intervalKey, gen, instr, bidAskEl, st
   const streamPath = `${mapped.toLowerCase()}@kline_${interval}`;
   const url = `${BINANCE_WS}/${streamPath}`;
 
+  console.log('[Binance WS] Connecting to', url);
   const ws = new WebSocket(url);
   binanceWs = ws;
+
+  ws.onerror = (e) => console.warn('[Binance WS] Error', e);
 
   ws.onmessage = (ev) => {
     if (gen !== liveGen || !series) return;
