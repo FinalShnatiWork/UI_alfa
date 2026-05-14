@@ -457,9 +457,9 @@ function chartColors() {
       borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)',
       barSpacing: 8,
       minBarSpacing: 2,
-      fixLeftEdge: true,       // stop at first candle, no blank space on left
-      fixRightEdge: false,     // allow scrolling past last candle
-      rightOffset: 5,          // small breathing room on the right
+      fixLeftEdge: true,        // stop at first candle
+      fixRightEdge: true,       // stop at last candle, no blank space on right
+      rightOffset: 3,           // small breathing room on the right
       lockVisibleTimeRangeOnResize: false,
     },
     handleScroll: {
