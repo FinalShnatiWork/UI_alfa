@@ -449,25 +449,20 @@ async function loadChart() {
   try {
     let data;
     if (source === 'binance') {
+      let restOk = true;
       try {
         data = await fetchBinanceKlines(instr.id, state.interval);
       } catch (e) {
-        if (gen !== liveGen) return;
+        restOk = false;
         data = syntheticCandles(instr.id, state.interval);
-        series.setData(data);
-        chart.timeScale().fitContent();
-        const last = data[data.length - 1];
-        if (last) updateBidAskRow(bidAsk, instr, last.close);
-        status.textContent = t('charts.binanceSlow');
-        return;
       }
       if (gen !== liveGen) return;
       series.setData(data);
       chart.timeScale().fitContent();
       const last = data[data.length - 1];
-      if (last) {
-        updateBidAskRow(bidAsk, instr, last.close);
-      }
+      if (last) updateBidAskRow(bidAsk, instr, last.close);
+      // Always connect WebSocket — even if REST failed, WS gives live ticks
+      status.textContent = restOk ? t('charts.liveBinance') : t('charts.binanceSlow');
       connectBinanceKlineStream(instr.id, state.interval, gen, instr, bidAsk, status);
     } else if (source === 'yahoo') {
       try {
