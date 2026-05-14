@@ -53,7 +53,14 @@
 
     <div class="charts-main-layout">
       <div class="charts-left-col">
-        <div class="card chart-preview-area">
+        <div class="card chart-preview-area" style="position:relative;">
+          <!-- Chart toolbar: zoom controls -->
+          <div id="chartToolbar" style="position:absolute;top:10px;right:12px;z-index:10;display:flex;gap:6px;opacity:0.75;">
+            <button id="chartZoomIn"  title="Zoom In"  class="chart-ctrl-btn">+</button>
+            <button id="chartZoomOut" title="Zoom Out" class="chart-ctrl-btn">−</button>
+            <button id="chartFit"     title="Fit All"  class="chart-ctrl-btn" data-i18n-title="charts.fitAll">⊡</button>
+            <button id="chartToNow"   title="Go to Now" class="chart-ctrl-btn" data-i18n-title="charts.toNow">▶|</button>
+          </div>
           <div id="chartMount" class="chart-mount"></div>
         </div>
 

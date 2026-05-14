@@ -450,12 +450,29 @@ function chartColors() {
     },
     rightPriceScale: {
       borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)',
-      scaleMargins: { top: 0.08, bottom: 0.22 }, // leave room for volume
+      scaleMargins: { top: 0.08, bottom: 0.22 },
+      autoScale: true,
     },
     timeScale: {
       borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)',
       barSpacing: 8,
-      minBarSpacing: 3,
+      minBarSpacing: 2,
+      fixLeftEdge: true,       // stop at first candle, no blank space on left
+      fixRightEdge: false,     // allow scrolling past last candle
+      rightOffset: 5,          // small breathing room on the right
+      lockVisibleTimeRangeOnResize: false,
+    },
+    handleScroll: {
+      mouseWheel: true,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: false,    // vertical touch = page scroll, not chart zoom
+    },
+    handleScale: {
+      axisPressedMouseMove: { time: true, price: true },
+      axisDoubleClickReset: { time: true, price: true }, // double-click axis = reset
+      mouseWheel: true,
+      pinch: true,
     },
   };
 }
@@ -498,6 +515,42 @@ function ensureChart(mountEl) {
     chart.applyOptions(chartColors());
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  setupChartToolbar();
+}
+
+function setupChartToolbar() {
+  const zoomIn  = document.getElementById('chartZoomIn');
+  const zoomOut = document.getElementById('chartZoomOut');
+  const fitBtn  = document.getElementById('chartFit');
+  const toNow   = document.getElementById('chartToNow');
+  if (!chart) return;
+
+  zoomIn?.addEventListener('click', () => {
+    const ts = chart.timeScale();
+    const range = ts.getVisibleLogicalRange();
+    if (!range) return;
+    const mid = (range.from + range.to) / 2;
+    const half = (range.to - range.from) / 2 * 0.65; // zoom in 35%
+    ts.setVisibleLogicalRange({ from: mid - half, to: mid + half });
+  });
+
+  zoomOut?.addEventListener('click', () => {
+    const ts = chart.timeScale();
+    const range = ts.getVisibleLogicalRange();
+    if (!range) return;
+    const mid = (range.from + range.to) / 2;
+    const half = (range.to - range.from) / 2 * 1.45; // zoom out 45%
+    ts.setVisibleLogicalRange({ from: mid - half, to: mid + half });
+  });
+
+  fitBtn?.addEventListener('click', () => {
+    chart.timeScale().fitContent();
+  });
+
+  toNow?.addEventListener('click', () => {
+    chart.timeScale().scrollToRealTime();
+  });
 }
 
 function applyTimeScaleFormatting() {
