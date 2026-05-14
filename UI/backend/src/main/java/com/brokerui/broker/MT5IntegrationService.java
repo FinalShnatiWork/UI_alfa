@@ -41,7 +41,12 @@ public class MT5IntegrationService {
     /**
      * Verifies if the MT5 bridge is actually reachable.
      */
+    public boolean isConfigured() {
+        return basePath != null && !basePath.isBlank();
+    }
+
     public boolean checkHealth() {
+        if (!isConfigured()) return false;
         File dir = new File(basePath);
         if (!dir.exists() || !dir.isDirectory()) {
             return false;
@@ -154,6 +159,7 @@ public class MT5IntegrationService {
     }
 
     public JSONArray getOpenPositions() throws Exception {
+        if (!isConfigured()) return null;
         File posFile = new File(basePath, "positions_data.json");
         File requestFile = new File(basePath, "request_positions.txt");
 
