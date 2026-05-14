@@ -113,11 +113,14 @@ public class MarketController {
 
         BigDecimal base;
         int scale;
-        if (s.endsWith("JPY"))      { base = new BigDecimal("150.000"); scale = 3; }
-        else if (s.startsWith("XAU")) { base = new BigDecimal("2350.00"); scale = 2; }
-        else if (s.startsWith("XAG")) { base = new BigDecimal("30.00");   scale = 2; }
-        else if (s.startsWith("BTC")) { base = new BigDecimal("65000.00"); scale = 2; }
-        else                          { base = new BigDecimal("1.10000"); scale = 5; }
+        if (s.endsWith("JPY"))      { base = new BigDecimal("158.000"); scale = 3; }
+        else if (s.startsWith("XAU")) { base = new BigDecimal("4660.00"); scale = 2; }
+        else if (s.startsWith("XAG")) { base = new BigDecimal("83.00");   scale = 2; }
+        else if (s.startsWith("BTC")) { base = new BigDecimal("103000.00"); scale = 2; }
+        else if (s.startsWith("ETH")) { base = new BigDecimal("2400.00"); scale = 2; }
+        else if (s.startsWith("SOL")) { base = new BigDecimal("170.00");  scale = 2; }
+        else if (s.startsWith("XRP")) { base = new BigDecimal("2.40");    scale = 5; }
+        else                          { base = new BigDecimal("1.17000"); scale = 5; }
 
         return base.multiply(BigDecimal.valueOf(0.99 + (u * 0.02)))
                    .setScale(scale, RoundingMode.HALF_UP);
