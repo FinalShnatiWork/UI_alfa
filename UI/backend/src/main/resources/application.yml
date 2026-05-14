@@ -20,6 +20,8 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    ignore-missing-migrations: true
+    validate-on-migrate: false
 
 broker:
   market:
