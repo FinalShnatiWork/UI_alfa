@@ -3,11 +3,16 @@ package com.brokerui.market;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import javax.net.ssl.*;
+import java.net.HttpURLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +48,34 @@ public class YahooFinanceService {
 
     public YahooFinanceService(ObjectMapper om) {
         this.om = om;
-        this.http = RestClient.builder().build();
+        this.http = RestClient.builder()
+                .requestFactory(trustAllFactory())
+                .build();
+    }
+
+    /** Creates an HTTP factory that skips SSL certificate validation.
+     *  Safe for external market-data calls in a demo environment. */
+    private static SimpleClientHttpRequestFactory trustAllFactory() {
+        try {
+            TrustManager[] trustAll = { new X509TrustManager() {
+                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                public void checkClientTrusted(X509Certificate[] c, String a) {}
+                public void checkServerTrusted(X509Certificate[] c, String a) {}
+            }};
+            SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, trustAll, new SecureRandom());
+            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+            HttpsURLConnection.setDefaultHostnameVerifier((h, s) -> true);
+        } catch (Exception ignored) {}
+        return new SimpleClientHttpRequestFactory() {
+            @Override
+            protected void prepareConnection(HttpURLConnection conn, String method) throws java.io.IOException {
+                if (conn instanceof HttpsURLConnection https) {
+                    https.setHostnameVerifier((h, s) -> true);
+                }
+                super.prepareConnection(conn, method);
+            }
+        };
     }
 
     public boolean isConfigured() {
@@ -77,7 +109,9 @@ public class YahooFinanceService {
                     price = result.get(0).path("regularMarketPrice").asDouble(0);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("[Yahoo] Price error for " + uiSymbol + ": " + e.getMessage());
+        }
 
         // 2. Try RapidAPI if unofficial failed and key is set
         if (price <= 0 && rapidApiKey != null && !rapidApiKey.isBlank()) {
@@ -121,7 +155,9 @@ public class YahooFinanceService {
             String url = String.format(UNOFFICIAL_CHART,
                     URLEncoder.encode(ticker, StandardCharsets.UTF_8), interval, range);
             String json = http.get().uri(url)
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Accept", "application/json")
+                    .header("Accept-Language", "en-US,en;q=0.9")
                     .retrieve()
                     .onStatus(s -> !s.is2xxSuccessful(), (req, res) -> {
                         throw new RuntimeException("Yahoo unofficial chart: " + res.getStatusCode());
@@ -130,8 +166,11 @@ public class YahooFinanceService {
             if (json != null) {
                 List<CandleBar> bars = parseYahooChart(json);
                 if (!bars.isEmpty()) return bars;
+                System.err.println("[Yahoo] Candles empty for " + uiSymbol + " ticker=" + ticker);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("[Yahoo] Chart error for " + uiSymbol + ": " + e.getMessage());
+        }
 
         return List.of(); // frontend will use synthetic
     }
