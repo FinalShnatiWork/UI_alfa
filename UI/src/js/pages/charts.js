@@ -251,11 +251,25 @@ function mulberry32(seed) {
   };
 }
 
-function syntheticCandles(symbol, intervalKey, count = 400) {
+function syntheticCandles(symbol, intervalKey, count = 400, basePrice = null) {
   const sec = INTERVAL_SECONDS[intervalKey] ?? 3600;
   const seed = Array.from(symbol).reduce((s, c) => (s + c.charCodeAt(0)) | 0, 7);
   const rand = mulberry32(seed);
-  let price = 50 + rand() * 200 + symbol.length * 3;
+  // Use provided real price, otherwise fall back to realistic defaults per symbol
+  let price;
+  if (basePrice && basePrice > 0) {
+    price = basePrice;
+  } else {
+    const s = symbol.toUpperCase();
+    if (s.endsWith('JPY'))        price = 150 + (rand() - 0.5) * 10;
+    else if (s.startsWith('XAU')) price = 2350 + (rand() - 0.5) * 100;
+    else if (s.startsWith('XAG')) price = 30 + (rand() - 0.5) * 2;
+    else if (s.startsWith('BTC')) price = 65000 + (rand() - 0.5) * 2000;
+    else if (s.startsWith('ETH')) price = 3200 + (rand() - 0.5) * 200;
+    else if (s.startsWith('SOL')) price = 150 + (rand() - 0.5) * 20;
+    else if (s.startsWith('XRP')) price = 0.55 + (rand() - 0.5) * 0.1;
+    else                          price = 1.10 + (rand() - 0.5) * 0.05;
+  }
   const now = Math.floor(Date.now() / 1000);
   const nowBucket = Math.floor(now / sec) * sec;
   const out = [];
@@ -482,55 +496,62 @@ async function loadChart() {
       status.textContent = restOk ? t('charts.liveBinance') : t('charts.binanceSlow');
       connectBinanceKlineStream(instr.id, state.interval, gen, instr, bidAsk, status);
     } else if (source === 'yahoo') {
+      // Fetch real price first so synthetic candles use the correct base price
+      let realPrice = null;
+      try {
+        const pd = await apiGet(`/api/market/price/${encodeURIComponent(instr.id)}`);
+        if (pd && pd.price) realPrice = Number(pd.price);
+      } catch { /* use null — syntheticCandles has per-symbol defaults */ }
+
       let yahooOk = true;
       try {
         data = await fetchYahooCandles(instr.id, state.interval, state.category);
       } catch (e) {
         yahooOk = false;
-        data = syntheticCandles(instr.id, state.interval);
+        data = syntheticCandles(instr.id, state.interval, 400, realPrice);
       }
       if (gen !== liveGen) return;
       series.setData(data);
       chart.timeScale().fitContent();
       const lastYahoo = data[data.length - 1];
-      if (lastYahoo) updateBidAskRow(bidAsk, instr, lastYahoo.close);
+      // Show real price immediately if we have it
+      if (realPrice) updateBidAskRow(bidAsk, instr, realPrice);
+      else if (lastYahoo) updateBidAskRow(bidAsk, instr, lastYahoo.close);
       status.textContent = yahooOk
         ? (t('charts.liveYahoo') || 'Live — Yahoo Finance')
         : t('charts.demoData');
 
-      // Start live price polling regardless of candle source
+      // Live price polling — every 10 seconds
       let currentBar = lastYahoo ? { ...lastYahoo } : null;
-      stockPollTimer = setInterval(async () => {
+      if (realPrice && currentBar) {
+        currentBar = { ...currentBar, close: realPrice,
+          high: Math.max(currentBar.high, realPrice),
+          low: Math.min(currentBar.low, realPrice) };
+        series.update(currentBar);
+      }
+
+      const pollPrice = async () => {
         if (gen !== liveGen) return;
         try {
           const pd = await apiGet(`/api/market/price/${encodeURIComponent(instr.id)}`);
           if (pd && pd.price) {
             const price = Number(pd.price);
             updateBidAskRow(bidAsk, instr, price);
-            
             const now = Math.floor(Date.now() / 1000);
             const sec = INTERVAL_SECONDS[state.interval] ?? 3600;
             const bucket = Math.floor(now / sec) * sec;
-
             if (!currentBar || bucket > currentBar.time) {
-              // New candle
-              currentBar = {
-                time: bucket,
-                open: price,
-                high: price,
-                low: price,
-                close: price
-              };
+              currentBar = { time: bucket, open: price, high: price, low: price, close: price };
             } else {
-              // Update existing candle
               currentBar.high = Math.max(currentBar.high, price);
-              currentBar.low = Math.min(currentBar.low, price);
+              currentBar.low  = Math.min(currentBar.low,  price);
               currentBar.close = price;
             }
             series.update(currentBar);
           }
         } catch { /* ignore */ }
-      }, 60_000); // 1 minute — matches Yahoo Finance cache TTL
+      };
+      stockPollTimer = setInterval(pollPrice, 10_000); // every 10 seconds
     } else if (source === 'synthetic_live') {
       data = syntheticCandles(instr.id, state.interval);
       if (gen !== liveGen) return;
