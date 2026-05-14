@@ -58,8 +58,11 @@ public class YahooFinanceService {
                 .header("x-rapidapi-key", rapidApiKey)
                 .header("x-rapidapi-host", RAPIDAPI_HOST)
                 .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(),
+                        (req, res) -> { throw new RuntimeException("RapidAPI price error: " + res.getStatusCode()); })
                 .body(String.class);
 
+        if (json == null || json.isBlank()) return 0.0;
         JsonNode root = objectMapper.readTree(json);
         // Response: { "body": { "regularMarketPrice": 1.0875, ... } }
         double price = root.path("body").path("regularMarketPrice").asDouble(0.0);
@@ -83,8 +86,11 @@ public class YahooFinanceService {
                 .header("x-rapidapi-key", rapidApiKey)
                 .header("x-rapidapi-host", RAPIDAPI_HOST)
                 .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(),
+                        (req, res) -> { throw new RuntimeException("RapidAPI candles error: " + res.getStatusCode()); })
                 .body(String.class);
 
+        if (json == null || json.isBlank()) return List.of();
         JsonNode root = objectMapper.readTree(json);
         // Response is an array of { date, open, high, low, close, ... }
         if (!root.isArray()) return List.of();

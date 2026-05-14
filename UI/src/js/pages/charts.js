@@ -97,8 +97,10 @@ let liveGen = 0;
 let binanceWs = null;
 let stockPollTimer = null;
 let synthTickTimer = null;
+let sessionOpenPrice = null; // first price of the session for % change
 
 function stopLiveUpdates() {
+  sessionOpenPrice = null;
   if (binanceWs) {
     try {
       binanceWs.close();
@@ -132,11 +134,18 @@ function updateBidAskRow(bidAskEl, instr, close) {
     });
   }
 
-  // Update trading panel labels if they exist
+  // Update trading panel live price + change
   const livePriceValue = document.getElementById('livePriceValue');
+  const livePriceChange = document.getElementById('livePriceChange');
   if (livePriceValue) {
     livePriceValue.textContent = mid > 100 ? mid.toFixed(2) : mid.toFixed(d);
-    // Simple color logic based on previous state if we wanted to add it
+  }
+  if (livePriceChange) {
+    if (sessionOpenPrice == null) sessionOpenPrice = mid;
+    const pct = ((mid - sessionOpenPrice) / sessionOpenPrice) * 100;
+    const sign = pct >= 0 ? '+' : '';
+    livePriceChange.textContent = `${sign}${pct.toFixed(2)}%`;
+    livePriceChange.style.color = pct >= 0 ? 'var(--green)' : 'var(--red)';
   }
 }
 
