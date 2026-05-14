@@ -8,14 +8,6 @@ echo   BROKER PLATFORM - Starting All Services
 echo  ============================================
 echo.
 
-:: ─── Load .env if it exists ──────────────────────────────────────────────────
-if exist "%~dp0.env" (
-    echo [ENV] Loading .env file...
-    for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0.env") do (
-        if not "%%A"=="" if not "%%A:~0,1%"=="#" set "%%A=%%B"
-    )
-)
-
 :: ─── Step 1: Start Docker (PostgreSQL) ───────────────────────────────────────
 echo [1/3] Starting PostgreSQL (Docker Compose)...
 cd /d "%~dp0UI"
