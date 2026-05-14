@@ -98,6 +98,7 @@ let binanceWs = null;
 let stockPollTimer = null;
 let synthTickTimer = null;
 let sessionOpenPrice = null; // first price of the session for % change
+let loadChartTimer = null;  // debounce timer for rapid clicks
 
 function stopLiveUpdates() {
   sessionOpenPrice = null;
@@ -434,10 +435,15 @@ function renderInstrumentButtons() {
     btn.addEventListener('click', () => {
       state.instrumentId = instr.id;
       setActiveGroup('.charts-instr', btn);
-      loadChart();
+      debouncedLoadChart();
     });
     row.appendChild(btn);
   });
+}
+
+function debouncedLoadChart() {
+  if (loadChartTimer) clearTimeout(loadChartTimer);
+  loadChartTimer = setTimeout(() => { loadChartTimer = null; loadChart(); }, 250);
 }
 
 async function loadChart() {
@@ -752,7 +758,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.instrumentId = cfg.instruments[0].id;
       setActiveGroup('.charts-cat', btn);
       renderInstrumentButtons();
-      loadChart();
+      debouncedLoadChart();
     });
   });
 
@@ -760,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       state.interval = btn.dataset.interval ?? '1h';
       setActiveGroup('.charts-tf', btn);
-      loadChart();
+      debouncedLoadChart();
     });
   });
 
