@@ -61,30 +61,6 @@
       </ul>
     </div>
 
-    <div class="card text-left">
-      <h3 class="mb-20 text-xl border-bottom" style="padding-bottom:10px; border-bottom: 2px solid var(--border-light)" data-i18n="account.financial">
-        Financial Information (FIN)</h3>
-      <div class="stats-grid mb-20" style="grid-template-columns: 1fr 1fr 1fr;">
-        <div class="stat-card" style="border: 1px solid var(--border-light); padding:15px; border-radius: 8px;">
-          <div class="label text-secondary text-sm" data-i18n="dashboard.balance">Balance</div>
-          <div class="value text-primary" id="accountBalance">$0.00</div>
-        </div>
-        <div class="stat-card" style="border: 1px solid var(--border-light); padding:15px; border-radius: 8px;">
-          <div class="label text-secondary text-sm" data-i18n="dashboard.equity">Equity</div>
-          <div class="value text-primary" id="accountEquity">$0.00</div>
-        </div>
-        <div class="stat-card" style="border: 1px solid var(--border-light); padding:15px; border-radius: 8px;">
-          <div class="label text-secondary text-sm" data-i18n="account.freeMargin">Free Margin</div>
-          <div class="value text-primary" id="accountFreeMargin">$0.00</div>
-        </div>
-      </div>
-      <div class="flex-gap mt-20">
-        <div class="badge badge-success" style="padding: 6px 15px; font-size:0.9rem;" data-i18n="account.statusActive">Status: Active</div>
-        <div class="badge" id="accountLeverageBadge" style="background:var(--blue); padding: 6px 15px; font-size:0.9rem;" data-i18n="account.leverageBadge">Leverage: 1:100</div>
-      </div>
-      <p class="text-secondary text-sm mt-15" id="accountCurrencyLine" hidden></p>
-    </div>
-
     <div class="flex-gap flex-col" style="width:100%;">
       <button type="button" class="btn btn-primary" id="editProfileBtn" style="width:100%; padding: 15px; font-size: 1.1rem;" data-i18n="account.edit">Edit Profile</button>
       <button type="button" class="btn btn-outline-dark" id="accountLogoutBtn" style="width:100%; padding: 15px; font-size: 1.1rem;" data-i18n="account.logout">Log out</button>
