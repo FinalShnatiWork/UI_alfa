@@ -13,16 +13,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Fetches Forex/Metals prices and candles.
+ * Priority: RapidAPI Yahoo Finance → unofficial Yahoo Finance → empty (frontend uses synthetic)
+ */
 @Service
 public class YahooFinanceService {
 
-    private static final String RAPIDAPI_HOST = "yahoo-finance15.p.rapidapi.com";
-    private static final String QUOTE_URL =
-            "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/quote?ticker=%s&type=CURRENCY";
-    private static final String CHART_URL =
-            "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/stock/history?symbol=%s&interval=%s&diffandsplits=false";
+    // Unofficial Yahoo Finance (no key, free)
+    private static final String UNOFFICIAL_QUOTE = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%s";
+    private static final String UNOFFICIAL_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=%s&range=%s";
 
-    // 1-minute price cache: symbol → [price, fetchedAtMs]
+    // RapidAPI Yahoo Finance (requires key) — try both popular hosts
+    private static final String[] RAPID_HOSTS = {
+        "yh-finance.p.rapidapi.com",
+        "yahoo-finance15.p.rapidapi.com",
+        "yahoo-finance166.p.rapidapi.com"
+    };
+
+    // 1-minute price cache
     private final Map<String, double[]> priceCache = new ConcurrentHashMap<>();
     private static final long CACHE_TTL_MS = 60_000;
 
@@ -30,42 +39,70 @@ public class YahooFinanceService {
     private String rapidApiKey;
 
     private final RestClient http;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper om;
 
-    public YahooFinanceService(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    public YahooFinanceService(ObjectMapper om) {
+        this.om = om;
         this.http = RestClient.builder().build();
     }
 
     public boolean isConfigured() {
-        return rapidApiKey != null && !rapidApiKey.isBlank();
+        return true; // always available (unofficial fallback)
     }
 
-    /** Returns live price, cached for 60 seconds to stay within API limits. */
+    /** Returns live price, cached 60 s. */
     public double getLivePrice(String uiSymbol) throws Exception {
         String key = uiSymbol.trim().toUpperCase();
-
         double[] cached = priceCache.get(key);
         if (cached != null && (System.currentTimeMillis() - cached[1]) < CACHE_TTL_MS) {
             return cached[0];
         }
 
-        String yahooTicker = mapSymbol(key);
-        String url = String.format(QUOTE_URL, URLEncoder.encode(yahooTicker, StandardCharsets.UTF_8));
+        String ticker = mapSymbol(key);
+        double price = 0;
 
-        String json = http.get()
-                .uri(url)
-                .header("x-rapidapi-key", rapidApiKey)
-                .header("x-rapidapi-host", RAPIDAPI_HOST)
-                .retrieve()
-                .onStatus(status -> !status.is2xxSuccessful(),
-                        (req, res) -> { throw new RuntimeException("RapidAPI price error: " + res.getStatusCode()); })
-                .body(String.class);
+        // 1. Try unofficial Yahoo Finance
+        try {
+            String url = String.format(UNOFFICIAL_QUOTE, URLEncoder.encode(ticker, StandardCharsets.UTF_8));
+            String json = http.get().uri(url)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .retrieve()
+                    .onStatus(s -> !s.is2xxSuccessful(), (req, res) -> {
+                        throw new RuntimeException("Yahoo unofficial: " + res.getStatusCode());
+                    })
+                    .body(String.class);
+            if (json != null) {
+                JsonNode result = om.readTree(json).path("quoteResponse").path("result");
+                if (result.isArray() && !result.isEmpty()) {
+                    price = result.get(0).path("regularMarketPrice").asDouble(0);
+                }
+            }
+        } catch (Exception ignored) {}
 
-        if (json == null || json.isBlank()) return 0.0;
-        JsonNode root = objectMapper.readTree(json);
-        // Response: { "body": { "regularMarketPrice": 1.0875, ... } }
-        double price = root.path("body").path("regularMarketPrice").asDouble(0.0);
+        // 2. Try RapidAPI if unofficial failed and key is set
+        if (price <= 0 && rapidApiKey != null && !rapidApiKey.isBlank()) {
+            for (String host : RAPID_HOSTS) {
+                try {
+                    String url = String.format("https://%s/market/v2/get-quotes?region=US&symbols=%s",
+                            host, URLEncoder.encode(ticker, StandardCharsets.UTF_8));
+                    String json = http.get().uri(url)
+                            .header("x-rapidapi-key", rapidApiKey)
+                            .header("x-rapidapi-host", host)
+                            .retrieve()
+                            .onStatus(s -> !s.is2xxSuccessful(), (req, res) -> {
+                                throw new RuntimeException("RapidAPI " + host + ": " + res.getStatusCode());
+                            })
+                            .body(String.class);
+                    if (json != null) {
+                        JsonNode result = om.readTree(json).path("quoteResponse").path("result");
+                        if (result.isArray() && !result.isEmpty()) {
+                            price = result.get(0).path("regularMarketPrice").asDouble(0);
+                            if (price > 0) break;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
 
         if (price > 0) {
             priceCache.put(key, new double[]{price, System.currentTimeMillis()});
@@ -73,40 +110,51 @@ public class YahooFinanceService {
         return price;
     }
 
-    /** Fetches OHLCV candles from RapidAPI Yahoo Finance. */
+    /** Returns OHLCV candles. */
     public List<CandleBar> getCandles(String uiSymbol, String intervalKey) throws Exception {
-        String yahooTicker = mapSymbol(uiSymbol.trim().toUpperCase());
+        String ticker = mapSymbol(uiSymbol.trim().toUpperCase());
         String interval = mapInterval(intervalKey);
+        String range = mapRange(intervalKey);
 
-        String url = String.format(CHART_URL,
-                URLEncoder.encode(yahooTicker, StandardCharsets.UTF_8), interval);
-
-        String json = http.get()
-                .uri(url)
-                .header("x-rapidapi-key", rapidApiKey)
-                .header("x-rapidapi-host", RAPIDAPI_HOST)
-                .retrieve()
-                .onStatus(status -> !status.is2xxSuccessful(),
-                        (req, res) -> { throw new RuntimeException("RapidAPI candles error: " + res.getStatusCode()); })
-                .body(String.class);
-
-        if (json == null || json.isBlank()) return List.of();
-        JsonNode root = objectMapper.readTree(json);
-        // Response is an array of { date, open, high, low, close, ... }
-        if (!root.isArray()) return List.of();
-
-        List<CandleBar> candles = new ArrayList<>();
-        for (JsonNode bar : root) {
-            long ts = bar.path("date").asLong(0);
-            double o = bar.path("open").asDouble(0);
-            double h = bar.path("high").asDouble(0);
-            double l = bar.path("low").asDouble(0);
-            double c = bar.path("close").asDouble(0);
-            if (ts > 0 && c > 0) {
-                candles.add(new CandleBar(ts, o, h, l, c));
+        // 1. Try unofficial Yahoo Finance chart
+        try {
+            String url = String.format(UNOFFICIAL_CHART,
+                    URLEncoder.encode(ticker, StandardCharsets.UTF_8), interval, range);
+            String json = http.get().uri(url)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .retrieve()
+                    .onStatus(s -> !s.is2xxSuccessful(), (req, res) -> {
+                        throw new RuntimeException("Yahoo unofficial chart: " + res.getStatusCode());
+                    })
+                    .body(String.class);
+            if (json != null) {
+                List<CandleBar> bars = parseYahooChart(json);
+                if (!bars.isEmpty()) return bars;
             }
+        } catch (Exception ignored) {}
+
+        return List.of(); // frontend will use synthetic
+    }
+
+    private List<CandleBar> parseYahooChart(String json) throws Exception {
+        JsonNode root = om.readTree(json);
+        JsonNode result = root.path("chart").path("result");
+        if (!result.isArray() || result.isEmpty()) return List.of();
+        JsonNode data = result.get(0);
+        JsonNode ts = data.path("timestamp");
+        JsonNode q = data.path("indicators").path("quote").get(0);
+        if (ts.isMissingNode() || q == null) return List.of();
+
+        JsonNode opens = q.path("open"), highs = q.path("high"),
+                 lows  = q.path("low"),  closes = q.path("close");
+        List<CandleBar> out = new ArrayList<>(ts.size());
+        for (int i = 0; i < ts.size(); i++) {
+            if (opens.get(i).isNull() || closes.get(i).isNull()) continue;
+            out.add(new CandleBar(ts.get(i).asLong(),
+                    opens.get(i).asDouble(), highs.get(i).asDouble(),
+                    lows.get(i).asDouble(),  closes.get(i).asDouble()));
         }
-        return candles;
+        return out;
     }
 
     private String mapSymbol(String s) {
@@ -126,17 +174,21 @@ public class YahooFinanceService {
         };
     }
 
-    private String mapInterval(String intervalKey) {
-        return switch (intervalKey) {
-            case "1m"  -> "1m";
-            case "5m"  -> "5m";
-            case "15m" -> "15m";
-            case "1h"  -> "1h";
-            case "4h"  -> "1h";
-            case "1d"  -> "1d";
-            case "1w"  -> "1wk";
-            case "1M"  -> "1mo";
-            default    -> "1h";
+    private String mapInterval(String k) {
+        return switch (k) {
+            case "1m" -> "1m"; case "5m" -> "5m";
+            case "1h" -> "1h"; case "4h" -> "1h";
+            case "1d" -> "1d"; case "1w" -> "1wk";
+            case "1M" -> "1mo"; default -> "1h";
+        };
+    }
+
+    private String mapRange(String k) {
+        return switch (k) {
+            case "1m" -> "1d"; case "5m" -> "5d";
+            case "1h" -> "1mo"; case "4h" -> "3mo";
+            case "1d" -> "1y"; case "1w" -> "5y";
+            case "1M" -> "max"; default -> "1mo";
         };
     }
 }
