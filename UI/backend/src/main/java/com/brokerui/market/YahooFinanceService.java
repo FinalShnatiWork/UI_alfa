@@ -33,8 +33,12 @@ import java.util.stream.Collectors;
 @Service
 public class YahooFinanceService {
 
-    // Frankfurter — free, no-key ECB/FX rates (daily official rates)
+    // Frankfurter — free, no-key ECB/FX rates
     private static final String FRANKFURTER_URL = "https://api.frankfurter.app/latest?from=%s&to=%s";
+
+    // Swissquote public feed — free, no-key, real-time (Forex + metals)
+    private static final String SWISSQUOTE_URL =
+            "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/%s/%s";
 
     // Yahoo Finance chart (crumb-authenticated)
     private static final String YAHOO_CRUMB_INIT = "https://finance.yahoo.com/";
@@ -105,7 +109,16 @@ public class YahooFinanceService {
             return cached[0];
         }
 
-        double price = fetchFrankfurterPrice(key);
+        double price = 0;
+
+        // Metals → Swissquote real-time feed
+        if (key.startsWith("XAU") || key.startsWith("XAG")) {
+            price = fetchSwissquotePrice(key.substring(0, 3), key.substring(3, 6));
+        } else {
+            // Forex → try Swissquote first (real-time), then Frankfurter (daily ECB)
+            price = fetchSwissquotePrice(key.substring(0, 3), key.substring(3, 6));
+            if (price <= 0) price = fetchFrankfurterPrice(key);
+        }
 
         if (price > 0) {
             priceCache.put(key, new double[]{price, System.currentTimeMillis()});
@@ -113,25 +126,46 @@ public class YahooFinanceService {
         return price;
     }
 
-    /**
-     * Fetches FX rate from Frankfurter ECB API.
-     * Supports all standard forex pairs. Returns 0 for metals/crypto (not available).
-     */
+    /** Swissquote public real-time feed — free, no key, covers Forex + metals. */
+    private double fetchSwissquotePrice(String base, String quote) {
+        try {
+            String url = String.format(SWISSQUOTE_URL, base, quote);
+            HttpResponse<String> r = httpClient.send(
+                HttpRequest.newBuilder().uri(URI.create(url))
+                    .header("User-Agent", UA)
+                    .header("Accept", "application/json")
+                    .GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            if (r.statusCode() == 200 && r.body() != null) {
+                JsonNode arr = om.readTree(r.body());
+                if (arr.isArray() && !arr.isEmpty()) {
+                    JsonNode profiles = arr.get(0).path("spreadProfilePrices");
+                    if (profiles.isArray() && !profiles.isEmpty()) {
+                        double bid = profiles.get(0).path("bid").asDouble(0);
+                        double ask = profiles.get(0).path("ask").asDouble(0);
+                        double mid = (bid + ask) / 2.0;
+                        if (mid > 0) {
+                            System.out.println("[Swissquote] " + base + quote + " = " + mid);
+                            return mid;
+                        }
+                    }
+                }
+            } else {
+                System.err.println("[Swissquote] Status " + r.statusCode() + " for " + base + quote);
+            }
+        } catch (Exception e) {
+            System.err.println("[Swissquote] Error for " + base + quote + ": " + e.getMessage());
+        }
+        return 0;
+    }
+
+    /** Frankfurter ECB fallback — daily official rates, no key. */
     private double fetchFrankfurterPrice(String symbol) {
-        // Metals and crypto not supported by Frankfurter
-        if (symbol.startsWith("XAU") || symbol.startsWith("XAG")
-                || symbol.endsWith("USD") && symbol.length() <= 4) {
-            return 0;
-        }
-
-        String base = symbol.substring(0, 3);
+        if (symbol.length() < 6) return 0;
+        String base  = symbol.substring(0, 3);
         String quote = symbol.substring(3, 6);
-
-        // Frankfurter doesn't support all currencies — filter known supported ones
-        if (!isFrankfurterSupported(base) || !isFrankfurterSupported(quote)) {
-            return 0;
-        }
-
+        if (!isFrankfurterSupported(base) || !isFrankfurterSupported(quote)) return 0;
         try {
             String url = String.format(FRANKFURTER_URL, base, quote);
             HttpResponse<String> r = httpClient.send(
@@ -142,14 +176,11 @@ public class YahooFinanceService {
                 HttpResponse.BodyHandlers.ofString()
             );
             if (r.statusCode() == 200 && r.body() != null) {
-                JsonNode rates = om.readTree(r.body()).path("rates");
-                double rate = rates.path(quote).asDouble(0);
+                double rate = om.readTree(r.body()).path("rates").path(quote).asDouble(0);
                 if (rate > 0) {
                     System.out.println("[Frankfurter] " + symbol + " = " + rate);
                     return rate;
                 }
-            } else {
-                System.err.println("[Frankfurter] Status " + r.statusCode() + " for " + symbol);
             }
         } catch (Exception e) {
             System.err.println("[Frankfurter] Error for " + symbol + ": " + e.getMessage());
