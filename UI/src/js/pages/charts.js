@@ -302,7 +302,7 @@ async function fetchYahooCandles(symbol, intervalKey, category) {
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`Yahoo backend error: ${res.status}`);
   const data = await res.json();
-  if (!Array.isArray(data)) throw new Error('Invalid candle data');
+  if (!Array.isArray(data) || data.length === 0) throw new Error('No candle data from backend');
   return data.map(d => ({
     time: d.time,
     open: d.open,
@@ -482,27 +482,24 @@ async function loadChart() {
       status.textContent = restOk ? t('charts.liveBinance') : t('charts.binanceSlow');
       connectBinanceKlineStream(instr.id, state.interval, gen, instr, bidAsk, status);
     } else if (source === 'yahoo') {
+      let yahooOk = true;
       try {
         data = await fetchYahooCandles(instr.id, state.interval, state.category);
       } catch (e) {
-        if (gen !== liveGen) return;
+        yahooOk = false;
         data = syntheticCandles(instr.id, state.interval);
-        series.setData(data);
-        chart.timeScale().fitContent();
-        const last = data[data.length - 1];
-        if (last) updateBidAskRow(bidAsk, instr, last.close);
-        status.textContent = t('charts.demoData');
-        return;
       }
       if (gen !== liveGen) return;
       series.setData(data);
       chart.timeScale().fitContent();
-      const last = data[data.length - 1];
-      if (last) updateBidAskRow(bidAsk, instr, last.close);
-      status.textContent = t('charts.liveYahoo') || 'Live — Yahoo Finance';
+      const lastYahoo = data[data.length - 1];
+      if (lastYahoo) updateBidAskRow(bidAsk, instr, lastYahoo.close);
+      status.textContent = yahooOk
+        ? (t('charts.liveYahoo') || 'Live — Yahoo Finance')
+        : t('charts.demoData');
 
-      // Start polling for live price update
-      let currentBar = last ? { ...last } : null;
+      // Start live price polling regardless of candle source
+      let currentBar = lastYahoo ? { ...lastYahoo } : null;
       stockPollTimer = setInterval(async () => {
         if (gen !== liveGen) return;
         try {

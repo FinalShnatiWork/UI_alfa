@@ -3,13 +3,18 @@ package com.brokerui.market;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
-import javax.net.ssl.*;
-import java.net.HttpURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
@@ -17,45 +22,52 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
- * Fetches Forex/Metals prices and candles.
- * Priority: RapidAPI Yahoo Finance → unofficial Yahoo Finance → empty (frontend uses synthetic)
+ * Fetches Forex/Metals live prices and OHLCV candles.
+ *
+ * Price priority:   Frankfurter (Forex) → synthetic fallback
+ * Candles priority: Yahoo Finance (crumb-auth) → synthetic fallback on frontend
  */
 @Service
 public class YahooFinanceService {
 
-    // Unofficial Yahoo Finance (no key, free)
-    private static final String UNOFFICIAL_QUOTE = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%s";
-    private static final String UNOFFICIAL_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=%s&range=%s";
+    // Frankfurter — free, no-key ECB/FX rates (daily official rates)
+    private static final String FRANKFURTER_URL = "https://api.frankfurter.app/latest?from=%s&to=%s";
 
-    // RapidAPI Yahoo Finance (requires key) — try both popular hosts
-    private static final String[] RAPID_HOSTS = {
-        "yh-finance.p.rapidapi.com",
-        "yahoo-finance15.p.rapidapi.com",
-        "yahoo-finance166.p.rapidapi.com"
-    };
+    // Yahoo Finance chart (crumb-authenticated)
+    private static final String YAHOO_CRUMB_INIT = "https://finance.yahoo.com/";
+    private static final String YAHOO_CRUMB_URL  = "https://query1.finance.yahoo.com/v1/test/getcrumb";
+    private static final String YAHOO_CHART      =
+            "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=%s&range=%s&crumb=%s";
+
+    private static final String UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            + "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
     // 1-minute price cache
     private final Map<String, double[]> priceCache = new ConcurrentHashMap<>();
     private static final long CACHE_TTL_MS = 60_000;
 
     @Value("${broker.market.rapidapi-key:}")
-    private String rapidApiKey;
+    private String rapidApiKey;   // kept for future use, not currently used
 
-    private final RestClient http;
+    private final HttpClient httpClient;
     private final ObjectMapper om;
+
+    // Yahoo crumb state
+    private volatile String yahoocrumb = null;
+    private volatile String yahooCookies = null;
+    private volatile long crumbFetchedAt = 0;
+    private static final long CRUMB_TTL_MS = 30 * 60_000; // 30 minutes
 
     public YahooFinanceService(ObjectMapper om) {
         this.om = om;
-        this.http = RestClient.builder()
-                .requestFactory(trustAllFactory())
-                .build();
+        this.httpClient = buildHttpClient();
     }
 
-    /** Creates an HTTP factory that skips SSL certificate validation.
-     *  Safe for external market-data calls in a demo environment. */
-    private static SimpleClientHttpRequestFactory trustAllFactory() {
+    private static HttpClient buildHttpClient() {
         try {
             TrustManager[] trustAll = { new X509TrustManager() {
                 public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
@@ -64,25 +76,28 @@ public class YahooFinanceService {
             }};
             SSLContext sc = SSLContext.getInstance("TLS");
             sc.init(null, trustAll, new SecureRandom());
-            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-            HttpsURLConnection.setDefaultHostnameVerifier((h, s) -> true);
-        } catch (Exception ignored) {}
-        return new SimpleClientHttpRequestFactory() {
-            @Override
-            protected void prepareConnection(HttpURLConnection conn, String method) throws java.io.IOException {
-                if (conn instanceof HttpsURLConnection https) {
-                    https.setHostnameVerifier((h, s) -> true);
-                }
-                super.prepareConnection(conn, method);
-            }
-        };
+            return HttpClient.newBuilder()
+                    .sslContext(sc)
+                    .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+                    .followRedirects(HttpClient.Redirect.ALWAYS)
+                    .build();
+        } catch (Exception e) {
+            System.err.println("[Market] SSL setup error: " + e.getMessage());
+            return HttpClient.newBuilder()
+                    .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+                    .followRedirects(HttpClient.Redirect.ALWAYS)
+                    .build();
+        }
     }
 
     public boolean isConfigured() {
-        return true; // always available (unofficial fallback)
+        return true;
     }
 
-    /** Returns live price, cached 60 s. */
+    // ─────────────────────────────────────────────────────────────
+    //  LIVE PRICE  — uses Frankfurter for Forex, returns 0 for metals
+    // ─────────────────────────────────────────────────────────────
+
     public double getLivePrice(String uiSymbol) throws Exception {
         String key = uiSymbol.trim().toUpperCase();
         double[] cached = priceCache.get(key);
@@ -90,53 +105,7 @@ public class YahooFinanceService {
             return cached[0];
         }
 
-        String ticker = mapSymbol(key);
-        double price = 0;
-
-        // 1. Try unofficial Yahoo Finance
-        try {
-            String url = String.format(UNOFFICIAL_QUOTE, URLEncoder.encode(ticker, StandardCharsets.UTF_8));
-            String json = http.get().uri(url)
-                    .header("User-Agent", "Mozilla/5.0")
-                    .retrieve()
-                    .onStatus(s -> !s.is2xxSuccessful(), (req, res) -> {
-                        throw new RuntimeException("Yahoo unofficial: " + res.getStatusCode());
-                    })
-                    .body(String.class);
-            if (json != null) {
-                JsonNode result = om.readTree(json).path("quoteResponse").path("result");
-                if (result.isArray() && !result.isEmpty()) {
-                    price = result.get(0).path("regularMarketPrice").asDouble(0);
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("[Yahoo] Price error for " + uiSymbol + ": " + e.getMessage());
-        }
-
-        // 2. Try RapidAPI if unofficial failed and key is set
-        if (price <= 0 && rapidApiKey != null && !rapidApiKey.isBlank()) {
-            for (String host : RAPID_HOSTS) {
-                try {
-                    String url = String.format("https://%s/market/v2/get-quotes?region=US&symbols=%s",
-                            host, URLEncoder.encode(ticker, StandardCharsets.UTF_8));
-                    String json = http.get().uri(url)
-                            .header("x-rapidapi-key", rapidApiKey)
-                            .header("x-rapidapi-host", host)
-                            .retrieve()
-                            .onStatus(s -> !s.is2xxSuccessful(), (req, res) -> {
-                                throw new RuntimeException("RapidAPI " + host + ": " + res.getStatusCode());
-                            })
-                            .body(String.class);
-                    if (json != null) {
-                        JsonNode result = om.readTree(json).path("quoteResponse").path("result");
-                        if (result.isArray() && !result.isEmpty()) {
-                            price = result.get(0).path("regularMarketPrice").asDouble(0);
-                            if (price > 0) break;
-                        }
-                    }
-                } catch (Exception ignored) {}
-            }
-        }
+        double price = fetchFrankfurterPrice(key);
 
         if (price > 0) {
             priceCache.put(key, new double[]{price, System.currentTimeMillis()});
@@ -144,35 +113,154 @@ public class YahooFinanceService {
         return price;
     }
 
-    /** Returns OHLCV candles. */
+    /**
+     * Fetches FX rate from Frankfurter ECB API.
+     * Supports all standard forex pairs. Returns 0 for metals/crypto (not available).
+     */
+    private double fetchFrankfurterPrice(String symbol) {
+        // Metals and crypto not supported by Frankfurter
+        if (symbol.startsWith("XAU") || symbol.startsWith("XAG")
+                || symbol.endsWith("USD") && symbol.length() <= 4) {
+            return 0;
+        }
+
+        String base = symbol.substring(0, 3);
+        String quote = symbol.substring(3, 6);
+
+        // Frankfurter doesn't support all currencies — filter known supported ones
+        if (!isFrankfurterSupported(base) || !isFrankfurterSupported(quote)) {
+            return 0;
+        }
+
+        try {
+            String url = String.format(FRANKFURTER_URL, base, quote);
+            HttpResponse<String> r = httpClient.send(
+                HttpRequest.newBuilder().uri(URI.create(url))
+                    .header("User-Agent", UA)
+                    .header("Accept", "application/json")
+                    .GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            if (r.statusCode() == 200 && r.body() != null) {
+                JsonNode rates = om.readTree(r.body()).path("rates");
+                double rate = rates.path(quote).asDouble(0);
+                if (rate > 0) {
+                    System.out.println("[Frankfurter] " + symbol + " = " + rate);
+                    return rate;
+                }
+            } else {
+                System.err.println("[Frankfurter] Status " + r.statusCode() + " for " + symbol);
+            }
+        } catch (Exception e) {
+            System.err.println("[Frankfurter] Error for " + symbol + ": " + e.getMessage());
+        }
+        return 0;
+    }
+
+    private boolean isFrankfurterSupported(String currency) {
+        return switch (currency) {
+            case "USD", "EUR", "GBP", "JPY", "CAD", "NOK", "NZD", "AUD",
+                 "CHF", "SEK", "DKK", "CZK", "PLN", "HUF" -> true;
+            default -> false;
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  CANDLES  — tries Yahoo Finance with crumb, returns empty on failure
+    // ─────────────────────────────────────────────────────────────
+
     public List<CandleBar> getCandles(String uiSymbol, String intervalKey) throws Exception {
         String ticker = mapSymbol(uiSymbol.trim().toUpperCase());
         String interval = mapInterval(intervalKey);
         String range = mapRange(intervalKey);
 
-        // 1. Try unofficial Yahoo Finance chart
-        try {
-            String url = String.format(UNOFFICIAL_CHART,
-                    URLEncoder.encode(ticker, StandardCharsets.UTF_8), interval, range);
-            String json = http.get().uri(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                    .header("Accept", "application/json")
-                    .header("Accept-Language", "en-US,en;q=0.9")
-                    .retrieve()
-                    .onStatus(s -> !s.is2xxSuccessful(), (req, res) -> {
-                        throw new RuntimeException("Yahoo unofficial chart: " + res.getStatusCode());
-                    })
-                    .body(String.class);
-            if (json != null) {
-                List<CandleBar> bars = parseYahooChart(json);
-                if (!bars.isEmpty()) return bars;
-                System.err.println("[Yahoo] Candles empty for " + uiSymbol + " ticker=" + ticker);
+        // Try to get/refresh Yahoo crumb
+        String crumb = getYahooCrumb();
+        if (crumb != null) {
+            try {
+                String url = String.format(YAHOO_CHART,
+                        URLEncoder.encode(ticker, StandardCharsets.UTF_8),
+                        interval, range,
+                        URLEncoder.encode(crumb, StandardCharsets.UTF_8));
+
+                HttpRequest.Builder req = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("User-Agent", UA)
+                        .header("Accept", "application/json")
+                        .GET();
+                if (yahooCookies != null) {
+                    req.header("Cookie", yahooCookies);
+                }
+
+                HttpResponse<String> r = httpClient.send(req.build(),
+                        HttpResponse.BodyHandlers.ofString());
+
+                if (r.statusCode() == 200 && r.body() != null) {
+                    List<CandleBar> bars = parseYahooChart(r.body());
+                    if (!bars.isEmpty()) {
+                        System.out.println("[Yahoo] Got " + bars.size() + " candles for " + uiSymbol);
+                        return bars;
+                    }
+                    System.err.println("[Yahoo] Empty candles for " + uiSymbol);
+                } else if (r.statusCode() == 401) {
+                    yahoocrumb = null;
+                    System.err.println("[Yahoo] 401 candles for " + uiSymbol + " — crumb reset");
+                } else {
+                    System.err.println("[Yahoo] Candles status " + r.statusCode() + " for " + uiSymbol);
+                }
+            } catch (Exception e) {
+                System.err.println("[Yahoo] Candles error for " + uiSymbol + ": " + e.getMessage());
             }
-        } catch (Exception e) {
-            System.err.println("[Yahoo] Chart error for " + uiSymbol + ": " + e.getMessage());
         }
 
-        return List.of(); // frontend will use synthetic
+        return List.of(); // frontend will use synthetic candles
+    }
+
+    /** Gets (or refreshes) the Yahoo Finance crumb with explicit cookie forwarding. */
+    private String getYahooCrumb() {
+        long now = System.currentTimeMillis();
+        if (yahoocrumb != null && (now - crumbFetchedAt) < CRUMB_TTL_MS) return yahoocrumb;
+        try {
+            // Step 1: visit Yahoo Finance to bootstrap cookies
+            HttpResponse<String> r1 = httpClient.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create(YAHOO_CRUMB_INIT))
+                    .header("User-Agent", UA)
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            // Extract cookies to forward explicitly
+            String cookies = r1.headers().allValues("set-cookie").stream()
+                    .map(h -> h.split(";")[0])
+                    .collect(Collectors.joining("; "));
+            yahooCookies = cookies.isBlank() ? null : cookies;
+
+            // Step 2: fetch crumb, forwarding cookies explicitly
+            HttpRequest.Builder crumbReq = HttpRequest.newBuilder()
+                    .uri(URI.create(YAHOO_CRUMB_URL))
+                    .header("User-Agent", UA)
+                    .header("Accept", "*/*")
+                    .header("Referer", "https://finance.yahoo.com/")
+                    .GET();
+            if (yahooCookies != null) crumbReq.header("Cookie", yahooCookies);
+
+            HttpResponse<String> r2 = httpClient.send(crumbReq.build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            if (r2.statusCode() == 200 && r2.body() != null && !r2.body().isBlank()
+                    && !r2.body().contains("Unauthorized")) {
+                yahoocrumb = r2.body().trim();
+                crumbFetchedAt = System.currentTimeMillis();
+                System.out.println("[Yahoo] Crumb obtained: " + yahoocrumb);
+                return yahoocrumb;
+            }
+            System.err.println("[Yahoo] Crumb failed: HTTP " + r2.statusCode() + " — " + r2.body());
+        } catch (Exception e) {
+            System.err.println("[Yahoo] Crumb error: " + e.getMessage());
+        }
+        return null;
     }
 
     private List<CandleBar> parseYahooChart(String json) throws Exception {
