@@ -1240,8 +1240,8 @@ html[data-theme="light"] .tx-modal-close:hover {
   padding: 24px;
 }
 .live-price-banner {
-  background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(16,185,129,0.1));
-  border: 1px solid rgba(59,130,246,0.3);
+  background: var(--bg-alt);
+  border: 1px solid rgba(234, 179, 8, 0.25);
   border-radius: 12px;
   padding: 16px 20px;
   display: flex;
@@ -1251,13 +1251,20 @@ html[data-theme="light"] .tx-modal-close:hover {
 .live-price-text {
   font-size: 1.6rem;
   font-weight: 700;
-  color: #60a5fa;
+  color: var(--accent-strong);
   letter-spacing: -0.5px;
 }
 .live-change-text {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+}
+html[data-theme="light"] .live-price-banner {
+  background: var(--bg-alt);
+  border-color: rgba(234, 179, 8, 0.4);
+}
+html[data-theme="light"] .live-price-text {
+  color: #92710a;
 }
 .portfolio-summary-card {
   background: var(--bg-alt);
