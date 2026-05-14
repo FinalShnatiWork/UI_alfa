@@ -92,6 +92,7 @@ const INTERVAL_SECONDS = {
 
 let chart;
 let series;
+let volumeSeries;
 
 let liveGen = 0;
 let binanceWs = null;
@@ -99,6 +100,35 @@ let stockPollTimer = null;
 let synthTickTimer = null;
 let sessionOpenPrice = null; // first price of the session for % change
 let loadChartTimer = null;  // debounce timer for rapid clicks
+
+/** Set candles + volume histogram from an array of {time,open,high,low,close,volume?} */
+function setChartData(data) {
+  if (!series) return;
+  series.setData(data);
+  if (volumeSeries) {
+    const isLight = isLightTheme();
+    volumeSeries.setData(data.map(d => ({
+      time:  d.time,
+      value: d.volume ?? Math.round(Math.abs(d.close - d.open) / d.close * 1e4 + 200),
+      color: d.close >= d.open
+        ? (isLight ? 'rgba(34,197,94,0.25)'  : 'rgba(34,197,94,0.20)')
+        : (isLight ? 'rgba(239,68,68,0.25)'  : 'rgba(239,68,68,0.20)'),
+    })));
+  }
+}
+
+/** Update the current (rightmost) candle for both series */
+function updateChartBar(bar) {
+  if (!series) return;
+  series.update(bar);
+  if (volumeSeries) {
+    volumeSeries.update({
+      time:  bar.time,
+      value: bar.volume ?? 300,
+      color: bar.close >= bar.open ? 'rgba(34,197,94,0.22)' : 'rgba(239,68,68,0.22)',
+    });
+  }
+}
 
 function stopLiveUpdates() {
   sessionOpenPrice = null;
@@ -171,13 +201,14 @@ function connectBinanceKlineStream(symbol, intervalKey, gen, instr, bidAskEl, st
       const k = msg.k;
       if (!k) return;
       const bar = {
-        time: Math.floor(Number(k.t) / 1000),
-        open: parseFloat(k.o),
-        high: parseFloat(k.h),
-        low: parseFloat(k.l),
-        close: parseFloat(k.c),
+        time:   Math.floor(Number(k.t) / 1000),
+        open:   parseFloat(k.o),
+        high:   parseFloat(k.h),
+        low:    parseFloat(k.l),
+        close:  parseFloat(k.c),
+        volume: parseFloat(k.v),
       };
-      series.update(bar);
+      updateChartBar(bar);
       updateBidAskRow(bidAskEl, instr, bar.close);
     } catch {
       /* ignore malformed */
@@ -234,7 +265,7 @@ function startSyntheticStreaming(symbol, intervalKey, initialBar, gen, instr, bi
       };
     }
 
-    series.update(cur);
+    updateChartBar(cur);
     updateBidAskRow(bidAskEl, instr, cur.close);
     if (statusEl) statusEl.textContent = t('charts.almostLive');
   }, SYNTH_TICK_MS);
@@ -251,42 +282,104 @@ function mulberry32(seed) {
   };
 }
 
-function syntheticCandles(symbol, intervalKey, count = 400, basePrice = null) {
-  const sec = INTERVAL_SECONDS[intervalKey] ?? 3600;
-  const seed = Array.from(symbol).reduce((s, c) => (s + c.charCodeAt(0)) | 0, 7);
-  const rand = mulberry32(seed);
-  // Use provided real price, otherwise fall back to realistic defaults per symbol
-  let price;
-  if (basePrice && basePrice > 0) {
-    price = basePrice;
-  } else {
-    const s = symbol.toUpperCase();
-    if (s.endsWith('JPY'))        price = 150 + (rand() - 0.5) * 10;
-    else if (s.startsWith('XAU')) price = 2350 + (rand() - 0.5) * 100;
-    else if (s.startsWith('XAG')) price = 30 + (rand() - 0.5) * 2;
-    else if (s.startsWith('BTC')) price = 65000 + (rand() - 0.5) * 2000;
-    else if (s.startsWith('ETH')) price = 3200 + (rand() - 0.5) * 200;
-    else if (s.startsWith('SOL')) price = 150 + (rand() - 0.5) * 20;
-    else if (s.startsWith('XRP')) price = 0.55 + (rand() - 0.5) * 0.1;
-    else                          price = 1.10 + (rand() - 0.5) * 0.05;
+/** Approximate annualised volatility for each asset class */
+function symbolAnnualVol(s) {
+  if (s.startsWith('BTC') || s.startsWith('ETH')) return 0.85;
+  if (s.startsWith('SOL') || s.startsWith('XRP')) return 1.00;
+  if (s.startsWith('XAG')) return 0.28;
+  if (s.startsWith('XAU')) return 0.16;
+  if (s.endsWith('JPY'))   return 0.08;
+  return 0.07; // standard forex pairs
+}
+
+/** Realistic default prices (updated to current market levels) */
+function defaultPrice(s) {
+  if (s.endsWith('JPY'))         return 158.0;
+  if (s.startsWith('CADJPY'))    return 113.0;
+  if (s.startsWith('GBPJPY'))    return 210.0;
+  if (s.startsWith('XAU'))       return 4660.0;
+  if (s.startsWith('XAG'))       return 83.0;
+  if (s.startsWith('BTC'))       return 103000.0;
+  if (s.startsWith('ETH'))       return 2400.0;
+  if (s.startsWith('SOL'))       return 170.0;
+  if (s.startsWith('XRP'))       return 2.40;
+  if (s.startsWith('GBPUSD'))    return 1.34;
+  if (s.startsWith('USDCAD'))    return 1.37;
+  if (s.startsWith('NZDUSD'))    return 0.60;
+  if (s.startsWith('EURNOK'))    return 10.80;
+  return 1.17;
+}
+
+/**
+ * Generates realistic synthetic OHLCV candles using Geometric Brownian Motion.
+ * - Deterministic seed per (symbol × time-period) → same candles every refresh
+ * - Trend cycles with mean-reversion to keep price anchored near basePrice
+ * - Realistic wick proportions per asset class
+ * - Returns { time, open, high, low, close, volume }
+ */
+function syntheticCandles(symbol, intervalKey, count = 300, basePrice = null) {
+  const sec   = INTERVAL_SECONDS[intervalKey] ?? 3600;
+  const S     = symbol.toUpperCase();
+  const anchor = (basePrice && basePrice > 0) ? basePrice : defaultPrice(S);
+
+  // Per-bar sigma from annualised vol
+  const annualVol    = symbolAnnualVol(S);
+  const barsPerYear  = (365.25 * 24 * 3600) / sec;
+  const sigmaPerBar  = annualVol / Math.sqrt(barsPerYear);
+
+  // Deterministic seed: (symbol hash) XOR (latest bar's index)
+  const now      = Math.floor(Date.now() / 1000);
+  const endBucket = Math.floor(now / sec) * sec;
+  const symHash  = Array.from(S).reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) | 0, 7);
+  const periodKey = (Math.floor(endBucket / (sec * count)) & 0x7fffffff);
+  const rand     = mulberry32(((symHash ^ periodKey) + 0x9e3779b9) >>> 0);
+
+  // Simulate forward as normalised values (last = 1.0), then rescale to anchor
+  const rawLog = [0]; // log-prices
+  let trendMu  = 0;
+  let trendLeft = 0;
+
+  for (let i = 1; i < count; i++) {
+    if (trendLeft <= 0) {
+      // New trend segment: random drift + mean-reversion pull
+      const pull = -rawLog[i - 1] * 0.03; // gentle mean-reversion
+      trendMu   = pull + (rand() - 0.5) * sigmaPerBar * 0.6;
+      trendLeft = Math.floor(6 + rand() * 20);
+    }
+    trendLeft--;
+    // Box-Muller for a better normal sample
+    const u1 = Math.max(1e-10, rand()), u2 = rand();
+    const z  = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    rawLog.push(rawLog[i - 1] + trendMu + sigmaPerBar * z);
   }
-  const now = Math.floor(Date.now() / 1000);
-  const nowBucket = Math.floor(now / sec) * sec;
+
+  // Scale so last log-price maps to anchor
+  const logAnchor = Math.log(anchor);
+  const logOffset = logAnchor - rawLog[rawLog.length - 1];
+  const prices    = rawLog.map(l => Math.exp(l + logOffset));
+
+  // Build OHLCV bars
   const out = [];
-  for (let i = count - 1; i >= 0; i -= 1) {
-    const time = nowBucket - i * sec;
-    const o = price;
-    const c = o * (1 + (rand() - 0.47) * 0.028);
-    const h = Math.max(o, c) * (1 + rand() * 0.006);
-    const l = Math.min(o, c) * (1 - rand() * 0.006);
-    out.push({
-      time,
-      open: o,
-      high: h,
-      low: l,
-      close: c,
-    });
-    price = c;
+  for (let i = 0; i < count; i++) {
+    const time  = endBucket - (count - 1 - i) * sec;
+    const close = prices[i];
+    const open  = i === 0 ? close : prices[i - 1] * (1 + (rand() - 0.5) * sigmaPerBar * 0.1);
+
+    // Wick sizes: proportional to body + volatility, with occasional long wicks
+    const body     = Math.abs(close - open);
+    const avgBody  = close * sigmaPerBar * 0.5;
+    const wickBase = Math.max(body, avgBody) * (0.15 + rand() * 0.55);
+    const longWick = rand() < 0.06 ? wickBase * (1.5 + rand() * 2.0) : 0;
+    const upper    = wickBase + (close > open ? 0 : longWick);
+    const lower    = wickBase + (close < open ? 0 : longWick);
+
+    const high = Math.max(open, close) + upper;
+    const low  = Math.max(0.000001, Math.min(open, close) - lower);
+
+    // Synthetic volume: correlated with price movement
+    const vol = Math.round((0.4 + rand() * 1.2 + (body / (avgBody || 1)) * 0.4) * 1000);
+
+    out.push({ time, open, high, low, close, volume: vol });
   }
   return out;
 }
@@ -337,41 +430,68 @@ function chartColors() {
       background: { type: ColorType.Solid, color: 'transparent' },
       textColor: light ? '#475569' : '#94a3b8',
       attributionLogo: false,
+      fontFamily: "'Inter', 'Segoe UI', sans-serif",
+      fontSize: 12,
     },
     grid: {
-      vertLines: { color: light ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.06)' },
-      horzLines: { color: light ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.06)' },
+      vertLines: { color: light ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.04)' },
+      horzLines: { color: light ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.04)' },
     },
-    crosshair: { mode: CrosshairMode.Normal },
-    rightPriceScale: { borderColor: light ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.12)' },
-    timeScale: { borderColor: light ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.12)' },
+    crosshair: {
+      mode: CrosshairMode.Normal,
+      vertLine: {
+        color: light ? 'rgba(15,23,42,0.35)' : 'rgba(234,179,8,0.5)',
+        labelBackgroundColor: light ? '#1e293b' : '#ca8a04',
+      },
+      horzLine: {
+        color: light ? 'rgba(15,23,42,0.35)' : 'rgba(234,179,8,0.5)',
+        labelBackgroundColor: light ? '#1e293b' : '#ca8a04',
+      },
+    },
+    rightPriceScale: {
+      borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)',
+      scaleMargins: { top: 0.08, bottom: 0.22 }, // leave room for volume
+    },
+    timeScale: {
+      borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)',
+      barSpacing: 8,
+      minBarSpacing: 3,
+    },
   };
 }
 
 function ensureChart(mountEl) {
   if (chart) {
-    chart.applyOptions({
-      width: mountEl.clientWidth,
-      ...chartColors(),
-    });
+    chart.applyOptions({ width: mountEl.clientWidth, ...chartColors() });
     return;
   }
   chart = createChart(mountEl, {
     width: mountEl.clientWidth,
-    height: mountEl.clientHeight || 396,
+    height: mountEl.clientHeight || 420,
     ...chartColors(),
   });
+
+  // Candlestick series
   series = chart.addCandlestickSeries({
-    upColor: '#22c55e',
-    downColor: '#ef4444',
+    upColor:       '#22c55e',
+    downColor:     '#ef4444',
     borderVisible: false,
-    wickUpColor: '#22c55e',
+    wickUpColor:   '#22c55e',
     wickDownColor: '#ef4444',
   });
+
+  // Volume histogram
+  volumeSeries = chart.addHistogramSeries({
+    priceFormat:   { type: 'volume' },
+    priceScaleId:  'volume',
+    color:         '#6366f120',
+  });
+  volumeSeries.priceScale().applyOptions({
+    scaleMargins: { top: 0.80, bottom: 0 }, // occupy bottom 20%
+  });
+
   window.addEventListener('resize', () => {
-    if (chart && mountEl) {
-      chart.applyOptions({ width: mountEl.clientWidth });
-    }
+    if (chart && mountEl) chart.applyOptions({ width: mountEl.clientWidth });
   });
   const mo = new MutationObserver(() => {
     if (!chart) return;
@@ -477,6 +597,12 @@ async function loadChart() {
   status.textContent = t('charts.loading');
   applyTimeScaleFormatting();
 
+  // Fade-out existing chart while loading
+  if (mount) mount.style.opacity = '0.4';
+  mount.style.transition = 'opacity 0.15s ease';
+
+  const fadeIn = () => { if (mount) mount.style.opacity = '1'; };
+
   try {
     let data;
     if (source === 'binance') {
@@ -488,48 +614,49 @@ async function loadChart() {
         data = syntheticCandles(instr.id, state.interval);
       }
       if (gen !== liveGen) return;
-      series.setData(data);
+      setChartData(data);
       chart.timeScale().fitContent();
+      fadeIn();
       const last = data[data.length - 1];
       if (last) updateBidAskRow(bidAsk, instr, last.close);
-      // Always connect WebSocket — even if REST failed, WS gives live ticks
       status.textContent = restOk ? t('charts.liveBinance') : t('charts.binanceSlow');
       connectBinanceKlineStream(instr.id, state.interval, gen, instr, bidAsk, status);
     } else if (source === 'yahoo') {
-      // Fetch real price first so synthetic candles use the correct base price
+      // Fetch real price first so synthetic candles anchor to correct price
       let realPrice = null;
       try {
         const pd = await apiGet(`/api/market/price/${encodeURIComponent(instr.id)}`);
         if (pd && pd.price) realPrice = Number(pd.price);
-      } catch { /* use null — syntheticCandles has per-symbol defaults */ }
+      } catch { /* syntheticCandles has per-symbol defaults */ }
 
       let yahooOk = true;
       try {
         data = await fetchYahooCandles(instr.id, state.interval, state.category);
       } catch (e) {
         yahooOk = false;
-        data = syntheticCandles(instr.id, state.interval, 400, realPrice);
+        data = syntheticCandles(instr.id, state.interval, 300, realPrice);
       }
       if (gen !== liveGen) return;
-      series.setData(data);
+      setChartData(data);
       chart.timeScale().fitContent();
+      fadeIn();
       const lastYahoo = data[data.length - 1];
-      // Show real price immediately if we have it
       if (realPrice) updateBidAskRow(bidAsk, instr, realPrice);
       else if (lastYahoo) updateBidAskRow(bidAsk, instr, lastYahoo.close);
       status.textContent = yahooOk
         ? (t('charts.liveYahoo') || 'Live — Yahoo Finance')
         : t('charts.demoData');
 
-      // Live price polling — every 10 seconds
+      // Anchor last bar to real price immediately
       let currentBar = lastYahoo ? { ...lastYahoo } : null;
       if (realPrice && currentBar) {
         currentBar = { ...currentBar, close: realPrice,
           high: Math.max(currentBar.high, realPrice),
-          low: Math.min(currentBar.low, realPrice) };
-        series.update(currentBar);
+          low:  Math.min(currentBar.low,  realPrice) };
+        updateChartBar(currentBar);
       }
 
+      // Live price polling — every 10 seconds
       const pollPrice = async () => {
         if (gen !== liveGen) return;
         try {
@@ -537,45 +664,47 @@ async function loadChart() {
           if (pd && pd.price) {
             const price = Number(pd.price);
             updateBidAskRow(bidAsk, instr, price);
-            const now = Math.floor(Date.now() / 1000);
-            const sec = INTERVAL_SECONDS[state.interval] ?? 3600;
-            const bucket = Math.floor(now / sec) * sec;
+            const now2   = Math.floor(Date.now() / 1000);
+            const sec2   = INTERVAL_SECONDS[state.interval] ?? 3600;
+            const bucket = Math.floor(now2 / sec2) * sec2;
             if (!currentBar || bucket > currentBar.time) {
               currentBar = { time: bucket, open: price, high: price, low: price, close: price };
             } else {
-              currentBar.high = Math.max(currentBar.high, price);
-              currentBar.low  = Math.min(currentBar.low,  price);
+              currentBar.high  = Math.max(currentBar.high, price);
+              currentBar.low   = Math.min(currentBar.low,  price);
               currentBar.close = price;
             }
-            series.update(currentBar);
+            updateChartBar(currentBar);
           }
         } catch { /* ignore */ }
       };
-      stockPollTimer = setInterval(pollPrice, 10_000); // every 10 seconds
+      stockPollTimer = setInterval(pollPrice, 10_000);
     } else if (source === 'synthetic_live') {
       data = syntheticCandles(instr.id, state.interval);
       if (gen !== liveGen) return;
-      series.setData(data);
+      setChartData(data);
       chart.timeScale().fitContent();
+      fadeIn();
       const last = data[data.length - 1];
       if (last) updateBidAskRow(bidAsk, instr, last.close);
       status.textContent = t('charts.almostLive');
-      // stream updates every second
       const initialBar = last ?? { time: Math.floor(Date.now() / 1000), open: 1, high: 1, low: 1, close: 1 };
       startSyntheticStreaming(instr.id, state.interval, initialBar, gen, instr, bidAsk, status);
     } else {
       data = syntheticCandles(instr.id, state.interval);
       if (gen !== liveGen) return;
-      series.setData(data);
+      setChartData(data);
       chart.timeScale().fitContent();
+      fadeIn();
       const last = data[data.length - 1];
       if (last) updateBidAskRow(bidAsk, instr, last.close);
       status.textContent = t('charts.demoData');
     }
   } catch {
     if (gen !== liveGen) return;
+    fadeIn();
     status.textContent = t('charts.errorLoad');
-    series.setData([]);
+    setChartData([]);
   }
   refreshPortfolio();
 }
