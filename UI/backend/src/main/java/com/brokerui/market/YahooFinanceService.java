@@ -1,19 +1,33 @@
 package com.brokerui.market;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class YahooFinanceService {
-    private static final String QUOTE_BASE = "https://query1.finance.yahoo.com/v7/finance/quote";
-    private static final String CHART_BASE = "https://query1.finance.yahoo.com/v8/finance/chart";
+
+    private static final String RAPIDAPI_HOST = "yahoo-finance15.p.rapidapi.com";
+    private static final String QUOTE_URL =
+            "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/quote?ticker=%s&type=CURRENCY";
+    private static final String CHART_URL =
+            "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/stock/history?symbol=%s&interval=%s&diffandsplits=false";
+
+    // 1-minute price cache: symbol → [price, fetchedAtMs]
+    private final Map<String, double[]> priceCache = new ConcurrentHashMap<>();
+    private static final long CACHE_TTL_MS = 60_000;
+
+    @Value("${broker.market.rapidapi-key:}")
+    private String rapidApiKey;
 
     private final RestClient http;
     private final ObjectMapper objectMapper;
@@ -23,67 +37,73 @@ public class YahooFinanceService {
         this.http = RestClient.builder().build();
     }
 
-    public double getLivePrice(String uiSymbol) throws JsonProcessingException {
-        String yahooSymbol = mapSymbol(uiSymbol);
-        String url = QUOTE_BASE + "?symbols=" + URLEncoder.encode(yahooSymbol, StandardCharsets.UTF_8);
-
-        String json = http.get().uri(url).retrieve().body(String.class);
-        JsonNode root = objectMapper.readTree(json);
-        JsonNode result = root.path("quoteResponse").path("result");
-        if (result.isArray() && !result.isEmpty()) {
-            return result.get(0).path("regularMarketPrice").asDouble(0.0);
-        }
-        return 0.0;
+    public boolean isConfigured() {
+        return rapidApiKey != null && !rapidApiKey.isBlank();
     }
 
-    public List<CandleBar> getCandles(String uiSymbol, String intervalKey) throws JsonProcessingException {
-        String yahooSymbol = mapSymbol(uiSymbol);
-        String interval = mapInterval(intervalKey);
-        String range = mapRangeForInterval(intervalKey);
+    /** Returns live price, cached for 60 seconds to stay within API limits. */
+    public double getLivePrice(String uiSymbol) throws Exception {
+        String key = uiSymbol.trim().toUpperCase();
 
-        String url = CHART_BASE + "/" + URLEncoder.encode(yahooSymbol, StandardCharsets.UTF_8)
-                + "?interval=" + interval + "&range=" + range;
+        double[] cached = priceCache.get(key);
+        if (cached != null && (System.currentTimeMillis() - cached[1]) < CACHE_TTL_MS) {
+            return cached[0];
+        }
 
-        String json = http.get().uri(url).retrieve().body(String.class);
+        String yahooTicker = mapSymbol(key);
+        String url = String.format(QUOTE_URL, URLEncoder.encode(yahooTicker, StandardCharsets.UTF_8));
+
+        String json = http.get()
+                .uri(url)
+                .header("x-rapidapi-key", rapidApiKey)
+                .header("x-rapidapi-host", RAPIDAPI_HOST)
+                .retrieve()
+                .body(String.class);
+
         JsonNode root = objectMapper.readTree(json);
-        JsonNode result = root.path("chart").path("result");
-        if (!result.isArray() || result.isEmpty()) {
-            return List.of();
+        // Response: { "body": { "regularMarketPrice": 1.0875, ... } }
+        double price = root.path("body").path("regularMarketPrice").asDouble(0.0);
+
+        if (price > 0) {
+            priceCache.put(key, new double[]{price, System.currentTimeMillis()});
         }
+        return price;
+    }
 
-        JsonNode data = result.get(0);
-        JsonNode timestamps = data.path("timestamp");
-        JsonNode indicators = data.path("indicators").path("quote").get(0);
-        
-        if (timestamps.isMissingNode() || indicators.isMissingNode()) {
-            return List.of();
-        }
+    /** Fetches OHLCV candles from RapidAPI Yahoo Finance. */
+    public List<CandleBar> getCandles(String uiSymbol, String intervalKey) throws Exception {
+        String yahooTicker = mapSymbol(uiSymbol.trim().toUpperCase());
+        String interval = mapInterval(intervalKey);
 
-        JsonNode opens = indicators.path("open");
-        JsonNode highs = indicators.path("high");
-        JsonNode lows = indicators.path("low");
-        JsonNode closes = indicators.path("close");
+        String url = String.format(CHART_URL,
+                URLEncoder.encode(yahooTicker, StandardCharsets.UTF_8), interval);
 
-        int size = timestamps.size();
-        List<CandleBar> candles = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            // Yahoo sometimes returns nulls in the middle of data
-            if (opens.get(i).isNull() || highs.get(i).isNull() || lows.get(i).isNull() || closes.get(i).isNull()) {
-                continue;
+        String json = http.get()
+                .uri(url)
+                .header("x-rapidapi-key", rapidApiKey)
+                .header("x-rapidapi-host", RAPIDAPI_HOST)
+                .retrieve()
+                .body(String.class);
+
+        JsonNode root = objectMapper.readTree(json);
+        // Response is an array of { date, open, high, low, close, ... }
+        if (!root.isArray()) return List.of();
+
+        List<CandleBar> candles = new ArrayList<>();
+        for (JsonNode bar : root) {
+            long ts = bar.path("date").asLong(0);
+            double o = bar.path("open").asDouble(0);
+            double h = bar.path("high").asDouble(0);
+            double l = bar.path("low").asDouble(0);
+            double c = bar.path("close").asDouble(0);
+            if (ts > 0 && c > 0) {
+                candles.add(new CandleBar(ts, o, h, l, c));
             }
-            candles.add(new CandleBar(
-                    timestamps.get(i).asLong(),
-                    opens.get(i).asDouble(),
-                    highs.get(i).asDouble(),
-                    lows.get(i).asDouble(),
-                    closes.get(i).asDouble()
-            ));
         }
         return candles;
     }
 
-    private String mapSymbol(String uiSymbol) {
-        String s = uiSymbol.trim().toUpperCase();
+    private String mapSymbol(String s) {
         return switch (s) {
             case "EURUSD" -> "EURUSD=X";
             case "GBPUSD" -> "GBPUSD=X";
@@ -96,38 +116,21 @@ public class YahooFinanceService {
             case "CADJPY" -> "CADJPY=X";
             case "XAUUSD" -> "GC=F";
             case "XAGUSD" -> "SI=F";
-            case "XPTUSD" -> "PL=F";
-            default -> s.contains("=") ? s : s + "=X"; // Fallback for other FX
+            default -> s.contains("=") || s.contains("-") ? s : s + "=X";
         };
     }
 
     private String mapInterval(String intervalKey) {
         return switch (intervalKey) {
-            case "1m" -> "1m";
-            case "5m" -> "5m";
+            case "1m"  -> "1m";
+            case "5m"  -> "5m";
             case "15m" -> "15m";
-            case "30m" -> "30m";
-            case "1h" -> "1h";
-            case "4h" -> "1h"; // Yahoo doesn't have 4h in some regions, 1h is safer or we can try 1h and aggregate
-            case "1d" -> "1d";
-            case "1w" -> "1wk";
-            case "1M" -> "1mo";
-            default -> "1h";
-        };
-    }
-
-    private String mapRangeForInterval(String intervalKey) {
-        return switch (intervalKey) {
-            case "1m" -> "1d";
-            case "5m" -> "5d";
-            case "15m" -> "5d";
-            case "30m" -> "5d";
-            case "1h" -> "1mo";
-            case "4h" -> "3mo";
-            case "1d" -> "1y";
-            case "1w" -> "5y";
-            case "1M" -> "max";
-            default -> "1mo";
+            case "1h"  -> "1h";
+            case "4h"  -> "1h";
+            case "1d"  -> "1d";
+            case "1w"  -> "1wk";
+            case "1M"  -> "1mo";
+            default    -> "1h";
         };
     }
 }

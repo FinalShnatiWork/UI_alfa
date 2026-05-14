@@ -516,7 +516,7 @@ async function loadChart() {
             series.update(currentBar);
           }
         } catch { /* ignore */ }
-      }, 2000); // 2 seconds for faster feel
+      }, 60_000); // 1 minute — matches Yahoo Finance cache TTL
     } else if (source === 'synthetic_live') {
       data = syntheticCandles(instr.id, state.interval);
       if (gen !== liveGen) return;
