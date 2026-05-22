@@ -19,6 +19,7 @@ public class OrderExecutionService {
   private final NotificationRepository notificationRepo;
   private final SymbolRepository symbolRepo;
   private final MT5IntegrationService mt5Service;
+  private final com.brokerui.market.MarketPriceService priceService;
 
   @Autowired @Lazy
   private OrderExecutionService self;
@@ -30,7 +31,8 @@ public class OrderExecutionService {
       TradeFillRepository fillRepo,
       NotificationRepository notificationRepo,
       SymbolRepository symbolRepo,
-      MT5IntegrationService mt5Service) {
+      MT5IntegrationService mt5Service,
+      com.brokerui.market.MarketPriceService priceService) {
     this.accountRepo = accountRepo;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
@@ -38,6 +40,7 @@ public class OrderExecutionService {
     this.notificationRepo = notificationRepo;
     this.symbolRepo = symbolRepo;
     this.mt5Service = mt5Service;
+    this.priceService = priceService;
   }
 
   @Scheduled(fixedDelay = 2000)
@@ -66,7 +69,9 @@ public class OrderExecutionService {
 
     BigDecimal last;
     try {
-      last = BigDecimal.valueOf(mt5Service.getPrice(symbolCode));
+      double price = priceService.getLivePrice(symbolCode);
+      if (price <= 0) return; // keep NEW
+      last = BigDecimal.valueOf(price);
     } catch (Exception e) {
       return; // keep NEW
     }
@@ -128,6 +133,11 @@ public class OrderExecutionService {
           prevAvg.multiply(prevQty).add(price.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
       pos.setQuantity(newQty);
       pos.setAvgPrice(newAvg);
+      
+      BigDecimal currentPrice = price;
+      BigDecimal unrealized = currentPrice.subtract(newAvg).multiply(newQty);
+      pos.setUnrealizedPnl(unrealized);
+
       positionRepo.save(pos);
     } else { // SELL
       BigDecimal prevQty = pos == null || pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();

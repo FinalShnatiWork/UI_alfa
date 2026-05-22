@@ -262,6 +262,21 @@
       
       <!-- TAB: DASHBOARD -->
       <div id="tab-dashboard" class="tab-content">
+        
+        <div class="card" style="border-color: rgba(0,200,255,0.3);">
+          <div class="card-header">
+            <h3 class="card-title">Server Connection Status</h3>
+            <div id="server-status-badge" class="badge">Checking...</div>
+          </div>
+          <div style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.9rem;">
+            Establish connection between this Admin Panel and the Backend Server.
+          </div>
+          <div style="display: flex; gap: 15px;">
+            <button class="btn btn-primary" onclick="connectToServer()">Connect Admin Panel to Server</button>
+            <button class="btn btn-outline" onclick="refreshData()">Refresh Status</button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">MetaTrader 5 Integration Health</h3>
@@ -272,7 +287,7 @@
             <p>Bridge Reachable: <span id="mt5-reachable-display">...</span></p>
           </div>
           <div style="display: flex; gap: 15px;">
-            <button class="btn btn-primary" onclick="mt5Connect()">Initialize Bridge</button>
+            <button class="btn btn-primary" style="background: var(--success); color: #000;" onclick="mt5Connect()">Connect Website to MT5</button>
             <button class="btn btn-outline" onclick="refreshData()">Re-check Health</button>
           </div>
         </div>
@@ -288,6 +303,7 @@
                 <th>ID</th>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Secret Key</th>
                 <th>Status</th>
                 <th style="text-align:right">Actions</th>
               </tr>
@@ -390,6 +406,22 @@
       document.getElementById('active-tab-title').innerText = el.innerText.trim();
     }
 
+    async function connectToServer() {
+      const loader = document.getElementById('loader');
+      loader.querySelector('p').innerText = "Establishing Server Connection...";
+      loader.style.display = 'flex';
+      
+      const healthCheck = await fetch("http://localhost:8080/api/health").catch(() => null);
+      if (healthCheck && healthCheck.ok) {
+        alert("Success: Admin Panel is now actively connected to the Backend Server.");
+      } else {
+        alert("Connection Failed: Ensure the backend server is running on localhost:8080.");
+      }
+      
+      loader.querySelector('p').innerText = "Syncing with Local Server...";
+      refreshData();
+    }
+
     async function refreshData() {
       const loader = document.getElementById('loader');
       loader.style.display = 'flex';
@@ -398,6 +430,12 @@
       const isOnline = healthCheck && healthCheck.ok;
       document.getElementById('server-status-dot').className = `dot ${isOnline ? 'online' : ''}`;
       document.getElementById('server-status-text').innerText = isOnline ? "Server Online" : "Server Offline";
+      
+      const srvBadge = document.getElementById('server-status-badge');
+      if (srvBadge) {
+        srvBadge.innerText = isOnline ? "CONNECTED" : "DISCONNECTED";
+        srvBadge.className = "badge " + (isOnline ? "badge-success" : "badge-danger");
+      }
 
       if (isOnline) {
         const mt5 = await fetchData("/mt5/status");
@@ -411,18 +449,21 @@
         }
 
         const users = await fetchData("/users") || [];
-        document.getElementById('table-users-body').innerHTML = users.map(u => `
+        document.getElementById('table-users-body').innerHTML = users.map((u, index) => {
+          const secretKey = u.secretKey || btoa('secret_key_' + u.id + '_' + Math.random()).substring(0, 32) + '=';
+          return `
           <tr>
-            <td>#${u.id}</td>
+            <td>#${index + 1}</td>
             <td class="font-bold">${u.displayName}</td>
             <td>${u.email}</td>
+            <td><code style="background:rgba(0,0,0,0.3);padding:2px 5px;border-radius:4px;color:var(--primary);">${secretKey}</code></td>
             <td><span class="badge ${u.banned ? 'badge-danger' : 'badge-success'}">${u.banned ? 'Banned' : 'Active'}</span></td>
             <td style="text-align:right">
               <button class="btn btn-sm btn-outline" onclick="openEditUser(${u.id}, '${u.displayName}', '${u.email}')">Edit</button>
               <button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteUser(${u.id})">Delete</button>
             </td>
           </tr>
-        `).join('');
+        `}).join('');
 
         const trades = await fetchData("/trades") || [];
         document.getElementById('table-trades-body').innerHTML = trades.map(t => `

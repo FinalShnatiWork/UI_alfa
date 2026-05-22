@@ -31,6 +31,7 @@ public class BrokerApiController {
   private final NotificationRepository notificationRepo;
   private final KycCaseRepository kycRepo;
   private final MT5IntegrationService mt5Service;
+  private final com.brokerui.market.MarketPriceService priceService;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -42,7 +43,8 @@ public class BrokerApiController {
       AccountTransactionRepository txRepo,
       NotificationRepository notificationRepo,
       KycCaseRepository kycRepo,
-      MT5IntegrationService mt5Service) {
+      MT5IntegrationService mt5Service,
+      com.brokerui.market.MarketPriceService priceService) {
     this.userRepo = userRepo;
     this.accountRepo = accountRepo;
     this.symbolRepo = symbolRepo;
@@ -53,6 +55,7 @@ public class BrokerApiController {
     this.notificationRepo = notificationRepo;
     this.kycRepo = kycRepo;
     this.mt5Service = mt5Service;
+    this.priceService = priceService;
   }
 
   private AppUser requireUser(Authentication auth) {
@@ -161,12 +164,15 @@ public class BrokerApiController {
       return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW"));
     }
 
-    // MARKET execution via MT5
+    // MARKET execution via MT5 or fallback API
     double price;
     try {
-      price = mt5Service.getPrice(symbolCode);
+      price = priceService.getLivePrice(symbolCode);
+      if (price <= 0) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+      }
     } catch (Exception e) {
-      return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "mt5_price_unavailable"));
+      return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
     }
 
     BigDecimal bdPrice = BigDecimal.valueOf(price);
@@ -194,14 +200,35 @@ public class BrokerApiController {
           prevAvg.multiply(prevQty).add(bdPrice.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
       pos.setQuantity(newQty);
       pos.setAvgPrice(newAvg);
+      
+      // Calculate exact PNL (which is exactly 0 for a brand new position right at entry price, but for adds it can be non-zero if price moved, actually we can just reset to zero based on current price being entry price)
+      BigDecimal currentPrice = BigDecimal.valueOf(price);
+      BigDecimal unrealized = currentPrice.subtract(newAvg).multiply(newQty);
+      pos.setUnrealizedPnl(unrealized);
+
       positionRepo.save(pos);
     } else {
       ta.setBalance(ta.getBalance().add(notional));
       if (pos != null) {
-        BigDecimal newQty = pos.getQuantity().subtract(qty);
+        BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
+        BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
+        
+        BigDecimal realizedDelta = bdPrice.subtract(avg).multiply(qty);
+        BigDecimal realized = pos.getRealizedPnl() == null ? BigDecimal.ZERO : pos.getRealizedPnl();
+        pos.setRealizedPnl(realized.add(realizedDelta));
+
+        BigDecimal newQty = prevQty.subtract(qty);
         pos.setQuantity(newQty);
-        if (newQty.compareTo(BigDecimal.ZERO) <= 0) positionRepo.delete(pos);
-        else positionRepo.save(pos);
+
+        BigDecimal currentPrice = bdPrice;
+        BigDecimal unrealized = currentPrice.subtract(avg).multiply(newQty);
+        pos.setUnrealizedPnl(unrealized);
+
+        if (newQty.compareTo(BigDecimal.ZERO) <= 0) {
+          positionRepo.delete(pos);
+        } else {
+          positionRepo.save(pos);
+        }
       }
     }
     ta.setEquity(ta.getBalance());
@@ -226,6 +253,67 @@ public class BrokerApiController {
     }
 
     return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "fillPrice", bdPrice, "newBalance", ta.getBalance()));
+  }
+
+  @PostMapping("/positions/{id}/close")
+  @Transactional
+  public ResponseEntity<?> closePosition(Authentication auth, @PathVariable Long id) {
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    Position pos = positionRepo.findById(id).orElse(null);
+    if (pos == null || !pos.getTradingAccount().getId().equals(ta.getId())) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "position_not_found"));
+    }
+
+    double price;
+    try {
+      price = priceService.getLivePrice(pos.getSymbolCode());
+      if (price <= 0) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+      }
+    } catch (Exception e) {
+      return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+    }
+
+    BigDecimal bdPrice = BigDecimal.valueOf(price);
+    BigDecimal qty = pos.getQuantity();
+    BigDecimal notional = bdPrice.multiply(qty);
+
+    // Calculate PnL
+    BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
+    BigDecimal pnl;
+    
+    // In this simplified model, if quantity > 0 it's a long position.
+    pnl = bdPrice.subtract(avg).multiply(qty);
+    
+    // Update balance
+    ta.setBalance(ta.getBalance().add(notional).add(pnl));
+    ta.setEquity(ta.getBalance());
+    accountRepo.save(ta);
+
+    // Record order history
+    BrokerOrder order = new BrokerOrder();
+    order.setTradingAccount(ta);
+    order.setSymbolCode(pos.getSymbolCode());
+    order.setSide("SELL");
+    order.setOrderType("MARKET");
+    order.setStatus("FILLED");
+    order.setQuantity(qty);
+    order.setFilledAt(Instant.now());
+    order.setEntryPrice(bdPrice);
+    order.setRealizedPnl(pnl);
+    orderRepo.save(order);
+
+    positionRepo.delete(pos);
+
+    // Forward to MT5
+    try {
+      mt5Service.sendTrade(pos.getSymbolCode(), "SELL", price, 0, 0, qty.doubleValue());
+    } catch (Exception ex) {
+      System.err.println("MT5 Send Failed: " + ex.getMessage());
+    }
+
+    return ResponseEntity.ok(Map.of("ok", true, "closePnl", pnl, "newBalance", ta.getBalance()));
   }
 
   @GetMapping("/notifications")
