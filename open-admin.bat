@@ -25,7 +25,7 @@ if "%HEALTH_CODE%"=="200" (
 
 :: ─── Check Vite frontend is alive ────────────────────────────────────────────
 echo  Checking frontend...
-curl -s -o nul -w "%%{http_code}" http://localhost:3000 > "%TEMP%\fe_code.txt" 2>nul
+curl -s -o nul -w "%%{http_code}" http://localhost:3001 > "%TEMP%\fe_code.txt" 2>nul
 set /p FE_CODE=<"%TEMP%\fe_code.txt"
 del "%TEMP%\fe_code.txt" 2>nul
 

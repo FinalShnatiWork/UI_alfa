@@ -10,7 +10,7 @@ echo.
 
 :: ─── Step 1: Start Docker (PostgreSQL) ───────────────────────────────────────
 echo [1/3] Starting PostgreSQL (Docker Compose)...
-cd /d "%~dp0UI"
+cd /d "%~dp0backend"
 docker compose up -d
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Docker Compose failed. Make sure Docker Desktop is running.
@@ -33,25 +33,25 @@ echo.
 
 :: ─── Step 3: Start Java Backend ──────────────────────────────────────────────
 echo [3/3] Starting Java Backend (Spring Boot)...
-cd /d "%~dp0UI\backend"
+cd /d "%~dp0backend\backend"
 start "Backend - Spring Boot" cmd /k "mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=postgres & pause"
 echo       Backend starting on http://localhost:8080
 echo       (Wait ~15 seconds for Spring Boot to boot fully)
 echo.
 
-:: ─── Step 4: Start Vite Frontend ─────────────────────────────────────────────
-echo [4/4] Starting Vite Frontend...
-cd /d "%~dp0UI"
-start "Frontend - Vite" cmd /k "npm run dev & pause"
-echo       Frontend will open at http://localhost:3000
+:: ─── Step 4: Start React Frontend ────────────────────────────────────────────
+echo [4/4] Starting React Frontend (Vite)...
+cd /d "%~dp0UI-react"
+start "Frontend - React+Vite" cmd /k "npm run dev & pause"
+echo       Frontend will open at http://localhost:3001
 echo.
 
 echo  ============================================
 echo   All services started!
 echo   - PostgreSQL : localhost:5433
 echo   - Backend    : http://localhost:8080
-echo   - Frontend   : http://localhost:3000
-echo   - Admin page : http://localhost:3000/pages/admin.html
+echo   - Frontend   : http://localhost:3001
+echo   - Admin page : open-admin.bat
 echo  ============================================
 echo.
 echo  To STOP everything, run: kill-server.bat
