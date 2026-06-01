@@ -245,6 +245,8 @@
       <div class="nav-link" onclick="showTab('users', this)">User Management</div>
       <div class="nav-link" onclick="showTab('trades', this)">Trades & Activity</div>
       <div class="nav-link" onclick="showTab('finance', this)">Financial Data</div>
+      <div class="nav-link" onclick="showTab('transactions', this)">Transactions</div>
+      <div class="nav-link" onclick="showTab('audit', this)">📋 Audit Log</div>
       <div class="nav-link" onclick="showTab('system', this)">System Status</div>
     </div>
   </aside>
@@ -347,6 +349,50 @@
               </tr>
             </thead>
             <tbody id="table-accounts-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB: TRANSACTIONS -->
+      <div id="tab-transactions" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="card-header"><h3 class="card-title">Deposits &amp; Withdrawals</h3></div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Acc ID</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Currency</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="table-transactions-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB: AUDIT LOG -->
+      <div id="tab-audit" class="tab-content" style="display:none;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">📋 Audit Log</h3>
+            <span style="font-size:0.8rem;color:var(--text-muted);">Login events, orders, closes, deposits</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>User ID</th>
+                <th>Action</th>
+                <th>Detail</th>
+                <th>IP</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="table-audit-body"></tbody>
           </table>
         </div>
       </div>
@@ -488,6 +534,40 @@
             </td>
           </tr>
         `).join('');
+
+        const txns = await fetchData("/transactions") || [];
+        document.getElementById('table-transactions-body').innerHTML = txns.length ? txns.map(tx => {
+          const typeColor = tx.txType === 'DEPOSIT' ? 'var(--success)' : 'var(--danger)';
+          const date = tx.createdAt ? String(tx.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '–';
+          return `<tr>
+            <td>#${tx.id}</td>
+            <td>#${tx.accountId}</td>
+            <td><b style="color:${typeColor}">${tx.txType}</b></td>
+            <td class="font-bold">$${Number(tx.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td>${tx.currency || '–'}</td>
+            <td><span class="badge ${tx.status==='APPROVED'?'badge-success':'badge-info'}">${tx.status}</span></td>
+            <td style="color:var(--text-muted);font-size:0.82rem">${date}</td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No transactions yet</td></tr>';
+
+        const audit = await fetchData("/audit") || [];
+        const auditColors = {
+          LOGIN_SUCCESS: 'var(--success)', LOGIN_FAILURE: 'var(--danger)',
+          ORDER_PLACED: 'var(--primary)', ORDER_PENDING: '#a78bfa',
+          POSITION_CLOSED: '#fb923c', DEPOSIT: 'var(--success)', WITHDRAWAL: 'var(--danger)'
+        };
+        document.getElementById('table-audit-body').innerHTML = audit.length ? [...audit].reverse().map(a => {
+          const color = auditColors[a.action] || 'var(--text-muted)';
+          const date = a.createdAt ? String(a.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '–';
+          return `<tr>
+            <td style="color:var(--text-muted)">#${a.id}</td>
+            <td>${a.userId ? '#'+a.userId : '–'}</td>
+            <td><b style="color:${color}">${a.action}</b></td>
+            <td style="max-width:260px;word-break:break-all;font-size:0.82rem;color:var(--text-muted)">${a.detail || '–'}</td>
+            <td style="font-size:0.82rem">${a.ip || '–'}</td>
+            <td style="color:var(--text-muted);font-size:0.82rem">${date}</td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No audit entries yet. Login or place a trade to see events here.</td></tr>';
       }
 
       setTimeout(() => loader.style.display = 'none', 400);
