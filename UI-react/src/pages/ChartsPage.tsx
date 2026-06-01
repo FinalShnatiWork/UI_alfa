@@ -4,11 +4,12 @@ import {
   CandlestickSeries, HistogramSeries,
   type IChartApi, type ISeriesApi, type UTCTimestamp,
 } from 'lightweight-charts';
-import { apiGet, apiPostJson } from '@/lib/api';
+import { apiPostJson } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
-import type { Position, PlaceOrderResponse } from '@/types/api';
+import { usePositions, useBrokerOverview, useInvalidateAfterTrade } from '@/hooks/useApi';
+import type { PlaceOrderResponse } from '@/types/api';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -257,10 +258,22 @@ export function ChartsPage() {
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [volume, setVolume] = useState('1.00');
   const [entryPrice, setEntryPrice] = useState('');
-  const [balance, setBalance] = useState('—');
-  const [positionQty, setPositionQty] = useState('—');
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [posLoading, setPosLoading] = useState(true);
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+
+  // Shared data via React Query — same cache as Dashboard and Positions pages
+  const { data: overviewData } = useBrokerOverview();
+  const { data: positionsData, isLoading: posLoading } = usePositions();
+  const invalidateAfterTrade = useInvalidateAfterTrade();
+
+  const positions = (Array.isArray(positionsData) ? positionsData : []).filter(
+    (p) => Number(p.quantity ?? 0) !== 0,
+  );
+  const balance = overviewData
+    ? '$' + Number(overviewData.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
+    : '—';
+  const positionQty = positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())
+    ? Number(positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())!.quantity).toFixed(2)
+    : '0.00';
 
   useEffect(() => {
     document.title = t('titles.charts');
@@ -344,6 +357,8 @@ export function ChartsPage() {
     const pct = ((close - sessionOpenPriceRef.current) / sessionOpenPriceRef.current) * 100;
     setLiveChange(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
     setLiveChangePct(pct);
+    // Keep live price map updated so positions table reflects chart feed
+    setLivePrices(prev => ({ ...prev, [instr.id]: close }));
   }
 
   const loadChart = useCallback(async (cat: Category, sym: string, iv: Interval) => {
@@ -390,8 +405,8 @@ export function ChartsPage() {
       } else {
         let realPrice: number | null = null;
         try {
-          const pd = await apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(sym)}`);
-          if (pd?.price) realPrice = Number(pd.price);
+          const r = await fetch(`/api/market/price/${encodeURIComponent(sym)}`);
+          if (r.ok) { const pd = await r.json() as { price?: number }; if (pd?.price) realPrice = Number(pd.price); }
         } catch { /* */ }
 
         let data: Candle[];
@@ -414,7 +429,8 @@ export function ChartsPage() {
         const pollPrice = async () => {
           if (gen !== liveGenRef.current) return;
           try {
-            const pd = await apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(sym)}`);
+            const r2 = await fetch(`/api/market/price/${encodeURIComponent(sym)}`);
+            const pd = r2.ok ? await r2.json() as { price?: number } : null;
             if (pd?.price) {
               const price = Number(pd.price);
               updateBidAsk(instr, price);
@@ -437,7 +453,6 @@ export function ChartsPage() {
       if (gen !== liveGenRef.current) return;
       fadeIn(); setStatus(t('charts.errorLoad')); setChartData([]);
     }
-    void refreshPortfolio(sym);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t]);
 
@@ -462,34 +477,23 @@ export function ChartsPage() {
     }
   });
 
-  async function refreshPortfolio(sym: string) {
-    try {
-      const ov = await apiGet<{ balance: number }>('/api/broker/overview');
-      if (ov) setBalance('$' + Number(ov.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }));
-    } catch { /* */ }
-    try {
-      const pos = await apiGet<Position[]>('/api/broker/positions');
-      const list = Array.isArray(pos) ? pos : [];
-      const p = list.find(x => x.symbolCode.toUpperCase() === sym.toUpperCase());
-      setPositionQty(p ? Number(p.quantity).toFixed(2) : '0.00');
-    } catch { /* */ }
-  }
-
-  async function loadInlinePositions() {
-    setPosLoading(true);
-    try {
-      const rows = await apiGet<Position[]>('/api/broker/positions');
-      const list = Array.isArray(rows) ? rows : [];
-      setPositions(list.filter(p => Number(p.quantity ?? 0) !== 0));
-    } catch { /* */ }
-    setPosLoading(false);
-  }
-
+  // Fetch live prices for open positions (Charts page tracks them locally for chart price updates too)
   useEffect(() => {
-    void loadInlinePositions();
-    const id = setInterval(() => void loadInlinePositions(), 8000);
-    return () => clearInterval(id);
-  }, []);
+    if (positions.length === 0) return;
+    const syms = [...new Set(positions.map((p) => p.symbolCode))];
+    void Promise.all(
+      syms.map(async (sym) => {
+        try {
+          const res = await fetch(`/api/market/price/${encodeURIComponent(sym)}`);
+          if (res.ok) {
+            const d = await res.json() as { price?: number };
+            if (d?.price) setLivePrices((prev) => ({ ...prev, [sym]: Number(d.price) }));
+          }
+        } catch { /* */ }
+      }),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionsData]);
 
   async function placeOrder(side: 'BUY' | 'SELL') {
     const qty = Number(volume);
@@ -508,8 +512,7 @@ export function ChartsPage() {
         } else {
           toast.show(t('trading.orderFilled', { side, symbol, price: data.fillPrice ?? '', balance: Number(data.newBalance ?? 0).toFixed(2) }), { variant: 'success' });
         }
-        void refreshPortfolio(symbol);
-        setTimeout(() => void loadInlinePositions(), 800);
+        invalidateAfterTrade();
       } else {
         toast.show(t('trading.errOrderFailed') + ': ' + (data.error ?? ''), { variant: 'error' });
       }
@@ -522,7 +525,7 @@ export function ChartsPage() {
       const data = await res.json() as PlaceOrderResponse;
       if (data.ok) {
         toast.show(t('alerts.closeOk', { symbol: sym }) + (data.fillPrice ? ` @ ${data.fillPrice}` : ''), { variant: 'success' });
-        setTimeout(() => void loadInlinePositions(), 500);
+        invalidateAfterTrade();
       } else {
         toast.show(t('alerts.closeFail'), { variant: 'error' });
       }
@@ -705,7 +708,7 @@ export function ChartsPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ margin: 0, fontSize: '1rem' }}>{t('trading.openPositions')}</h3>
             <button className="btn btn-outline-dark" style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-              onClick={() => void loadInlinePositions()}>{t('common.refresh')}</button>
+              onClick={() => invalidateAfterTrade()}>{t('common.refresh')}</button>
           </div>
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <table className="positions-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -728,13 +731,23 @@ export function ChartsPage() {
                   positions.map((p) => {
                     const qty = Number(p.quantity ?? 0);
                     const avg = Number(p.avgPrice ?? 0);
+                    const live = livePrices[p.symbolCode];
+                    const pnl = live ? (live - avg) * qty : Number(p.unrealizedPnl ?? 0);
+                    const pnlColor = pnl >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
                     return (
                       <tr key={p.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
                         <td style={{ fontWeight: 600 }}>{p.symbolCode}</td>
                         <td className="num">{fmtP(qty)}</td>
                         <td className="num" style={{ color: 'var(--text-secondary)' }}>{fmtP(avg)}</td>
-                        <td className="num">—</td>
-                        <td className="num">—</td>
+                        <td className="num">
+                          {live
+                            ? <span style={{ fontWeight: 500 }}>{fmtP(live)}</span>
+                            : <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>…</span>
+                          }
+                        </td>
+                        <td className="num" style={{ fontWeight: 600, color: pnlColor }}>
+                          {pnl >= 0 ? '+' : ''}{fmtP(pnl)}
+                        </td>
                         <td className="center">
                           <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                             onClick={() => void closeInlinePosition(p.symbolCode, qty)}>✕</button>

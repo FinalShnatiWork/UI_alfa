@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPostJson } from '@/lib/api';
 import type { BrokerOverview, Position, NotificationItem, Transaction, BrokerOrder, AuthMeResponse } from '@/types/api';
 
@@ -12,7 +12,18 @@ export const QK = {
   history: ['broker', 'history'] as const,
   me: ['auth', 'me'] as const,
   preferences: ['broker', 'preferences'] as const,
+  livePrice: (sym: string) => ['market', 'price', sym.toUpperCase()] as const,
 };
+
+/** Invalidate all data that changes after a trade (positions, overview, history). */
+export function useInvalidateAfterTrade() {
+  const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: QK.positions });
+    void qc.invalidateQueries({ queryKey: QK.overview });
+    void qc.invalidateQueries({ queryKey: QK.history });
+  };
+}
 
 export function useBrokerOverview() {
   return useQuery({
@@ -50,6 +61,39 @@ export function useTransactions() {
     staleTime: 60_000,
     retry: 1,
   });
+}
+
+/** Fetch a single live price — cached 5s, shared across all pages. */
+export function useLivePrice(symbol: string | null) {
+  return useQuery({
+    queryKey: symbol ? QK.livePrice(symbol) : ['market', 'price', '__none__'],
+    queryFn: () => apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(symbol!)}`),
+    enabled: !!symbol,
+    staleTime: 5_000,
+    refetchInterval: 6_000,
+    retry: 0,
+  });
+}
+
+/** Fetch live prices for an array of symbols — all share the same global cache. */
+export function useLivePrices(symbols: string[]): Record<string, number> {
+  const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
+  const results = useQueries({
+    queries: unique.map((sym) => ({
+      queryKey: QK.livePrice(sym),
+      queryFn: () => apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(sym)}`),
+      staleTime: 5_000,
+      refetchInterval: 6_000,
+      retry: 0,
+    })),
+  });
+
+  const prices: Record<string, number> = {};
+  unique.forEach((sym, i) => {
+    const price = results[i]?.data?.price;
+    if (price) prices[sym] = Number(price);
+  });
+  return prices;
 }
 
 export function useTradeHistory() {

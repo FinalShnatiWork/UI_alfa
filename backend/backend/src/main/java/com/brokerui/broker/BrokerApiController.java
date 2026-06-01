@@ -215,23 +215,41 @@ public class BrokerApiController {
       if (pos != null) {
         BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
         BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-        
+
         BigDecimal realizedDelta = bdPrice.subtract(avg).multiply(qty);
         BigDecimal realized = pos.getRealizedPnl() == null ? BigDecimal.ZERO : pos.getRealizedPnl();
         pos.setRealizedPnl(realized.add(realizedDelta));
 
         BigDecimal newQty = prevQty.subtract(qty);
         pos.setQuantity(newQty);
-
-        BigDecimal currentPrice = bdPrice;
-        BigDecimal unrealized = currentPrice.subtract(avg).multiply(newQty);
-        pos.setUnrealizedPnl(unrealized);
+        pos.setUnrealizedPnl(bdPrice.subtract(avg).multiply(newQty));
 
         if (newQty.compareTo(BigDecimal.ZERO) <= 0) {
           positionRepo.delete(pos);
         } else {
           positionRepo.save(pos);
         }
+
+        // Save realized P/L and avg open price on the order for history display
+        BrokerOrder order = new BrokerOrder();
+        order.setTradingAccount(ta);
+        order.setSymbolCode(symbolCode);
+        order.setSide(side);
+        order.setOrderType("MARKET");
+        order.setStatus("FILLED");
+        order.setQuantity(qty);
+        order.setFilledAt(Instant.now());
+        order.setEntryPrice(bdPrice);
+        order.setRealizedPnl(realizedDelta);
+        orderRepo.save(order);
+
+        ta.setEquity(ta.getBalance());
+        accountRepo.save(ta);
+
+        try { mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue()); }
+        catch (Exception ex) { System.err.println("MT5 Send Failed: " + ex.getMessage()); }
+
+        return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "fillPrice", bdPrice, "newBalance", ta.getBalance()));
       }
     }
     ta.setEquity(ta.getBalance());

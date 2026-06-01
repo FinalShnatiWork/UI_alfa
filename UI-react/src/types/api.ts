@@ -65,6 +65,8 @@ export interface BrokerOrder {
   quantity: string;
   entryPrice?: string;
   realizedPnl?: string;
+  stopLoss?: string;
+  takeProfit?: string;
   filledAt?: string;
   createdAt?: string;
 }

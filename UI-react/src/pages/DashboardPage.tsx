@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { apiGet, apiPostLogout } from '@/lib/api';
+import { apiPostLogout } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
-import { useBrokerOverview, usePositions, useNotifications } from '@/hooks/useApi';
+import { useBrokerOverview, usePositions, useNotifications, useLivePrices } from '@/hooks/useApi';
 
 function fmtMoney(value: unknown, currency = 'USD'): string {
   const n = Number(value ?? 0);
@@ -29,11 +29,13 @@ export function DashboardPage() {
   const navigate = useNavigate();
 
   const [loggingOut, setLoggingOut] = useState(false);
-  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
 
   const { data: overview, isLoading: overviewLoading, error: overviewError } = useBrokerOverview();
   const { data: positionsData, isLoading: positionsLoading } = usePositions();
   const { data: notificationsData, isLoading: notifsLoading } = useNotifications();
+
+  const positionSymbols = Array.isArray(positionsData) ? positionsData.map((p) => p.symbolCode) : [];
+  const livePrices = useLivePrices(positionSymbols);
 
   const isLoading = overviewLoading || positionsLoading || notifsLoading;
 
@@ -48,25 +50,6 @@ export function DashboardPage() {
     }
   }, [overviewError, navigate, t, toast]);
 
-  // Fetch live prices for open positions
-  useEffect(() => {
-    const positions = Array.isArray(positionsData) ? positionsData : [];
-    if (positions.length === 0) return;
-
-    const symbols = [...new Set(positions.map((p) => p.symbolCode))];
-    void Promise.all(
-      symbols.map(async (sym) => {
-        try {
-          const res = await apiGet<{ price: number }>(`/api/market/price/${sym}`);
-          if (res?.price) {
-            setLivePrices((prev) => ({ ...prev, [sym]: res.price }));
-          }
-        } catch {
-          /* ignore */
-        }
-      }),
-    );
-  }, [positionsData]);
 
   const currency = overview?.currency || 'USD';
   const balance = overview ? fmtMoney(overview.balance, currency) : '—';
