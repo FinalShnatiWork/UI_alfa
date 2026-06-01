@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { apiPostLogout } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/hooks/useAuth';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, usePositions, useNotifications, useLivePrices } from '@/hooks/useApi';
@@ -27,6 +28,7 @@ export function DashboardPage() {
   const { t } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
+  const { clearUser } = useAuth();
 
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -68,13 +70,17 @@ export function DashboardPage() {
     try {
       const res = await apiPostLogout();
       if (res.ok) {
+        clearUser();
         toast.show(t('alerts.authLoggedOut'), { variant: 'success' });
-        setTimeout(() => navigate('/login'), 700);
+        navigate('/login', { replace: true });
       } else {
-        toast.show(t('alerts.authLogoutFail'), { variant: 'error' });
+        // Even if server returns error, clear local state so user isn't stuck
+        clearUser();
+        navigate('/login', { replace: true });
       }
     } catch {
-      toast.show(t('alerts.authLogoutFail'), { variant: 'error' });
+      clearUser();
+      navigate('/login', { replace: true });
     } finally {
       setLoggingOut(false);
     }
