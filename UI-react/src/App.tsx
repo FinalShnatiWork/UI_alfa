@@ -5,6 +5,7 @@ import { I18nProvider } from '@/hooks/useI18n';
 import { ToastProvider } from '@/hooks/useToast';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { PreferenceSync } from '@/components/PreferenceSync';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
@@ -35,6 +36,7 @@ export function App() {
           <ToastProvider>
             <BrowserRouter>
               <AuthProvider>
+                <PreferenceSync>
                 <Routes>
                   <Route path="/" element={<Navigate to="/landing" replace />} />
                   <Route path="/landing" element={<LandingPage />} />
@@ -52,6 +54,7 @@ export function App() {
 
                   <Route path="*" element={<PlaceholderPage title="Not Found" />} />
                 </Routes>
+                </PreferenceSync>
               </AuthProvider>
             </BrowserRouter>
           </ToastProvider>

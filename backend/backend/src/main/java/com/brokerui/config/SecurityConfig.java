@@ -1,8 +1,12 @@
 package com.brokerui.config;
 
 import com.brokerui.auth.AppUserDetailsService;
+import com.brokerui.broker.AuditLogService;
+import com.brokerui.user.AppUserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -27,6 +31,16 @@ import java.util.Arrays;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+  // @Lazy prevents circular dependency: SecurityConfig → AuditLogService → AuditLogRepository
+  private final AuditLogService auditLogService;
+  private final AppUserRepository appUserRepository;
+
+  public SecurityConfig(@Lazy AuditLogService auditLogService,
+                        @Lazy AppUserRepository appUserRepository) {
+    this.auditLogService = auditLogService;
+    this.appUserRepository = appUserRepository;
+  }
 
   @Bean
   public PasswordEncoder passwordEncoder() {
@@ -64,12 +78,20 @@ public class SecurityConfig {
 
     AuthenticationSuccessHandler okJson =
         (request, response, authentication) -> {
+          // Audit: successful login
+          String email = authentication.getName();
+          appUserRepository.findByEmailIgnoreCase(email).ifPresent(user ->
+              auditLogService.log(user, "LOGIN_SUCCESS", "email=" + email, request));
           response.setStatus(200);
           response.setContentType("application/json;charset=UTF-8");
           response.getWriter().write("{\"ok\":true}");
         };
     AuthenticationFailureHandler denyJson =
         (request, response, exception) -> {
+          // Audit: failed login attempt
+          String username = request.getParameter("username");
+          auditLogService.log(null, "LOGIN_FAILURE",
+              "username=" + username + ", reason=" + exception.getClass().getSimpleName(), request);
           response.setStatus(401);
           response.setContentType("application/json;charset=UTF-8");
           if (exception instanceof DisabledException) {

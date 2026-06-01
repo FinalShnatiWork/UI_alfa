@@ -2,6 +2,7 @@ package com.brokerui.broker;
 
 import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -33,6 +34,7 @@ public class BrokerApiController {
   private final UserPreferenceRepository preferenceRepo;
   private final MT5IntegrationService mt5Service;
   private final com.brokerui.market.MarketPriceService priceService;
+  private final AuditLogService auditLogService;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -46,7 +48,8 @@ public class BrokerApiController {
       KycCaseRepository kycRepo,
       UserPreferenceRepository preferenceRepo,
       MT5IntegrationService mt5Service,
-      com.brokerui.market.MarketPriceService priceService) {
+      com.brokerui.market.MarketPriceService priceService,
+      AuditLogService auditLogService) {
     this.userRepo = userRepo;
     this.accountRepo = accountRepo;
     this.symbolRepo = symbolRepo;
@@ -59,6 +62,7 @@ public class BrokerApiController {
     this.preferenceRepo = preferenceRepo;
     this.mt5Service = mt5Service;
     this.priceService = priceService;
+    this.auditLogService = auditLogService;
   }
 
   private AppUser requireUser(Authentication auth) {
@@ -117,12 +121,13 @@ public class BrokerApiController {
 
   @PostMapping("/transactions")
   @Transactional
-  public ResponseEntity<?> createTransaction(Authentication auth, @RequestBody Map<String, Object> body) {
+  public ResponseEntity<?> createTransaction(Authentication auth,
+      @RequestBody Map<String, Object> body, HttpServletRequest request) {
     AppUser u = requireUser(auth);
-    TradingAccount ta = ensurePrimaryAccount(u);
+    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId()).orElseGet(() -> ensurePrimaryAccount(u));
     String type = String.valueOf(body.get("txType")).toUpperCase();
     BigDecimal amount = new BigDecimal(String.valueOf(body.get("amount")));
-    
+
     AccountTransaction tx = new AccountTransaction();
     tx.setTradingAccount(ta);
     tx.setTxType(type);
@@ -137,6 +142,8 @@ public class BrokerApiController {
     ta.setEquity(ta.getBalance());
     accountRepo.save(ta);
 
+    auditLogService.log(u, type, type + " " + amount + " " + ta.getCurrency(), request);
+
     return ResponseEntity.ok(Map.of("ok", true, "newBalance", ta.getBalance()));
   }
 
@@ -144,9 +151,10 @@ public class BrokerApiController {
 
   @PostMapping("/orders")
   @Transactional
-  public ResponseEntity<?> placeOrder(Authentication auth, @RequestBody PlaceOrderRequest body) {
+  public ResponseEntity<?> placeOrder(Authentication auth,
+      @RequestBody PlaceOrderRequest body, HttpServletRequest request) {
     AppUser u = requireUser(auth);
-    TradingAccount ta = ensurePrimaryAccount(u);
+    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId()).orElseGet(() -> ensurePrimaryAccount(u));
 
     String symbolCode = body.symbolCode().trim().toUpperCase();
     String side = body.side().trim().toUpperCase();
@@ -164,6 +172,8 @@ public class BrokerApiController {
       order.setLimitPrice(body.limitPrice());
       order.setStopPrice(body.stopPrice());
       order = orderRepo.save(order);
+      auditLogService.log(u, "ORDER_PENDING",
+          side + " " + qty + " " + symbolCode + " type=" + orderType, request);
       return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW"));
     }
 
@@ -185,8 +195,8 @@ public class BrokerApiController {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
     }
 
-    // Update local DB for immediate UI feedback (will be synced later by background task if needed)
-    Position pos = positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), symbolCode).orElse(null);
+    // Update local DB for immediate UI feedback – use locking query to prevent race conditions
+    Position pos = positionRepo.findByTradingAccountIdAndSymbolCodeForUpdate(ta.getId(), symbolCode).orElse(null);
     if ("BUY".equals(side)) {
       ta.setBalance(ta.getBalance().subtract(notional));
       if (pos == null) {
@@ -246,6 +256,9 @@ public class BrokerApiController {
         ta.setEquity(ta.getBalance());
         accountRepo.save(ta);
 
+        auditLogService.log(u, "ORDER_PLACED",
+            "SELL " + qty + " " + symbolCode + " @ " + bdPrice + " pnl=" + realizedDelta, request);
+
         try { mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue()); }
         catch (Exception ex) { System.err.println("MT5 Send Failed: " + ex.getMessage()); }
 
@@ -266,6 +279,9 @@ public class BrokerApiController {
     order.setEntryPrice(bdPrice);
     orderRepo.save(order);
 
+    auditLogService.log(u, "ORDER_PLACED",
+        "BUY " + qty + " " + symbolCode + " @ " + bdPrice, request);
+
     // Forward to MT5
     try {
       mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue());
@@ -278,10 +294,11 @@ public class BrokerApiController {
 
   @PostMapping("/positions/{id}/close")
   @Transactional
-  public ResponseEntity<?> closePosition(Authentication auth, @PathVariable Long id) {
+  public ResponseEntity<?> closePosition(Authentication auth,
+      @PathVariable Long id, HttpServletRequest request) {
     AppUser u = requireUser(auth);
-    TradingAccount ta = ensurePrimaryAccount(u);
-    Position pos = positionRepo.findById(id).orElse(null);
+    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId()).orElseGet(() -> ensurePrimaryAccount(u));
+    Position pos = positionRepo.findByIdForUpdate(id).orElse(null);
     if (pos == null || !pos.getTradingAccount().getId().equals(ta.getId())) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "position_not_found"));
     }
@@ -326,6 +343,9 @@ public class BrokerApiController {
     orderRepo.save(order);
 
     positionRepo.delete(pos);
+
+    auditLogService.log(u, "POSITION_CLOSED",
+        pos.getSymbolCode() + " qty=" + qty + " @ " + bdPrice + " pnl=" + pnl, request);
 
     // Forward to MT5
     try {
