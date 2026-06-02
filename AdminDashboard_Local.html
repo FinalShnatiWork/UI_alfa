@@ -131,6 +131,33 @@
     .badge-purple { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
     .badge-orange { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
 
+    /* Overview stat cards */
+    .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; }
+    .stat-card .sc-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+    .stat-card .sc-value { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+    .stat-card .sc-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
+
+    /* Inner tabs (for Trades) */
+    .inner-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; width: fit-content; }
+    .inner-tab { padding: 7px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; cursor: pointer; color: var(--text-muted); transition: all 0.2s; }
+    .inner-tab.active { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); }
+
+    /* Search / filter inputs in tables */
+    .table-toolbar { display: flex; gap: 12px; margin-bottom: 18px; align-items: center; }
+    .table-toolbar input, .table-toolbar select {
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 14px; border-radius: 8px; font-family: inherit; font-size: 0.87rem; outline: none;
+    }
+    .table-toolbar input { flex: 1; max-width: 300px; }
+    .table-toolbar input::placeholder { color: var(--text-muted); }
+
+    /* Transaction summary bar */
+    .tx-summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tx-summary-item { flex: 1; min-width: 140px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+    .tx-summary-item .ts-label { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px; }
+    .tx-summary-item .ts-value { font-size: 1.3rem; font-weight: 700; }
+
     /* Audit filters bar */
     .audit-filters {
       display: flex;
@@ -311,6 +338,15 @@
       
       <!-- TAB: DASHBOARD -->
       <div id="tab-dashboard" class="tab-content">
+
+        <!-- Summary stat cards -->
+        <div class="stat-cards" id="overview-stats">
+          <div class="stat-card"><div class="sc-label">Total Users</div><div class="sc-value" id="ov-users">–</div><div class="sc-sub">registered accounts</div></div>
+          <div class="stat-card"><div class="sc-label">Total Balance</div><div class="sc-value" id="ov-balance" style="color:var(--primary)">–</div><div class="sc-sub">across all accounts</div></div>
+          <div class="stat-card"><div class="sc-label">Open Positions</div><div class="sc-value" id="ov-positions">–</div><div class="sc-sub">active trades</div></div>
+          <div class="stat-card"><div class="sc-label">Deposits Today</div><div class="sc-value" id="ov-deposits" style="color:var(--success)">–</div><div class="sc-sub" id="ov-deposits-sub">transactions</div></div>
+          <div class="stat-card"><div class="sc-label">Login Failures</div><div class="sc-value" id="ov-failures" style="color:var(--danger)">–</div><div class="sc-sub">in audit log</div></div>
+        </div>
         
         <div class="card" style="border-color: rgba(0,200,255,0.3);">
           <div class="card-header">
@@ -345,14 +381,19 @@
       <!-- TAB: USERS -->
       <div id="tab-users" class="tab-content" style="display:none;">
         <div class="card">
-          <div class="card-header"><h3 class="card-title">Users List</h3></div>
+          <div class="card-header"><h3 class="card-title">Users List</h3><span id="users-count" style="color:var(--text-muted);font-size:0.83rem"></span></div>
+          <div class="table-toolbar">
+            <input type="text" id="users-search" placeholder="Search by name or email…" oninput="renderUsersTable()">
+          </div>
           <table>
             <thead>
               <tr>
-                <th>ID</th>
+                <th style="width:44px">#</th>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Secret Key</th>
+                <th>Role</th>
+                <th>Balance</th>
+                <th>Joined</th>
                 <th>Status</th>
                 <th style="text-align:right">Actions</th>
               </tr>
@@ -365,16 +406,23 @@
       <!-- TAB: TRADES -->
       <div id="tab-trades" class="tab-content" style="display:none;">
         <div class="card">
-          <div class="card-header"><h3 class="card-title">All Activity</h3></div>
+          <div class="card-header"><h3 class="card-title">Trades &amp; Activity</h3><span id="trades-count" style="color:var(--text-muted);font-size:0.83rem"></span></div>
+          <div class="inner-tabs">
+            <div class="inner-tab active" onclick="setTradesTab('all',this)">All</div>
+            <div class="inner-tab" onclick="setTradesTab('positions',this)">Open Positions</div>
+            <div class="inner-tab" onclick="setTradesTab('orders',this)">Orders</div>
+          </div>
           <table>
             <thead>
               <tr>
-                <th>ID</th>
+                <th style="width:44px">#</th>
+                <th>User</th>
                 <th>Symbol</th>
                 <th>Side</th>
                 <th>Volume</th>
                 <th>Type</th>
                 <th>Status</th>
+                <th>Date</th>
               </tr>
             </thead>
             <tbody id="table-trades-body"></tbody>
@@ -389,9 +437,13 @@
           <table>
             <thead>
               <tr>
-                <th>Acc ID</th>
-                <th>User ID</th>
+                <th style="width:44px">#</th>
+                <th>User</th>
+                <th>Type / Leverage</th>
                 <th>Balance</th>
+                <th>Equity</th>
+                <th>Free Margin</th>
+                <th>Status</th>
                 <th style="text-align:right">Action</th>
               </tr>
             </thead>
@@ -404,14 +456,15 @@
       <div id="tab-transactions" class="tab-content" style="display:none;">
         <div class="card">
           <div class="card-header"><h3 class="card-title">Deposits &amp; Withdrawals</h3></div>
+          <div class="tx-summary" id="tx-summary-bar"></div>
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Acc ID</th>
+                <th style="width:44px">#</th>
+                <th>User</th>
                 <th>Type</th>
                 <th>Amount</th>
-                <th>Currency</th>
+                <th>Currency / Method</th>
                 <th>Status</th>
                 <th>Date</th>
               </tr>
@@ -478,7 +531,13 @@
   <script>
     const API_BASE = "http://localhost:8080/api/admin";
     let _auditData = [];
-    let _usersMap = {};  // userId -> { email, displayName }
+    let _usersMap = {};      // userId -> { email, name, createdAt, role }
+    let _usersRaw = [];
+    let _tradesRaw = [];
+    let _accountsRaw = [];
+    let _accountsMap = {};   // accountId -> userId
+    let _transactionsRaw = [];
+    let _tradesFilter = 'all';
 
     function getUrl(endpoint) {
       const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
@@ -562,68 +621,28 @@
           document.getElementById('mt5-reachable-display').style.color = mt5.bridgeReachable ? "var(--success)" : "var(--danger)";
         }
 
-        const users = await fetchData("/users") || [];
+        _usersRaw = await fetchData("/users") || [];
         _usersMap = {};
-        users.forEach(u => { _usersMap[u.id] = { email: u.email, name: u.displayName }; });
-        document.getElementById('table-users-body').innerHTML = users.map((u, index) => {
-          const secretKey = u.secretKey || btoa('secret_key_' + u.id + '_' + Math.random()).substring(0, 32) + '=';
-          return `
-          <tr>
-            <td>#${index + 1}</td>
-            <td class="font-bold">${u.displayName}</td>
-            <td>${u.email}</td>
-            <td><code style="background:rgba(0,0,0,0.3);padding:2px 5px;border-radius:4px;color:var(--primary);">${secretKey}</code></td>
-            <td><span class="badge ${u.banned ? 'badge-danger' : 'badge-success'}">${u.banned ? 'Banned' : 'Active'}</span></td>
-            <td style="text-align:right">
-              <button class="btn btn-sm btn-outline" onclick="openEditUser(${u.id}, '${u.displayName}', '${u.email}')">Edit</button>
-              <button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteUser(${u.id})">Delete</button>
-            </td>
-          </tr>
-        `}).join('');
+        _usersRaw.forEach(u => { _usersMap[u.id] = { email: u.email, name: u.displayName, createdAt: u.createdAt, role: u.role }; });
+        renderUsersTable();
 
-        const trades = await fetchData("/trades") || [];
-        document.getElementById('table-trades-body').innerHTML = trades.map(t => `
-          <tr>
-            <td>#${t.id}</td>
-            <td class="font-bold">${t.symbol}</td>
-            <td><b style="color:${t.side==='BUY'?'var(--success)':'var(--danger)'}">${t.side}</b></td>
-            <td>${t.quantity}</td>
-            <td><span class="badge badge-info">${t.type}</span></td>
-            <td>${t.status}</td>
-          </tr>
-        `).join('');
+        _tradesRaw = await fetchData("/trades") || [];
+        renderTradesTable();
 
-        const accounts = await fetchData("/accounts") || [];
-        document.getElementById('table-accounts-body').innerHTML = accounts.map(a => `
-          <tr>
-            <td>#${a.id}</td>
-            <td>#${a.userId}</td>
-            <td class="font-bold text-primary">$${a.balance.toFixed(2)}</td>
-            <td style="text-align:right">
-              <button class="btn btn-sm btn-outline" onclick="openEditBalance(${a.id}, ${a.balance})">Adjust Balance</button>
-            </td>
-          </tr>
-        `).join('');
+        _accountsRaw = await fetchData("/accounts") || [];
+        _accountsMap = {};
+        _accountsRaw.forEach(a => { _accountsMap[a.id] = a.userId; });
+        renderAccountsTable();
 
-        const txns = await fetchData("/transactions") || [];
-        document.getElementById('table-transactions-body').innerHTML = txns.length ? txns.map(tx => {
-          const typeColor = tx.txType === 'DEPOSIT' ? 'var(--success)' : 'var(--danger)';
-          const date = tx.createdAt ? String(tx.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '–';
-          return `<tr>
-            <td>#${tx.id}</td>
-            <td>#${tx.accountId}</td>
-            <td><b style="color:${typeColor}">${tx.txType}</b></td>
-            <td class="font-bold">$${Number(tx.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-            <td>${tx.currency || '–'}</td>
-            <td><span class="badge ${tx.status==='APPROVED'?'badge-success':'badge-info'}">${tx.status}</span></td>
-            <td style="color:var(--text-muted);font-size:0.82rem">${date}</td>
-          </tr>`;
-        }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No transactions yet</td></tr>';
+        _transactionsRaw = await fetchData("/transactions") || [];
+        renderTransactionsTable();
 
         const audit = await fetchData("/audit") || [];
         _auditData = [...audit].reverse();
         renderAuditStats();
         renderAuditTable();
+
+        renderOverviewStats();
       }
 
       setTimeout(() => loader.style.display = 'none', 400);
@@ -655,6 +674,18 @@
       const res = await postData(`/accounts/${id}/balance`, { balance: parseFloat(document.getElementById('edit-acc-balance').value) });
       if (res && res.ok) { closeModals(); refreshData(); }
     }
+    async function banUser(id) {
+      const reason = prompt(`Reason for banning User #${id} (optional):`);
+      if (reason === null) return;
+      const res = await postData(`/users/${id}/ban`, { reason });
+      if (res && res.ok) refreshData();
+    }
+    async function unbanUser(id) {
+      if (confirm(`Unban User #${id}?`)) {
+        const res = await postData(`/users/${id}/unban`);
+        if (res && res.ok) refreshData();
+      }
+    }
     async function deleteUser(id) {
       if (confirm(`Permanently delete User #${id}?`)) {
         const res = await postData(`/users/${id}/delete`);
@@ -663,6 +694,158 @@
     }
     async function mt5Connect() { await postData("/mt5/connect"); refreshData(); }
     async function restartServer() { if (confirm("Restart backend?")) await postData("/server/restart"); }
+
+    // ─── Overview Stats ──────────────────────────────────────────────────────
+    function renderOverviewStats() {
+      document.getElementById('ov-users').innerText = _usersRaw.length;
+      const totalBal = _accountsRaw.reduce((s, a) => s + Number(a.balance || 0), 0);
+      document.getElementById('ov-balance').innerText = '$' + totalBal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      const openPos = _tradesRaw.filter(t => t.type === 'POSITION').length;
+      document.getElementById('ov-positions').innerText = openPos;
+      const today = new Date().toISOString().slice(0, 10);
+      const todayDeposits = _transactionsRaw.filter(t => t.txType === 'DEPOSIT' && t.createdAt && String(t.createdAt).startsWith(today));
+      const todayDepTotal = todayDeposits.reduce((s, t) => s + Number(t.amount || 0), 0);
+      document.getElementById('ov-deposits').innerText = todayDeposits.length > 0 ? '$' + todayDepTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '0';
+      document.getElementById('ov-deposits-sub').innerText = `${todayDeposits.length} transaction${todayDeposits.length !== 1 ? 's' : ''} today`;
+      const failures = _auditData.filter(a => a.action === 'LOGIN_FAILURE').length;
+      document.getElementById('ov-failures').innerText = failures;
+    }
+
+    // ─── Users Table ─────────────────────────────────────────────────────────
+    function renderUsersTable() {
+      const q = (document.getElementById('users-search')?.value || '').toLowerCase().trim();
+      const filtered = _usersRaw.filter(u =>
+        !q || u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+      );
+      document.getElementById('users-count').innerText = `${filtered.length} of ${_usersRaw.length} users`;
+      // Build userId -> balance map
+      const balMap = {};
+      _accountsRaw.forEach(a => { balMap[a.userId] = (balMap[a.userId] || 0) + Number(a.balance || 0); });
+      document.getElementById('table-users-body').innerHTML = filtered.map((u, idx) => {
+        const joined = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '–';
+        const bal = balMap[u.id] != null ? '$' + balMap[u.id].toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '–';
+        const roleBadge = u.role === 'ADMIN' ? 'badge-warning' : 'badge-info';
+        return `<tr>
+          <td style="color:var(--text-muted)">${idx + 1}</td>
+          <td style="font-weight:600">${u.displayName}</td>
+          <td style="color:var(--text-muted);font-size:0.87rem">${u.email}</td>
+          <td><span class="badge ${roleBadge}">${u.role || 'USER'}</span></td>
+          <td style="font-weight:600;color:var(--primary)">${bal}</td>
+          <td style="color:var(--text-muted);font-size:0.82rem">${joined}</td>
+          <td><span class="badge ${u.banned ? 'badge-danger' : 'badge-success'}">${u.banned ? 'Banned' : 'Active'}</span></td>
+          <td style="text-align:right">
+            <button class="btn btn-sm btn-outline" onclick="openEditUser(${u.id}, '${u.displayName.replace(/'/g,"\\'")}', '${u.email}')">Edit</button>
+            ${u.banned
+              ? `<button class="btn btn-sm btn-outline" style="color:var(--success)" onclick="unbanUser(${u.id})">Unban</button>`
+              : `<button class="btn btn-sm btn-outline" style="color:var(--warning)" onclick="banUser(${u.id})">Ban</button>`}
+            <button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteUser(${u.id})">Delete</button>
+          </td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No users found</td></tr>';
+    }
+
+    // ─── Trades Table ─────────────────────────────────────────────────────────
+    function setTradesTab(tab, el) {
+      _tradesFilter = tab;
+      document.querySelectorAll('.inner-tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      renderTradesTable();
+    }
+
+    function renderTradesTable() {
+      let data = _tradesRaw;
+      if (_tradesFilter === 'positions') data = data.filter(t => t.type === 'POSITION');
+      else if (_tradesFilter === 'orders') data = data.filter(t => t.type !== 'POSITION');
+      const sorted = [...data].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      document.getElementById('trades-count').innerText = `${sorted.length} records`;
+      document.getElementById('table-trades-body').innerHTML = sorted.length ? sorted.map((t, idx) => {
+        const user = _usersMap[t.accountId];
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div><div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">#${t.accountId || '–'}</span>`;
+        const sideColor = t.side === 'BUY' || t.side === 'OPEN' ? 'var(--success)' : 'var(--danger)';
+        const date = t.date ? formatAuditTime(t.date) : '–';
+        const fullDate = t.date ? String(t.date).replace('T',' ').replace(/\.\d+Z?$/,'') : '';
+        const typeBadge = t.type === 'POSITION' ? 'badge-orange' : 'badge-info';
+        return `<tr>
+          <td style="color:var(--text-muted)">${idx + 1}</td>
+          <td>${userCell}</td>
+          <td style="font-weight:600">${t.symbol}</td>
+          <td><b style="color:${sideColor}">${t.side}</b></td>
+          <td>${Number(t.quantity).toFixed(2)}</td>
+          <td><span class="badge ${typeBadge}">${t.type}</span></td>
+          <td><span class="badge ${t.status==='ACTIVE'||t.status==='FILLED'?'badge-success':'badge-info'}">${t.status}</span></td>
+          <td style="font-size:0.82rem" title="${fullDate}">${date}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No records</td></tr>';
+    }
+
+    // ─── Accounts Table ───────────────────────────────────────────────────────
+    function renderAccountsTable() {
+      document.getElementById('table-accounts-body').innerHTML = _accountsRaw.length ? _accountsRaw.map((a, idx) => {
+        const user = _usersMap[a.userId];
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div><div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">#${a.userId}</span>`;
+        const statusBadge = a.status === 'ACTIVE' ? 'badge-success' : 'badge-warning';
+        return `<tr>
+          <td style="color:var(--text-muted)">${idx + 1}</td>
+          <td>${userCell}</td>
+          <td><span style="font-size:0.82rem">${a.accountType || '–'}</span><br><span style="color:var(--text-muted);font-size:0.78rem">x${a.leverage}</span></td>
+          <td style="font-weight:700;color:var(--primary)">$${Number(a.balance).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="color:var(--text-muted)">$${Number(a.equity||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="color:var(--text-muted)">$${Number(a.freeMargin||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td><span class="badge ${statusBadge}">${a.status || '–'}</span></td>
+          <td style="text-align:right">
+            <button class="btn btn-sm btn-outline" onclick="openEditBalance(${a.id}, ${a.balance})">Adjust Balance</button>
+          </td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No accounts</td></tr>';
+    }
+
+    // ─── Transactions Table ───────────────────────────────────────────────────
+    function renderTransactionsTable() {
+      const totalDep = _transactionsRaw.filter(t=>t.txType==='DEPOSIT').reduce((s,t)=>s+Number(t.amount||0),0);
+      const totalWith = _transactionsRaw.filter(t=>t.txType==='WITHDRAWAL').reduce((s,t)=>s+Number(t.amount||0),0);
+      const netFlow = totalDep - totalWith;
+      document.getElementById('tx-summary-bar').innerHTML = `
+        <div class="tx-summary-item">
+          <div class="ts-label">Total Deposits</div>
+          <div class="ts-value" style="color:var(--success)">$${totalDep.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        <div class="tx-summary-item">
+          <div class="ts-label">Total Withdrawals</div>
+          <div class="ts-value" style="color:var(--danger)">$${totalWith.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        <div class="tx-summary-item">
+          <div class="ts-label">Net Flow</div>
+          <div class="ts-value" style="color:${netFlow>=0?'var(--success)':'var(--danger)'}">$${netFlow.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        <div class="tx-summary-item">
+          <div class="ts-label">Total Transactions</div>
+          <div class="ts-value">${_transactionsRaw.length}</div>
+        </div>`;
+
+      const sorted = [..._transactionsRaw].sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+      document.getElementById('table-transactions-body').innerHTML = sorted.length ? sorted.map((tx, idx) => {
+        const userId = _accountsMap[tx.accountId];
+        const user = userId ? _usersMap[userId] : null;
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div><div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">#${tx.accountId}</span>`;
+        const typeColor = tx.txType === 'DEPOSIT' ? 'var(--success)' : 'var(--danger)';
+        const date = tx.createdAt ? String(tx.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '–';
+        return `<tr>
+          <td style="color:var(--text-muted)">${sorted.length - idx}</td>
+          <td>${userCell}</td>
+          <td><b style="color:${typeColor}">${tx.txType}</b></td>
+          <td style="font-weight:700">$${Number(tx.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="font-size:0.82rem">${tx.currency || '–'}${tx.method ? ' · ' + tx.method : ''}</td>
+          <td><span class="badge ${tx.status==='APPROVED'?'badge-success':'badge-info'}">${tx.status}</span></td>
+          <td style="color:var(--text-muted);font-size:0.82rem">${date}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No transactions yet</td></tr>';
+    }
 
     // ─── Audit Log Rendering ─────────────────────────────────────────────────
     const AUDIT_BADGE = {
