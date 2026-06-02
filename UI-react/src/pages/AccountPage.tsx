@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiPostLogout } from '@/lib/api';
+import { useEffect } from 'react';
 import { getUserProfile } from '@/lib/userProfile';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { useBrokerOverview, useAuthMe } from '@/hooks/useApi';
+import { useLogout } from '@/hooks/useLogout';
 
 function displayOrDash(value: unknown): string {
   if (value == null) return '—';
@@ -17,9 +16,7 @@ function displayOrDash(value: unknown): string {
 export function AccountPage() {
   const { t } = useI18n();
   const toast = useToast();
-  const navigate = useNavigate();
-
-  const [loggingOut, setLoggingOut] = useState(false);
+  const { logout, loggingOut } = useLogout();
 
   const { data: me, isLoading: meLoading } = useAuthMe();
   const { data: overview, isLoading: overviewLoading } = useBrokerOverview();
@@ -47,21 +44,9 @@ export function AccountPage() {
     toast.show(t('alerts.editProfile'), { variant: 'info' });
   };
 
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    try {
-      const res = await apiPostLogout();
-      if (res.ok) {
-        toast.show(t('alerts.authLoggedOut'), { variant: 'success' });
-        setTimeout(() => navigate('/login'), 700);
-      } else {
-        toast.show(t('alerts.authLogoutFail'), { variant: 'error' });
-      }
-    } catch {
-      toast.show(t('alerts.authLogoutFail'), { variant: 'error' });
-    } finally {
-      setLoggingOut(false);
-    }
+  const handleLogout = () => {
+    toast.show(t('alerts.authLoggedOut'), { variant: 'success' });
+    void logout();
   };
 
   return (

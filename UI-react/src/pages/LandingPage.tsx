@@ -3,12 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { apiGet, apiPostFormUrlEncoded } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/hooks/useAuth';
 import { AuthHeader } from '@/components/AuthHeader';
 
 export function LandingPage() {
   const { t } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
+  const { refresh } = useAuth();
 
   useEffect(() => {
     document.title = t('titles.landing');
@@ -32,6 +34,7 @@ export function LandingPage() {
     try {
       const res = await apiPostFormUrlEncoded('/api/auth/login', body);
       if (res.ok) {
+        await refresh();
         setTimeout(() => navigate('/dashboard'), 600);
         return;
       }

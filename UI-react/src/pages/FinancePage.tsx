@@ -209,23 +209,24 @@ export function FinancePage() {
   async function handleConfirm(amount: number, method: string) {
     const isDeposit = modal === 'DEPOSIT';
     try {
-      const res = await txMutation.mutateAsync({
+      await txMutation.mutateAsync({
         txType: modal ?? 'DEPOSIT',
         amount,
         method,
         note: isDeposit ? 'Demo deposit' : 'Demo withdrawal request',
       });
-      if (res.ok) {
-        toast.show(
-          isDeposit ? t('finance.toastDepositOk') : t('finance.toastWithdrawOk'),
-          { variant: isDeposit ? 'success' : 'info' },
-        );
-        setModal(null);
+      toast.show(
+        isDeposit ? t('finance.toastDepositOk') : t('finance.toastWithdrawOk'),
+        { variant: isDeposit ? 'success' : 'info' },
+      );
+      setModal(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'insufficient_funds') {
+        toast.show(t('alerts.insufficientFunds') || 'Insufficient funds', { variant: 'error' });
       } else {
-        toast.show(t('alerts.authNeedLogin'), { variant: 'warning' });
+        toast.show(t('finance.toastError') || 'Transaction failed', { variant: 'error' });
       }
-    } catch {
-      toast.show(t('finance.modalInvalidAmount'), { variant: 'error' });
     }
   }
 

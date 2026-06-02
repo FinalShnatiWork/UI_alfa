@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { apiPostLogout } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
-import { useAuth } from '@/hooks/useAuth';
+import { useLogout } from '@/hooks/useLogout';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, usePositions, useNotifications, useLivePrices } from '@/hooks/useApi';
@@ -28,9 +27,7 @@ export function DashboardPage() {
   const { t } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
-  const { clearUser } = useAuth();
-
-  const [loggingOut, setLoggingOut] = useState(false);
+  const { logout, loggingOut } = useLogout();
 
   const { data: overview, isLoading: overviewLoading, error: overviewError } = useBrokerOverview();
   const { data: positionsData, isLoading: positionsLoading } = usePositions();
@@ -65,29 +62,10 @@ export function DashboardPage() {
   const notifications = Array.isArray(notificationsData) ? notificationsData.slice(0, 5) : [];
   const positions = Array.isArray(positionsData) ? positionsData : [];
 
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    try {
-      await apiPostLogout();
-    } catch {
-      // ignore server errors — we always clear local state
-    } finally {
-      // Clear per-user settings so the next user starts fresh
-      localStorage.removeItem('theme');
-      localStorage.removeItem('broker-ui-lang');
-      // Reset DOM to defaults before the next user's preferences load
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.documentElement.lang = 'en';
-      document.documentElement.dir = 'ltr';
-      clearUser();
-      setLoggingOut(false);
-      navigate('/login', { replace: true });
-    }
-  };
 
   return (
     <>
-      <DashboardHeader onLogout={() => void handleLogout()} loggingOut={loggingOut} />
+      <DashboardHeader onLogout={() => void logout()} loggingOut={loggingOut} />
 
       <div className="container mt-20">
 

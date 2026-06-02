@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
+import { useSavePreferences } from '@/hooks/useApi';
 import type { Lang } from '@/types/api';
 
 const NAV_LINKS = [
@@ -25,6 +26,12 @@ interface Props {
 export function DashboardHeader({ onLogout, loggingOut }: Props) {
   const { t, lang, setLang } = useI18n();
   const { pathname } = useLocation();
+  const { mutate: savePrefs } = useSavePreferences();
+
+  const handleLangChange = (code: Lang) => {
+    setLang(code);
+    savePrefs({ lang: code });
+  };
 
   return (
     <header className="top-nav">
@@ -56,7 +63,7 @@ export function DashboardHeader({ onLogout, loggingOut }: Props) {
               type="button"
               className={`btn ${lang === opt.code ? 'btn-primary' : 'btn-outline'}`}
               style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-              onClick={() => setLang(opt.code)}
+              onClick={() => handleLangChange(opt.code)}
             >
               {opt.label}
             </button>

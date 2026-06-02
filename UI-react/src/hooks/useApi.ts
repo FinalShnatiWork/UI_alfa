@@ -127,8 +127,14 @@ export function usePreferences(enabled = true) {
 export function useSavePreferences() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (prefs: Record<string, string>) =>
-      apiPostJson('/api/broker/preferences', prefs),
+    mutationFn: async (prefs: Record<string, string>) => {
+      const res = await apiPostJson('/api/broker/preferences', prefs);
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`preferences save failed: ${res.status} ${text}`);
+      }
+      return res;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QK.preferences });
     },
@@ -138,8 +144,15 @@ export function useSavePreferences() {
 export function useTransactionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { txType: string; amount: number; method: string; note: string }) =>
-      apiPostJson('/api/broker/transactions', body),
+    mutationFn: async (body: { txType: string; amount: number; method: string; note: string }) => {
+      const res = await apiPostJson('/api/broker/transactions', body);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = (data as { error?: string }).error ?? `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      return (await res.json()) as { ok: boolean; newBalance?: number };
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QK.overview });
       void queryClient.invalidateQueries({ queryKey: QK.transactions });

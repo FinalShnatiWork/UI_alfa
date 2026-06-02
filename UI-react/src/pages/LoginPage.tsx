@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,7 +19,10 @@ export function LoginPage() {
   const { t } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { refresh, status } = useAuth();
+
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/dashboard';
 
   const {
     register,
@@ -35,9 +38,9 @@ export function LoginPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      navigate('/dashboard', { replace: true });
+      navigate(from, { replace: true });
     }
-  }, [status, navigate]);
+  }, [status, navigate, from]);
 
   const onSubmit = async (data: FormData) => {
     const trimmedEmail = data.email.trim().toLowerCase();
@@ -50,7 +53,7 @@ export function LoginPage() {
       if (res.ok) {
         toast.show(t('alerts.authLoginOk'), { variant: 'success', duration: 1400 });
         await refresh();
-        setTimeout(() => navigate('/dashboard'), 600);
+        setTimeout(() => navigate(from, { replace: true }), 600);
         return;
       }
 

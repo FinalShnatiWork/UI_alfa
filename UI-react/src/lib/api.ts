@@ -87,7 +87,11 @@ async function postWithCsrfRetry(
 }
 
 export async function apiPostJson(path: string, body: unknown): Promise<Response> {
-  return postWithCsrfRetry(path, 'application/json', JSON.stringify(body));
+  const res = await postWithCsrfRetry(path, 'application/json', JSON.stringify(body));
+  if (res.status === 401) {
+    onUnauthorized.forEach((fn) => fn());
+  }
+  return res;
 }
 
 export async function apiPostFormUrlEncoded(
