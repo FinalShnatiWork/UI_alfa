@@ -10,6 +10,7 @@ export const QK = {
   notifications: ['broker', 'notifications'] as const,
   transactions: ['broker', 'transactions'] as const,
   history: ['broker', 'history'] as const,
+  pendingOrders: ['broker', 'orders', 'pending'] as const,
   me: ['auth', 'me'] as const,
   preferences: ['broker', 'preferences'] as const,
   livePrice: (sym: string) => ['market', 'price', sym.toUpperCase()] as const,
@@ -102,6 +103,34 @@ export function useTradeHistory() {
     queryFn: () => apiGet<BrokerOrder[]>('/api/broker/history'),
     staleTime: 60_000,
     retry: 1,
+  });
+}
+
+export function usePendingOrders() {
+  return useQuery({
+    queryKey: QK.pendingOrders,
+    queryFn: () => apiGet<BrokerOrder[]>('/api/broker/orders/pending'),
+    refetchInterval: 3000,
+    staleTime: 2000,
+    retry: 1,
+  });
+}
+
+export function useCancelOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderId: number) => {
+      const res = await apiPostJson(`/api/broker/orders/${orderId}/cancel`, {});
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      return (await res.json()) as { ok: boolean; newBalance?: number };
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QK.pendingOrders });
+      void queryClient.invalidateQueries({ queryKey: QK.overview });
+    },
   });
 }
 

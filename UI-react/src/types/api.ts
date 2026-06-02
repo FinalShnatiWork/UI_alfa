@@ -61,8 +61,10 @@ export interface BrokerOrder {
   symbolCode: string;
   side: 'BUY' | 'SELL';
   orderType: 'MARKET' | 'LIMIT' | 'STOP';
-  status: 'NEW' | 'FILLED' | 'CANCELED' | 'REJECTED';
+  status: 'NEW' | 'FILLED' | 'CANCELLED' | 'CANCELED' | 'REJECTED';
   quantity: string;
+  limitPrice?: string;
+  stopPrice?: string;
   entryPrice?: string;
   realizedPnl?: string;
   stopLoss?: string;

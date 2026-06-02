@@ -5,7 +5,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
-import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory } from '@/hooks/useApi';
+import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder } from '@/hooks/useApi';
 import type { Position, BrokerOrder } from '@/types/api';
 
 interface PairedTrade {
@@ -42,7 +42,7 @@ function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
   return pairs.sort((a, b) => tsMs(b.closeTime) - tsMs(a.closeTime));
 }
 
-type Tab = 'open' | 'closed';
+type Tab = 'open' | 'closed' | 'pending';
 
 function fmtPrice(n: unknown): string {
   const v = Number(n ?? 0);
@@ -98,9 +98,12 @@ export function PositionsPage() {
   const [search, setSearch] = useState('');
   const [closing, setClosing] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<{ position: Position } | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
 
   const { data: positionsData, isLoading, error } = usePositions();
   const { data: historyData, isLoading: histLoading } = useTradeHistory();
+  const { data: pendingData, isLoading: pendingLoading } = usePendingOrders();
+  const { mutateAsync: cancelOrder } = useCancelOrder();
   const invalidateAfterTrade = useInvalidateAfterTrade();
 
   useEffect(() => { document.title = t('titles.positions'); }, [t]);
@@ -118,6 +121,7 @@ export function PositionsPage() {
 
   const allHistory: BrokerOrder[] = Array.isArray(historyData) ? historyData : [];
   const closedTrades = pairOrders(allHistory);
+  const pendingOrders: BrokerOrder[] = Array.isArray(pendingData) ? pendingData : [];
 
   const filteredOpen = activePositions.filter((p) =>
     p.symbolCode.toLowerCase().includes(search.toLowerCase()),
@@ -125,6 +129,21 @@ export function PositionsPage() {
   const filteredClosed = closedTrades.filter((o) =>
     o.symbolCode.toLowerCase().includes(search.toLowerCase()),
   );
+  const filteredPending = pendingOrders.filter((o) =>
+    o.symbolCode.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  async function handleCancelOrder(orderId: number, symbol: string) {
+    setCancellingId(orderId);
+    try {
+      await cancelOrder(orderId);
+      toast.show(`${symbol} — ${t('alerts.orderCancelled') || 'Order cancelled'}`, { variant: 'success' });
+    } catch (err) {
+      toast.show(err instanceof Error ? err.message : t('alerts.cancelFail') || 'Cancel failed', { variant: 'error' });
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   async function closePosition(pos: Position) {
     setClosing(pos.id);
@@ -169,6 +188,7 @@ export function PositionsPage() {
             {([
               { key: 'open' as Tab, label: `${t('positions.open')} (${activePositions.length})` },
               { key: 'closed' as Tab, label: `${t('positions.closed')} (${closedTrades.length})` },
+              { key: 'pending' as Tab, label: `${t('positions.pending') || 'Pending'} (${pendingOrders.length})` },
             ]).map(({ key, label }) => (
               <button
                 key={key}
@@ -272,6 +292,28 @@ export function PositionsPage() {
                 })
               )}
             </tbody>
+            {filteredOpen.length > 0 && (() => {
+              const totalPnl = filteredOpen.reduce((sum, p) => {
+                const qty = Number(p.quantity ?? 0);
+                const avg = Number(p.avgPrice ?? 0);
+                const live = livePrices[p.symbolCode.toUpperCase()];
+                return live != null ? sum + (live - avg) * qty : sum;
+              }, 0);
+              const pnlColor = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+              return (
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid var(--border)' }}>
+                    <td colSpan={5} style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                      {t('table.totalPl') || 'Total P/L'}
+                    </td>
+                    <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
+                      {totalPnl >= 0 ? '+' : ''}${Math.abs(totalPnl).toFixed(2)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              );
+            })()}
           </table>
         )}
 
@@ -318,6 +360,71 @@ export function PositionsPage() {
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
                       <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
                         {pl != null ? `${pl >= 0 ? '+' : ''}$${Math.abs(pl).toFixed(2)}` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        )}
+
+        {/* ── PENDING ORDERS ── */}
+        {tab === 'pending' && (
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: 40 }}>#</th>
+                <th>{t('table.symbol')}</th>
+                <th>{t('table.type')}</th>
+                <th>{t('common.side') || 'Side'}</th>
+                <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
+                <th style={{ textAlign: 'right' }}>{t('common.limitPrice') || 'Limit Price'}</th>
+                <th style={{ textAlign: 'right' }}>{t('common.stopPrice') || 'Stop Price'}</th>
+                <th className="text-sm">{t('table.createdAt') || 'Created'}</th>
+                <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingLoading ? (
+                <SkeletonRow />
+              ) : filteredPending.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                    {t('positions.noPending')}
+                  </td>
+                </tr>
+              ) : (
+                filteredPending.map((o, idx) => {
+                  const isCancelling = cancellingId === o.id;
+                  return (
+                    <tr key={o.id}>
+                      <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
+                      <td className="font-bold">{o.symbolCode}</td>
+                      <td>
+                        <span className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>
+                          {o.orderType}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${o.side === 'BUY' ? 'badge-success' : 'badge-danger'}`}>
+                          {o.side === 'BUY' ? t('badge.buy') : t('badge.sell')}
+                        </span>
+                      </td>
+                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(o.quantity)}</td>
+                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.limitPrice)}</td>
+                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.stopPrice)}</td>
+                      <td className="text-sm">{fmtTime(o.createdAt)}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline-danger"
+                          style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+                          disabled={isCancelling}
+                          onClick={() => void handleCancelOrder(o.id, o.symbolCode)}
+                        >
+                          {isCancelling ? '...' : t('common.cancel')}
+                        </button>
                       </td>
                     </tr>
                   );

@@ -185,6 +185,33 @@ public class BrokerApiController {
     BigDecimal qty = body.quantity();
 
     if (!"MARKET".equals(orderType)) {
+      if ("BUY".equals(side)) {
+        // Reserve funds at the limit/stop price (worst-case cost)
+        BigDecimal reservePrice = body.limitPrice() != null ? body.limitPrice()
+            : (body.stopPrice() != null ? body.stopPrice() : BigDecimal.ZERO);
+        if (reservePrice.compareTo(BigDecimal.ZERO) <= 0) {
+          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "limit_price_required"));
+        }
+        BigDecimal reserved = reservePrice.multiply(qty);
+        if (ta.getBalance().compareTo(reserved) < 0) {
+          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds",
+              "required", reserved, "available", ta.getBalance()));
+        }
+        ta.setBalance(ta.getBalance().subtract(reserved));
+        ta.setEquity(ta.getBalance());
+        ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+        accountRepo.save(ta);
+      } else { // SELL limit/stop — verify position exists
+        Position pos = positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), symbolCode).orElse(null);
+        if (pos == null) {
+          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "no_open_position"));
+        }
+        BigDecimal available = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
+        if (qty.compareTo(available) > 0) {
+          return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_position",
+              "available", available));
+        }
+      }
       BrokerOrder order = new BrokerOrder();
       order.setTradingAccount(ta);
       order.setSymbolCode(symbolCode);
@@ -197,7 +224,8 @@ public class BrokerApiController {
       order = orderRepo.save(order);
       auditLogService.log(u, "ORDER_PENDING",
           side + " " + qty + " " + symbolCode + " type=" + orderType, request);
-      return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW"));
+      return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW",
+          "newBalance", ta.getBalance()));
     }
 
     // MARKET execution via MT5 or fallback API
@@ -431,6 +459,42 @@ public class BrokerApiController {
       preferenceRepo.save(pref);
     }
     return ResponseEntity.ok(Map.of("ok", true));
+  }
+
+  @GetMapping("/orders/pending")
+  public ResponseEntity<?> pendingOrders(Authentication auth) {
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    return ResponseEntity.ok(orderRepo.findByTradingAccountIdAndStatusOrderByCreatedAtDesc(ta.getId(), "NEW"));
+  }
+
+  @PostMapping("/orders/{id}/cancel")
+  @Transactional
+  public ResponseEntity<?> cancelOrder(Authentication auth, @PathVariable Long id) {
+    AppUser u = requireUser(auth);
+    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId()).orElseThrow();
+    BrokerOrder order = orderRepo.findById(id).orElse(null);
+    if (order == null || !order.getTradingAccount().getId().equals(ta.getId())) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "order_not_found"));
+    }
+    if (!"NEW".equalsIgnoreCase(order.getStatus())) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "order_not_cancellable"));
+    }
+    // Refund reserved balance for BUY orders
+    if ("BUY".equalsIgnoreCase(order.getSide())) {
+      BigDecimal reservePrice = order.getLimitPrice() != null ? order.getLimitPrice()
+          : (order.getStopPrice() != null ? order.getStopPrice() : BigDecimal.ZERO);
+      if (reservePrice.compareTo(BigDecimal.ZERO) > 0) {
+        BigDecimal refund = reservePrice.multiply(order.getQuantity());
+        ta.setBalance(ta.getBalance().add(refund));
+        ta.setEquity(ta.getBalance());
+        ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+        accountRepo.save(ta);
+      }
+    }
+    order.setStatus("CANCELLED");
+    orderRepo.save(order);
+    return ResponseEntity.ok(Map.of("ok", true, "newBalance", ta.getBalance()));
   }
 
   @GetMapping("/history")

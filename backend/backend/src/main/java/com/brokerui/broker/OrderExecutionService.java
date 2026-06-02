@@ -108,17 +108,25 @@ public class OrderExecutionService {
 
   private void executeFilled(BrokerOrder order, BigDecimal price) {
     TradingAccount ta = order.getTradingAccount();
-    ta = accountRepo.findById(ta.getId()).orElseThrow();
+    ta = accountRepo.findByIdForUpdate(ta.getId()).orElseThrow();
 
     BigDecimal qty = order.getQuantity();
-    BigDecimal balance = ta.getBalance() == null ? BigDecimal.ZERO : ta.getBalance();
+    BigDecimal notional = price.multiply(qty);
 
-    // Local DB update logic
-    Position pos = positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), order.getSymbolCode()).orElse(null);
+    Position pos = positionRepo.findByTradingAccountIdAndSymbolCodeForUpdate(ta.getId(), order.getSymbolCode()).orElse(null);
     BigDecimal orderEntryPrice = price;
     BigDecimal orderRealizedPnl = null;
 
     if ("BUY".equalsIgnoreCase(order.getSide())) {
+      // Funds were already reserved (deducted) when the order was placed.
+      // Refund the reserved amount and deduct the actual fill price to handle price differences.
+      BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
+          : (order.getStopPrice() != null ? order.getStopPrice() : price);
+      BigDecimal reserved = reservedPrice.multiply(qty);
+      BigDecimal actual = notional;
+      // Adjust balance: refund reserved, deduct actual fill cost
+      ta.setBalance(ta.getBalance().add(reserved).subtract(actual));
+
       if (pos == null) {
         pos = new Position();
         pos.setTradingAccount(ta);
@@ -129,15 +137,11 @@ public class OrderExecutionService {
       BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
       BigDecimal prevAvg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
       BigDecimal newQty = prevQty.add(qty);
-      BigDecimal newAvg = prevQty.compareTo(BigDecimal.ZERO) == 0 ? price : 
+      BigDecimal newAvg = prevQty.compareTo(BigDecimal.ZERO) == 0 ? price :
           prevAvg.multiply(prevQty).add(price.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
       pos.setQuantity(newQty);
       pos.setAvgPrice(newAvg);
-      
-      BigDecimal currentPrice = price;
-      BigDecimal unrealized = currentPrice.subtract(newAvg).multiply(newQty);
-      pos.setUnrealizedPnl(unrealized);
-
+      pos.setUnrealizedPnl(price.subtract(newAvg).multiply(newQty));
       positionRepo.save(pos);
     } else { // SELL
       BigDecimal prevQty = pos == null || pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
@@ -156,7 +160,13 @@ public class OrderExecutionService {
       positionRepo.save(pos);
       orderEntryPrice = avg;
       orderRealizedPnl = realizedDelta;
+      // Credit proceeds to balance
+      ta.setBalance(ta.getBalance().add(notional));
     }
+
+    ta.setEquity(ta.getBalance());
+    ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+    accountRepo.save(ta);
 
     order.setStatus("FILLED");
     order.setFilledAt(Instant.now());

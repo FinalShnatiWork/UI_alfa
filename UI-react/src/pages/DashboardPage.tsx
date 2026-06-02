@@ -55,12 +55,22 @@ export function DashboardPage() {
   const equity = overview ? fmtMoney(overview.equity, currency) : '—';
   const marginUsed = overview ? fmtMoney(overview.marginUsed ?? 0, currency) : '—';
   const freeMargin = overview ? fmtMoney(overview.freeMargin ?? 0, currency) : '—';
-  const pnl = overview ? Number(overview.equity ?? 0) - Number(overview.balance ?? 0) : 0;
-  const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtMoney(pnl, currency)}` : '—';
-  const plPositive = pnl >= 0;
 
   const notifications = Array.isArray(notificationsData) ? notificationsData.slice(0, 5) : [];
   const positions = Array.isArray(positionsData) ? positionsData : [];
+
+  // Calculate live unrealized P/L from open positions using real-time prices
+  const livePnl = positions.reduce((sum, p) => {
+    const qty = Number(p.quantity ?? 0);
+    if (!qty) return sum;
+    const avg = Number(p.avgPrice ?? 0);
+    const live = livePrices[p.symbolCode.toUpperCase()] ?? livePrices[p.symbolCode];
+    if (!live) return sum;
+    return sum + (live - avg) * qty;
+  }, 0);
+  const pnl = overview ? livePnl : 0;
+  const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtMoney(pnl, currency)}` : '—';
+  const plPositive = pnl >= 0;
 
 
   return (
