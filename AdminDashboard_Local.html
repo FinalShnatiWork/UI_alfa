@@ -127,6 +127,53 @@
     .badge-success { background: rgba(35, 209, 96, 0.1); color: var(--success); }
     .badge-danger { background: rgba(248, 81, 73, 0.1); color: var(--danger); }
     .badge-info { background: rgba(0, 200, 255, 0.1); color: var(--primary); }
+    .badge-warning { background: rgba(227, 179, 65, 0.15); color: var(--warning); }
+    .badge-purple { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+    .badge-orange { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+
+    /* Audit filters bar */
+    .audit-filters {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .audit-filters select,
+    .audit-filters input {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.87rem;
+      cursor: pointer;
+      outline: none;
+    }
+    .audit-filters select option { background: #0d1117; }
+    .audit-filters input::placeholder { color: var(--text-muted); }
+
+    /* Audit stats mini-bar */
+    .audit-stats {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 22px;
+      flex-wrap: wrap;
+    }
+    .audit-stat-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+    }
+    .audit-stat-pill .num { font-weight: 700; font-size: 0.95rem; }
+
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
 
     /* Buttons */
     .btn {
@@ -379,17 +426,37 @@
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">📋 Audit Log</h3>
-            <span style="font-size:0.8rem;color:var(--text-muted);">Login events, orders, closes, deposits</span>
+            <button class="btn btn-sm btn-outline" onclick="refreshData()">↻ Refresh</button>
           </div>
+
+          <!-- Mini stats bar -->
+          <div class="audit-stats" id="audit-stats-bar"></div>
+
+          <!-- Filters -->
+          <div class="audit-filters">
+            <select id="audit-filter-action" onchange="renderAuditTable()">
+              <option value="">All Events</option>
+              <option value="LOGIN_SUCCESS">Login Success</option>
+              <option value="LOGIN_FAILURE">Login Failure</option>
+              <option value="ORDER_PLACED">Order Placed</option>
+              <option value="ORDER_PENDING">Order Pending</option>
+              <option value="POSITION_CLOSED">Position Closed</option>
+              <option value="DEPOSIT">Deposit</option>
+              <option value="WITHDRAWAL">Withdrawal</option>
+            </select>
+            <input type="text" id="audit-filter-user" placeholder="Filter by email or user..." oninput="renderAuditTable()">
+            <span id="audit-count" style="color:var(--text-muted);font-size:0.83rem;margin-left:auto"></span>
+          </div>
+
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>User ID</th>
-                <th>Action</th>
-                <th>Detail</th>
-                <th>IP</th>
-                <th>Time</th>
+                <th style="width:48px">#</th>
+                <th>User</th>
+                <th style="width:160px">Action</th>
+                <th>Details</th>
+                <th style="width:130px">IP Address</th>
+                <th style="width:150px">Time</th>
               </tr>
             </thead>
             <tbody id="table-audit-body"></tbody>
@@ -410,9 +477,10 @@
 
   <script>
     const API_BASE = "http://localhost:8080/api/admin";
-    
+    let _auditData = [];
+    let _usersMap = {};  // userId -> { email, displayName }
+
     function getUrl(endpoint) {
-      // Ensure no double slashes
       const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
       const path = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
       return base + path;
@@ -495,6 +563,8 @@
         }
 
         const users = await fetchData("/users") || [];
+        _usersMap = {};
+        users.forEach(u => { _usersMap[u.id] = { email: u.email, name: u.displayName }; });
         document.getElementById('table-users-body').innerHTML = users.map((u, index) => {
           const secretKey = u.secretKey || btoa('secret_key_' + u.id + '_' + Math.random()).substring(0, 32) + '=';
           return `
@@ -551,23 +621,9 @@
         }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No transactions yet</td></tr>';
 
         const audit = await fetchData("/audit") || [];
-        const auditColors = {
-          LOGIN_SUCCESS: 'var(--success)', LOGIN_FAILURE: 'var(--danger)',
-          ORDER_PLACED: 'var(--primary)', ORDER_PENDING: '#a78bfa',
-          POSITION_CLOSED: '#fb923c', DEPOSIT: 'var(--success)', WITHDRAWAL: 'var(--danger)'
-        };
-        document.getElementById('table-audit-body').innerHTML = audit.length ? [...audit].reverse().map(a => {
-          const color = auditColors[a.action] || 'var(--text-muted)';
-          const date = a.createdAt ? String(a.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '–';
-          return `<tr>
-            <td style="color:var(--text-muted)">#${a.id}</td>
-            <td>${a.userId ? '#'+a.userId : '–'}</td>
-            <td><b style="color:${color}">${a.action}</b></td>
-            <td style="max-width:260px;word-break:break-all;font-size:0.82rem;color:var(--text-muted)">${a.detail || '–'}</td>
-            <td style="font-size:0.82rem">${a.ip || '–'}</td>
-            <td style="color:var(--text-muted);font-size:0.82rem">${date}</td>
-          </tr>`;
-        }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No audit entries yet. Login or place a trade to see events here.</td></tr>';
+        _auditData = [...audit].reverse();
+        renderAuditStats();
+        renderAuditTable();
       }
 
       setTimeout(() => loader.style.display = 'none', 400);
@@ -607,6 +663,90 @@
     }
     async function mt5Connect() { await postData("/mt5/connect"); refreshData(); }
     async function restartServer() { if (confirm("Restart backend?")) await postData("/server/restart"); }
+
+    // ─── Audit Log Rendering ─────────────────────────────────────────────────
+    const AUDIT_BADGE = {
+      LOGIN_SUCCESS:   { cls: 'badge-success', label: '✓ Login' },
+      LOGIN_FAILURE:   { cls: 'badge-danger',  label: '✗ Login Failed' },
+      ORDER_PLACED:    { cls: 'badge-info',    label: '⬆ Order' },
+      ORDER_PENDING:   { cls: 'badge-purple',  label: '⏳ Pending' },
+      POSITION_CLOSED: { cls: 'badge-orange',  label: '✕ Closed' },
+      DEPOSIT:         { cls: 'badge-success', label: '↓ Deposit' },
+      WITHDRAWAL:      { cls: 'badge-danger',  label: '↑ Withdrawal' },
+    };
+
+    function formatAuditTime(raw) {
+      if (!raw) return '–';
+      const d = new Date(raw);
+      const now = new Date();
+      const diffMs = now - d;
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 1) return 'just now';
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffH = Math.floor(diffMin / 60);
+      if (diffH < 24) return `${diffH}h ago`;
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderAuditStats() {
+      const counts = {};
+      _auditData.forEach(a => { counts[a.action] = (counts[a.action] || 0) + 1; });
+      const pills = [
+        { label: 'Total', count: _auditData.length, color: 'var(--text)' },
+        { label: 'Logins', count: (counts.LOGIN_SUCCESS || 0), color: 'var(--success)' },
+        { label: 'Failures', count: (counts.LOGIN_FAILURE || 0), color: 'var(--danger)' },
+        { label: 'Orders', count: (counts.ORDER_PLACED || 0) + (counts.ORDER_PENDING || 0), color: 'var(--primary)' },
+        { label: 'Closed', count: (counts.POSITION_CLOSED || 0), color: '#fb923c' },
+        { label: 'Deposits', count: (counts.DEPOSIT || 0), color: 'var(--success)' },
+      ].filter(p => p.label === 'Total' || p.count > 0);
+
+      document.getElementById('audit-stats-bar').innerHTML = pills.map(p =>
+        `<div class="audit-stat-pill">
+          <span class="num" style="color:${p.color}">${p.count}</span>
+          <span style="color:var(--text-muted)">${p.label}</span>
+        </div>`
+      ).join('');
+    }
+
+    function renderAuditTable() {
+      const actionFilter = document.getElementById('audit-filter-action').value;
+      const userFilter = (document.getElementById('audit-filter-user').value || '').toLowerCase().trim();
+
+      const filtered = _auditData.filter(a => {
+        if (actionFilter && a.action !== actionFilter) return false;
+        if (userFilter) {
+          const user = _usersMap[a.userId] || {};
+          const haystack = `${user.email || ''} ${user.name || ''} ${a.detail || ''} ${a.userId || ''}`.toLowerCase();
+          if (!haystack.includes(userFilter)) return false;
+        }
+        return true;
+      });
+
+      document.getElementById('audit-count').innerText = `${filtered.length} of ${_auditData.length} events`;
+
+      document.getElementById('table-audit-body').innerHTML = filtered.length ? filtered.map((a, idx) => {
+        const badge = AUDIT_BADGE[a.action] || { cls: 'badge-info', label: a.action };
+        const user = _usersMap[a.userId];
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div>
+             <div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">${a.userId ? '#'+a.userId : '–'}</span>`;
+        const detail = a.detail || '–';
+        const timeStr = formatAuditTime(a.createdAt);
+        const fullDate = a.createdAt ? String(a.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '';
+        return `<tr>
+          <td style="color:var(--text-muted);font-size:0.8rem">${filtered.length - idx}</td>
+          <td>${userCell}</td>
+          <td><span class="badge ${badge.cls}">${badge.label}</span></td>
+          <td style="font-size:0.83rem;color:var(--text-muted);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${detail}">${detail}</td>
+          <td style="font-size:0.82rem;color:var(--text-muted);font-family:monospace">${a.ip || '–'}</td>
+          <td style="font-size:0.82rem" title="${fullDate}">
+            <span style="color:var(--text)">${timeStr}</span>
+            <div style="color:var(--text-muted);font-size:0.76rem">${fullDate.slice(0,10)}</div>
+          </td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px">No events match the selected filters</td></tr>`;
+    }
 
     document.addEventListener('DOMContentLoaded', refreshData);
   </script>
