@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiGet, onUnauthorized } from '@/lib/api';
 import type { AuthMeResponse } from '@/types/api';
 
@@ -28,11 +29,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthMeResponse | null>(null);
   const navigate = useNavigate();
   const registeredRef = useRef(false);
+  const queryClient = useQueryClient();
 
   const clearUser = useCallback(() => {
     setUser(null);
     setStatus('unauthenticated');
-  }, []);
+    // Clear ALL cached queries so the next user doesn't see previous user's data
+    queryClient.clear();
+  }, [queryClient]);
 
   const refresh = useCallback(async () => {
     try {

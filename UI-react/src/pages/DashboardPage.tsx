@@ -68,21 +68,20 @@ export function DashboardPage() {
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
-      const res = await apiPostLogout();
-      if (res.ok) {
-        clearUser();
-        toast.show(t('alerts.authLoggedOut'), { variant: 'success' });
-        navigate('/login', { replace: true });
-      } else {
-        // Even if server returns error, clear local state so user isn't stuck
-        clearUser();
-        navigate('/login', { replace: true });
-      }
+      await apiPostLogout();
     } catch {
-      clearUser();
-      navigate('/login', { replace: true });
+      // ignore server errors — we always clear local state
     } finally {
+      // Clear per-user settings so the next user starts fresh
+      localStorage.removeItem('theme');
+      localStorage.removeItem('broker-ui-lang');
+      // Reset DOM to defaults before the next user's preferences load
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.lang = 'en';
+      document.documentElement.dir = 'ltr';
+      clearUser();
       setLoggingOut(false);
+      navigate('/login', { replace: true });
     }
   };
 

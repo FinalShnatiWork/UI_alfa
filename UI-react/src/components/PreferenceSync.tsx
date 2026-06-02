@@ -42,21 +42,20 @@ export function PreferenceSync({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!prefs) return;
 
+    // Always apply from DB so different users don't bleed into each other's settings.
+    // If the user has no saved preference, fall back to safe defaults.
     if (prefs.lang && ALLOWED_LANGS.has(prefs.lang)) {
-      const dbLang = prefs.lang as Lang;
-      // Only update if different from current localStorage value to avoid flicker
-      const localLang = localStorage.getItem('broker-ui-lang');
-      if (localLang !== dbLang) {
-        persistLang(dbLang);
-        setLang(dbLang);
-      }
+      persistLang(prefs.lang as Lang);
+      setLang(prefs.lang as Lang);
+    } else {
+      persistLang('en');
+      setLang('en');
     }
 
     if (prefs.theme && ALLOWED_THEMES.has(prefs.theme)) {
-      const localTheme = localStorage.getItem('theme');
-      if (localTheme !== prefs.theme) {
-        applyTheme(prefs.theme as Theme);
-      }
+      applyTheme(prefs.theme as Theme);
+    } else {
+      applyTheme('dark');
     }
   }, [prefs, setLang]);
 
