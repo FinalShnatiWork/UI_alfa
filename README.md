@@ -1,212 +1,200 @@
 ﻿# UI Alfa — Broker Trading Platform
 
-Fullstack брокерская платформа: Spring Boot (Java) + React (TypeScript) + PostgreSQL (Docker).
+Full-stack trading platform: Spring Boot (Java) + React (TypeScript) + PostgreSQL (Docker).
 
 ---
 
-## Требования
+## Requirements
 
-| Инструмент | Версия | Скачать |
-|------------|--------|---------|
-| **Java JDK** | 17 или выше | https://adoptium.net |
-| **Maven** | 3.8+ | https://maven.apache.org *(или mvnw.cmd из репо)* |
-| **Node.js** | 18 или выше | https://nodejs.org |
-| **Docker Desktop** | любая | https://docker.com/products/docker-desktop |
+| Tool | Version | Download |
+|------|---------|----------|
+| Java JDK | 17+ | https://adoptium.net |
+| Maven | 3.8+ | https://maven.apache.org |
+| Node.js | 18+ | https://nodejs.org |
+| Docker Desktop | latest | https://docker.com/products/docker-desktop |
 
 ---
 
-## Запуск проекта
+## Quick Start
 
-### 1. Клонировать репозиторий
+### 1. Clone the repo
 
-```
+```bash
 git clone https://github.com/FinalShnatiWork/UI_alfa.git
 cd UI_alfa
 git checkout session/jun02-improvements
 ```
 
-### 2. Запустить базу данных
+### 2. Start the database (Docker)
 
-```
+```bash
 cd backend
 docker compose up -d
 ```
 
-Подождать пока контейнер станет healthy:
-```
+Wait until the container is healthy:
+```bash
 docker ps
-# broker_ui_db   Up X seconds (healthy)
+# broker_ui_db should show (healthy)
 ```
 
-### 3. Запустить бэкенд
+### 3. Start the backend
 
-```
+```bash
 cd backend/backend
 mvn spring-boot:run
 ```
 
-Если Maven не установлен (Windows):
-```
-mvnw.cmd spring-boot:run
-```
+Wait for: `Started BrokerApplication in XX seconds`
 
-Ждать в логах: Started BackendApplication in X.XXX seconds
-Бэкенд: http://localhost:8080
+> On first run, Flyway automatically runs all migrations V1-V14
+> and populates the database with users, accounts, positions and trade history.
+> This takes about 10-15 seconds.
 
-При первом запуске Flyway автоматически создаст все таблицы и заполнит демо-данными.
+Backend URL: http://localhost:8080
 
-### 4. Запустить фронтенд
+### 4. Start the frontend
 
-```
+```bash
 cd UI-react
 npm install
 npm run dev
 ```
 
-Фронтенд: http://localhost:3001
+Frontend URL: http://localhost:3001
 
-### 5. Открыть в браузере
+### 5. Open in browser
 
-- Приложение: http://localhost:3001
-- Демо-аккаунт: demo@broker.local / demo123
-- Админ-панель: открыть файл AdminDashboard_Local.html в браузере
-
----
-
-## Демо-данные (создаются автоматически)
-
-| Email | Пароль | Роль |
-|-------|--------|------|
-| demo@broker.local | demo123 | User |
-
-Баланс: $100,000 DEMO. Демо-сделки по EURUSD, XAUUSD, BTCUSDT и другим инструментам.
+- App: http://localhost:3001
+- Admin Panel: Open AdminDashboard_Local.html from the project root in browser
 
 ---
 
-## Перенос данных от другого разработчика
+## Demo Data (auto-loaded on first startup via Flyway V14)
 
-База данных хранится в локальном Docker volume и НЕ входит в git.
-Чтобы получить данные с другого компьютера:
+No manual import needed. All data loads automatically.
 
-### Шаг 1 — Экспорт (на компьютере донора)
+| Email | Password | Role | Balance |
+|-------|----------|------|---------|
+| demo@broker.local | demo1234 | User | 100000 USD DEMO |
+| admin@gmail.com | admin1234 | Admin | — |
+| 12@gmail.com | (set by owner) | User | ~127000 USD DEMO |
+| 7@gmail.com | (set by owner) | User | ~100000 USD DEMO |
 
-Windows / Mac / Linux:
-```
+---
+
+## Transfer Data Between Developers
+
+### Export (on source machine)
+
+Windows:
+```powershell
 docker exec broker_ui_db pg_dump -U broker broker_ui > db_dump.sql
 ```
 
-Отправить файл db_dump.sql через Telegram, Google Drive, USB и т.д.
+Mac/Linux:
+```bash
+docker exec -i broker_ui_db pg_dump -U broker broker_ui > db_dump.sql
+```
 
-### Шаг 2 — Импорт (на своём компьютере)
+Send db_dump.sql via Telegram, Google Drive, USB, etc.
 
-Убедиться что контейнер запущен (docker compose up -d), затем:
+### Import (on partner machine)
+
+1. Start the database container first:
+```bash
+docker compose up -d
+```
+
+2. Import the dump:
 
 Windows:
-```
-docker exec -i broker_ui_db psql -U broker broker_ui < db_dump.sql
+```powershell
+docker exec -i broker_ui_db psql -U broker -d broker_ui < db_dump.sql
 ```
 
 Mac/Linux:
-```
-docker exec -i broker_ui_db psql -U broker broker_ui < db_dump.sql
+```bash
+docker exec -i broker_ui_db psql -U broker -d broker_ui < db_dump.sql
 ```
 
-ВАЖНО: импорт перезапишет все данные в базе.
+Note: if backend ran before (tables exist), you may see duplicate key warnings - that is normal.
 
 ---
 
-## Частые проблемы и решения
+## Common Problems
 
 ### Connection refused: localhost:5433
-Причина: Docker не запущен или контейнер не стартовал.
-
-```
-docker ps
-cd backend
+Docker is not running or the container is stopped.
+```bash
 docker compose up -d
-# или если контейнер уже есть но остановлен:
+# or:
 docker start broker_ui_db
 ```
 
 ### Port 8080 already in use
-Причина: Бэкенд уже запущен в другом окне.
-
 Windows:
-```
+```powershell
 netstat -ano | findstr :8080
-taskkill /PID <номер_PID> /F
+taskkill /PID <NUMBER> /F
 ```
 
 Mac/Linux:
-```
+```bash
 lsof -ti:8080 | xargs kill -9
 ```
 
-### Flyway migration failed / ERROR: relation already exists
-Причина: Старая база несовместима с новыми миграциями.
-
-```
+### Flyway migration failed: relation already exists
+Reset the database (WARNING: deletes all data):
+```bash
 cd backend
 docker compose down -v
 docker compose up -d
 ```
+Restart backend after.
 
-После этого перезапустить бэкенд — Flyway пересоздаст всё с нуля.
-ВНИМАНИЕ: удалит все данные!
-
-### JAVA_HOME is not set / java: command not found
-Причина: Java не установлена или не в PATH.
-
-1. Установить JDK 17+ с https://adoptium.net
-2. Windows: добавить JAVA_HOME в System Environment Variables
-3. Перезапустить терминал
+### JAVA_HOME is not set
+Install JDK 17+ from https://adoptium.net
+Windows: add JAVA_HOME to System Environment Variables.
 
 ### npm: command not found
-Установить Node.js 18+ с https://nodejs.org
+Install Node.js 18+ from https://nodejs.org
 
-### Бэкенд вылетает через несколько секунд
-База данных не готова. Проверить docker ps, дождаться статуса healthy.
-
-### Фронтенд работает но все запросы 401/403
-Бэкенд не запущен. Открыть http://localhost:8080, перезагрузить страницу.
-
-### Docker Desktop не запускается на Windows
-1. Включить виртуализацию в BIOS (Intel VT-x / AMD-V)
-2. Установить WSL2: wsl --install (PowerShell от администратора)
-3. Перезагрузить компьютер
+### Docker Desktop not starting on Windows
+1. Enable virtualization in BIOS (Intel VT-x / AMD-V)
+2. WSL2: run in PowerShell as Admin: wsl --install
+3. Restart after installing Docker
 
 ---
 
-## Структура проекта
+## Project Structure
 
 ```
 UI_alfa/
 ├── backend/
-│   ├── docker-compose.yml         # PostgreSQL в Docker (порт 5433)
+│   ├── docker-compose.yml          # PostgreSQL in Docker (port 5433)
 │   └── backend/
-│       ├── src/main/
-│       │   ├── java/com/brokerui/ # Spring Boot приложение
-│       │   └── resources/
-│       │       ├── application.yml
-│       │       ├── application-postgres.yml
-│       │       └── db/migration/  # Flyway SQL миграции
-│       └── pom.xml
-├── UI-react/                      # React + TypeScript (Vite)
+│       └── src/main/
+│           ├── java/com/brokerui/  # Spring Boot application
+│           └── resources/
+│               ├── application.yml
+│               └── db/migration/   # Flyway SQL migrations V1-V14
+├── UI-react/                       # React + TypeScript (Vite)
 │   ├── src/
 │   │   ├── pages/
 │   │   ├── components/
 │   │   ├── hooks/
-│   │   └── locales.json           # i18n (EN / RU / HE)
+│   │   └── locales.json            # i18n (EN / RU / HE)
 │   └── package.json
-└── AdminDashboard_Local.html      # Локальная админ-панель
+└── AdminDashboard_Local.html       # Admin panel (open directly in browser)
 ```
 
 ---
 
-## Порты
+## Ports
 
-| Сервис | Порт |
-|--------|------|
+| Service | Port |
+|---------|------|
 | Frontend (React) | 3001 |
 | Backend (Spring Boot) | 8080 |
 | PostgreSQL (Docker) | 5433 |
