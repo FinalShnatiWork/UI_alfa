@@ -186,8 +186,15 @@ public class AdminTradeController {
   public record UpdateBalanceRequest(BigDecimal balance) {}
 
   @PostMapping("/accounts/{id}/balance")
+  @org.springframework.transaction.annotation.Transactional
   public Map<String, Object> updateBalance(@PathVariable Long id, @RequestBody UpdateBalanceRequest req) {
-      var acc = accountRepo.findById(id).orElseThrow();
+      if (req.balance() == null || req.balance().compareTo(BigDecimal.ZERO) < 0) {
+        throw new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.BAD_REQUEST, "balance must be non-negative");
+      }
+      var acc = accountRepo.findByIdForUpdate(id)
+          .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+              org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
       acc.setBalance(req.balance());
       acc.setEquity(req.balance());
       accountRepo.save(acc);

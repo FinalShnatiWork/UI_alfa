@@ -119,14 +119,37 @@ public class BrokerApiController {
     return ResponseEntity.ok(txRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
   }
 
+  private static final java.util.Set<String> ALLOWED_TX_TYPES = java.util.Set.of("DEPOSIT", "WITHDRAWAL");
+
   @PostMapping("/transactions")
   @Transactional
   public ResponseEntity<?> createTransaction(Authentication auth,
       @RequestBody Map<String, Object> body, HttpServletRequest request) {
     AppUser u = requireUser(auth);
     TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId()).orElseGet(() -> ensurePrimaryAccount(u));
-    String type = String.valueOf(body.get("txType")).toUpperCase();
-    BigDecimal amount = new BigDecimal(String.valueOf(body.get("amount")));
+
+    Object rawType = body.get("txType");
+    Object rawAmount = body.get("amount");
+    if (rawType == null || rawAmount == null) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "missing_fields"));
+    }
+    String type;
+    BigDecimal amount;
+    try {
+      type = String.valueOf(rawType).toUpperCase();
+      amount = new BigDecimal(String.valueOf(rawAmount));
+    } catch (Exception e) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_fields"));
+    }
+    if (!ALLOWED_TX_TYPES.contains(type)) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_tx_type"));
+    }
+    if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "amount_must_be_positive"));
+    }
+    if ("WITHDRAWAL".equals(type) && ta.getBalance().compareTo(amount) < 0) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
+    }
 
     AccountTransaction tx = new AccountTransaction();
     tx.setTradingAccount(ta);
@@ -191,12 +214,31 @@ public class BrokerApiController {
     BigDecimal bdPrice = BigDecimal.valueOf(price);
     BigDecimal notional = bdPrice.multiply(qty);
 
+    if (body.symbolCode() == null || body.side() == null || body.quantity() == null) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "missing_fields"));
+    }
+    if (qty.compareTo(BigDecimal.ZERO) <= 0) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_quantity"));
+    }
+
     if ("BUY".equals(side) && ta.getBalance().compareTo(notional) < 0) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
     }
 
     // Update local DB for immediate UI feedback – use locking query to prevent race conditions
     Position pos = positionRepo.findByTradingAccountIdAndSymbolCodeForUpdate(ta.getId(), symbolCode).orElse(null);
+
+    if ("SELL".equals(side)) {
+      if (pos == null) {
+        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "no_open_position"));
+      }
+      BigDecimal available = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
+      if (qty.compareTo(available) > 0) {
+        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_position",
+            "available", available, "requested", qty));
+      }
+    }
+
     if ("BUY".equals(side)) {
       ta.setBalance(ta.getBalance().subtract(notional));
       if (pos == null) {
@@ -221,6 +263,7 @@ public class BrokerApiController {
 
       positionRepo.save(pos);
     } else {
+      // SELL — position existence and size already validated above
       ta.setBalance(ta.getBalance().add(notional));
       if (pos != null) {
         BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
