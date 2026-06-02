@@ -63,7 +63,7 @@ export function DashboardPage() {
   const plPositive = pnl >= 0;
 
   const notifications = Array.isArray(notificationsData) ? notificationsData.slice(0, 5) : [];
-  const positions = Array.isArray(positionsData) ? positionsData.slice(0, 10) : [];
+  const positions = Array.isArray(positionsData) ? positionsData : [];
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -387,8 +387,13 @@ export function DashboardPage() {
           </Link>
         </div>
 
+        <div style={{
+          maxHeight: positions.length > 6 ? 340 : undefined,
+          overflowY: positions.length > 6 ? 'auto' : undefined,
+          borderRadius: 16,
+        }}>
         <table>
-          <thead>
+          <thead style={{ position: positions.length > 6 ? 'sticky' : undefined, top: 0, zIndex: 1 }}>
             <tr>
               <th>{t('table.symbol')}</th>
               <th>{t('table.volume')}</th>
@@ -445,6 +450,7 @@ export function DashboardPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </>
   );
