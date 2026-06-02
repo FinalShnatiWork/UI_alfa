@@ -633,6 +633,7 @@
         _accountsMap = {};
         _accountsRaw.forEach(a => { _accountsMap[a.id] = a.userId; });
         renderAccountsTable();
+        renderUsersTable(); // re-render with balance data now available
 
         _transactionsRaw = await fetchData("/transactions") || [];
         renderTransactionsTable();

@@ -1,10 +1,9 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { persistLang } from '@/lib/i18n';
+import { usePreferences } from '@/hooks/useApi';
 import type { Lang } from '@/types/api';
 
 type Theme = 'dark' | 'light' | 'system';
@@ -31,13 +30,9 @@ export function PreferenceSync({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   const { setLang } = useI18n();
 
-  const { data: prefs } = useQuery({
-    queryKey: ['preferences'],
-    queryFn: () => apiGet<Record<string, string>>('/api/broker/preferences'),
-    enabled: status === 'authenticated',
-    staleTime: 300_000,
-    retry: 1,
-  });
+  // Reuse the same query key as usePreferences() so both share the same cache entry.
+  // Guard with status so we don't fire a 401 request before login.
+  const { data: prefs } = usePreferences(status === 'authenticated');
 
   useEffect(() => {
     if (!prefs) return;

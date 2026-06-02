@@ -317,15 +317,14 @@ public class BrokerApiController {
     BigDecimal qty = pos.getQuantity();
     BigDecimal notional = bdPrice.multiply(qty);
 
-    // Calculate PnL
+    // Calculate PnL: (closePrice - avgEntryPrice) * qty
     BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-    BigDecimal pnl;
-    
-    // In this simplified model, if quantity > 0 it's a long position.
-    pnl = bdPrice.subtract(avg).multiply(qty);
-    
-    // Update balance
-    ta.setBalance(ta.getBalance().add(notional).add(pnl));
+    BigDecimal pnl = bdPrice.subtract(avg).multiply(qty);
+
+    // Add only the close notional (closePrice * qty).
+    // pnl is already embedded: closePrice*qty = avgPrice*qty + pnl,
+    // and avgPrice*qty was the original cost deducted on BUY.
+    ta.setBalance(ta.getBalance().add(notional));
     ta.setEquity(ta.getBalance());
     accountRepo.save(ta);
 

@@ -114,10 +114,11 @@ export function useAuthMe() {
   });
 }
 
-export function usePreferences() {
+export function usePreferences(enabled = true) {
   return useQuery({
     queryKey: QK.preferences,
     queryFn: () => apiGet<Record<string, string>>('/api/broker/preferences'),
+    enabled,
     staleTime: 300_000,
     retry: 1,
   });
