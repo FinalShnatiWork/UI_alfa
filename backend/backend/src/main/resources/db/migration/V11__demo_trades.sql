@@ -1,5 +1,63 @@
 -- Demo trades for all trading accounts so the History page shows realistic data.
 -- Generates ~20 completed trade pairs (BUY+SELL) per account.
+
+-- Seed missing symbols first to avoid foreign key violations
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'EURUSD', 'FX', 'EUR', 'USD', 5
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'EURUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'GBPUSD', 'FX', 'GBP', 'USD', 5
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'GBPUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'USDCAD', 'FX', 'USD', 'CAD', 5
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'USDCAD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'EURNOK', 'FX', 'EUR', 'NOK', 5
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'EURNOK');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'GBPJPY', 'FX', 'GBP', 'JPY', 3
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'GBPJPY');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'USDJPY', 'FX', 'USD', 'JPY', 3
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'USDJPY');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'NZDUSD', 'FX', 'NZD', 'USD', 5
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'NZDUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'CADJPY', 'FX', 'CAD', 'JPY', 3
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'CADJPY');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'XAGUSD', 'metals', 'XAG', 'USD', 2
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'XAGUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'XAUUSD', 'metals', 'XAU', 'USD', 2
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'XAUUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'SOLUSD', 'CRYPTO', 'SOL', 'USD', 2
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'SOLUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'BTCUSD', 'CRYPTO', 'BTC', 'USD', 2
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'BTCUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'ETHUSD', 'CRYPTO', 'ETH', 'USD', 2
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'ETHUSD');
+
+INSERT INTO symbol (code, kind, base_currency, quote_currency, price_decimals)
+SELECT 'XRPUSD', 'CRYPTO', 'XRP', 'USD', 4
+WHERE NOT EXISTS (SELECT 1 FROM symbol WHERE code = 'XRPUSD');
+
 DO $$
 DECLARE
   acc_id    BIGINT;

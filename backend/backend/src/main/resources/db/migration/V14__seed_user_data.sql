@@ -1,7 +1,16 @@
-﻿-- V14: Seed real user data (users, accounts, positions, orders, transactions, preferences)
+-- V14: Seed real user data (users, accounts, positions, orders, transactions, preferences)
 -- Generated from production DB export. Uses ON CONFLICT DO NOTHING to avoid duplicates.
 
 SET client_encoding = 'UTF8';
+
+-- Clean up existing demo data to prevent unique and primary key conflicts with the production seed
+DELETE FROM user_preference;
+DELETE FROM trade_fill;
+DELETE FROM broker_order;
+DELETE FROM position;
+DELETE FROM account_transaction;
+DELETE FROM trading_account;
+
 INSERT INTO app_user (id, email, display_name, created_at, password_hash, role, banned, banned_at, banned_reason) VALUES (1, 'demo@broker.local', 'Demo User', '2026-04-11 22:36:27.420992', '$2a$10$DLm21SOJMefDjHxgjp1aJO1Dy825FqgrIt.Tm1wyOtCI/CRVdmZ7G', 'USER', false, NULL, NULL) ON CONFLICT (email) DO NOTHING;
 INSERT INTO app_user (id, email, display_name, created_at, password_hash, role, banned, banned_at, banned_reason) VALUES (2, 'admin@gmail.com', 'Administrator', '2026-04-11 19:36:31.184104', '$2a$10$VfvTYS.1uPgUYy9q0bCT/.cE0hVPY8CFUeVDp298KkaLQ1R5xm0Xa', 'ADMIN', false, NULL, NULL) ON CONFLICT (email) DO NOTHING;
 INSERT INTO app_user (id, email, display_name, created_at, password_hash, role, banned, banned_at, banned_reason) VALUES (3, '12@gmail.com', '11 22', '2026-04-11 19:41:15.523673', '$2a$10$eLJxLE6CINbW9pd.JgjQL.lAy.jtIyakOZ7DR5x8bsR0rH2eUXeiG', 'USER', false, NULL, NULL) ON CONFLICT (email) DO NOTHING;

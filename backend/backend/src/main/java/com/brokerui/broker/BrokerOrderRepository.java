@@ -11,4 +11,7 @@ public interface BrokerOrderRepository extends JpaRepository<BrokerOrder, Long> 
   List<BrokerOrder> findByTradingAccountIdAndStatusOrderByCreatedAtDesc(Long tradingAccountId, String status);
 
   List<BrokerOrder> findTop50ByStatusOrderByCreatedAtAsc(String status);
+
+  long countBySymbolCodeAndSideAndStatus(String symbolCode, String side, String status);
 }
+

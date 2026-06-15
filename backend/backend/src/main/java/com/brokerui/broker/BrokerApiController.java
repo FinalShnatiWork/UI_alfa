@@ -35,6 +35,7 @@ public class BrokerApiController {
   private final MT5IntegrationService mt5Service;
   private final com.brokerui.market.MarketPriceService priceService;
   private final AuditLogService auditLogService;
+  private final NNPredictorClient nnPredictorClient;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -49,7 +50,8 @@ public class BrokerApiController {
       UserPreferenceRepository preferenceRepo,
       MT5IntegrationService mt5Service,
       com.brokerui.market.MarketPriceService priceService,
-      AuditLogService auditLogService) {
+      AuditLogService auditLogService,
+      NNPredictorClient nnPredictorClient) {
     this.userRepo = userRepo;
     this.accountRepo = accountRepo;
     this.symbolRepo = symbolRepo;
@@ -63,6 +65,7 @@ public class BrokerApiController {
     this.mt5Service = mt5Service;
     this.priceService = priceService;
     this.auditLogService = auditLogService;
+    this.nnPredictorClient = nnPredictorClient;
   }
 
   private AppUser requireUser(Authentication auth) {
@@ -322,6 +325,76 @@ public class BrokerApiController {
         order.setFilledAt(Instant.now());
         order.setEntryPrice(bdPrice);
         order.setRealizedPnl(realizedDelta);
+
+        // Call Neural Network Predictor for Routing Decision
+        boolean routeExternal = true;
+        try {
+            double buyQtyNorm = qty.doubleValue() / 100.0;
+            double sellQtyNorm = 0.45;
+            try {
+                long activeSellQty = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW");
+                if (activeSellQty > 0) sellQtyNorm = activeSellQty / 100.0;
+            } catch (Exception ignored) {}
+
+            double scaledPrice = price;
+            if (price > 0) {
+                double log10 = Math.log10(price);
+                long exp = Math.round(log10) - 2;
+                scaledPrice = price / Math.pow(10, exp);
+            }
+            double spreadNorm = Math.min((scaledPrice * 0.00015) / 1.0, 1.0);
+
+            double imbalance = 0.0;
+            try {
+                long buys = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "BUY", "NEW");
+                long sells = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW");
+                if (buys + sells > 0) {
+                    imbalance = (double) (buys - sells) / (buys + sells);
+                }
+            } catch (Exception ignored) {}
+
+            double midPriceNorm = Math.min(scaledPrice / 200.0, 1.0);
+
+            double bookDepthBuy = 0.0;
+            try {
+                bookDepthBuy = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "BUY", "NEW") / 10.0;
+            } catch (Exception ignored) {}
+
+            double bookDepthSell = 0.0;
+            try {
+                bookDepthSell = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW") / 10.0;
+            } catch (Exception ignored) {}
+
+            double[] features = {
+                buyQtyNorm, sellQtyNorm, spreadNorm, imbalance,
+                midPriceNorm, bookDepthBuy, bookDepthSell, 0.72
+            };
+
+            java.util.Map<String, Object> pred = nnPredictorClient.getPrediction(features);
+            if (pred != null) {
+                double matchProb = ((Number) pred.get("matchProb")).doubleValue();
+                double expectedSavings = ((Number) pred.get("expectedSavings")).doubleValue();
+                double routeRecommendation = ((Number) pred.get("routeRecommendation")).doubleValue();
+
+                order.setNnMatchProb(matchProb);
+                order.setNnExpectedSavings(BigDecimal.valueOf(expectedSavings));
+                order.setNnRouteRecommendation(routeRecommendation > 0.5 ? "INTERNAL" : "EXTERNAL");
+
+                if (routeRecommendation > 0.5) {
+                    routeExternal = false;
+                }
+            } else {
+                order.setNnRouteRecommendation("EXTERNAL");
+                order.setNnMatchProb(0.0);
+                order.setNnExpectedSavings(BigDecimal.ZERO);
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch NN recommendation: " + e.getMessage());
+            order.setNnRouteRecommendation("EXTERNAL");
+            order.setNnMatchProb(0.0);
+            order.setNnExpectedSavings(BigDecimal.ZERO);
+        }
+
         orderRepo.save(order);
 
         ta.setEquity(ta.getBalance());
@@ -330,8 +403,12 @@ public class BrokerApiController {
         auditLogService.log(u, "ORDER_PLACED",
             "SELL " + qty + " " + symbolCode + " @ " + bdPrice + " pnl=" + realizedDelta, request);
 
-        try { mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue()); }
-        catch (Exception ex) { System.err.println("MT5 Send Failed: " + ex.getMessage()); }
+        if (routeExternal) {
+            try { mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue()); }
+            catch (Exception ex) { System.err.println("MT5 Send Failed: " + ex.getMessage()); }
+        } else {
+            System.out.println("AI Advisor matching: Routed MARKET order #" + order.getId() + " internally. Skipped external MT5 routing.");
+        }
 
         return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "fillPrice", bdPrice, "newBalance", ta.getBalance()));
       }
@@ -348,16 +425,90 @@ public class BrokerApiController {
     order.setQuantity(qty);
     order.setFilledAt(Instant.now());
     order.setEntryPrice(bdPrice);
+
+    // Call Neural Network Predictor for Routing Decision
+    boolean routeExternal = true;
+    try {
+        double buyQtyNorm = qty.doubleValue() / 100.0;
+        double sellQtyNorm = 0.45;
+        try {
+            long activeSellQty = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW");
+            if (activeSellQty > 0) sellQtyNorm = activeSellQty / 100.0;
+        } catch (Exception ignored) {}
+
+        double scaledPrice = price;
+        if (price > 0) {
+            double log10 = Math.log10(price);
+            long exp = Math.round(log10) - 2;
+            scaledPrice = price / Math.pow(10, exp);
+        }
+        double spreadNorm = Math.min((scaledPrice * 0.00015) / 1.0, 1.0);
+
+        double imbalance = 0.0;
+        try {
+            long buys = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "BUY", "NEW");
+            long sells = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW");
+            if (buys + sells > 0) {
+                imbalance = (double) (buys - sells) / (buys + sells);
+            }
+        } catch (Exception ignored) {}
+
+        double midPriceNorm = Math.min(scaledPrice / 200.0, 1.0);
+
+        double bookDepthBuy = 0.0;
+        try {
+            bookDepthBuy = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "BUY", "NEW") / 10.0;
+        } catch (Exception ignored) {}
+
+        double bookDepthSell = 0.0;
+        try {
+            bookDepthSell = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW") / 10.0;
+        } catch (Exception ignored) {}
+
+        double[] features = {
+            buyQtyNorm, sellQtyNorm, spreadNorm, imbalance,
+            midPriceNorm, bookDepthBuy, bookDepthSell, 0.72
+        };
+
+        java.util.Map<String, Object> pred = nnPredictorClient.getPrediction(features);
+        if (pred != null) {
+            double matchProb = ((Number) pred.get("matchProb")).doubleValue();
+            double expectedSavings = ((Number) pred.get("expectedSavings")).doubleValue();
+            double routeRecommendation = ((Number) pred.get("routeRecommendation")).doubleValue();
+
+            order.setNnMatchProb(matchProb);
+            order.setNnExpectedSavings(BigDecimal.valueOf(expectedSavings));
+            order.setNnRouteRecommendation(routeRecommendation > 0.5 ? "INTERNAL" : "EXTERNAL");
+
+            if (routeRecommendation > 0.5) {
+                routeExternal = false;
+            }
+        } else {
+            order.setNnRouteRecommendation("EXTERNAL");
+            order.setNnMatchProb(0.0);
+            order.setNnExpectedSavings(BigDecimal.ZERO);
+        }
+    } catch (Exception e) {
+        System.err.println("Failed to fetch NN recommendation: " + e.getMessage());
+        order.setNnRouteRecommendation("EXTERNAL");
+        order.setNnMatchProb(0.0);
+        order.setNnExpectedSavings(BigDecimal.ZERO);
+    }
+
     orderRepo.save(order);
 
     auditLogService.log(u, "ORDER_PLACED",
         "BUY " + qty + " " + symbolCode + " @ " + bdPrice, request);
 
     // Forward to MT5
-    try {
-      mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue());
-    } catch (Exception ex) {
-      System.err.println("MT5 Send Failed: " + ex.getMessage());
+    if (routeExternal) {
+        try {
+            mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue());
+        } catch (Exception ex) {
+            System.err.println("MT5 Send Failed: " + ex.getMessage());
+        }
+    } else {
+        System.out.println("AI Advisor matching: Routed MARKET order #" + order.getId() + " internally. Skipped external MT5 routing.");
     }
 
     return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "fillPrice", bdPrice, "newBalance", ta.getBalance()));

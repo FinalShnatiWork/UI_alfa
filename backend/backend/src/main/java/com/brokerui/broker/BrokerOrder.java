@@ -72,6 +72,15 @@ public class BrokerOrder {
   @Column(name = "realized_pnl", precision = 18, scale = 8)
   private BigDecimal realizedPnl;
 
+  @Column(name = "nn_route_recommendation", length = 20)
+  private String nnRouteRecommendation;
+
+  @Column(name = "nn_match_prob")
+  private Double nnMatchProb;
+
+  @Column(name = "nn_expected_savings", precision = 18, scale = 4)
+  private BigDecimal nnExpectedSavings;
+
   public Long getId() {
     return id;
   }
@@ -195,5 +204,30 @@ public class BrokerOrder {
   public void setRealizedPnl(BigDecimal realizedPnl) {
     this.realizedPnl = realizedPnl;
   }
+
+  public String getNnRouteRecommendation() {
+    return nnRouteRecommendation;
+  }
+
+  public void setNnRouteRecommendation(String nnRouteRecommendation) {
+    this.nnRouteRecommendation = nnRouteRecommendation;
+  }
+
+  public Double getNnMatchProb() {
+    return nnMatchProb;
+  }
+
+  public void setNnMatchProb(Double nnMatchProb) {
+    this.nnMatchProb = nnMatchProb;
+  }
+
+  public BigDecimal getNnExpectedSavings() {
+    return nnExpectedSavings;
+  }
+
+  public void setNnExpectedSavings(BigDecimal nnExpectedSavings) {
+    this.nnExpectedSavings = nnExpectedSavings;
+  }
 }
+
 

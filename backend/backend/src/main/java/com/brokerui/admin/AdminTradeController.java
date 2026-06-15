@@ -77,7 +77,7 @@ public class AdminTradeController {
     return Map.of("status", "restarting");
   }
 
-  public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date) {}
+  public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting) {}
 
   @GetMapping("/trades")
   public List<TradeDto> getAllTrades() {
@@ -90,7 +90,8 @@ public class AdminTradeController {
           o.getSide(), 
           o.getQuantity(), 
           o.getStatus(), 
-          o.getCreatedAt()))
+          o.getCreatedAt(),
+          o.getNnRouteRecommendation() != null ? o.getNnRouteRecommendation() : "EXTERNAL"))
       .collect(Collectors.toList());
 
     List<TradeDto> positions = positionRepo.findAll().stream()
@@ -102,7 +103,8 @@ public class AdminTradeController {
           "OPEN", 
           p.getQuantity(), 
           "ACTIVE", 
-          p.getOpenedAt()))
+          p.getOpenedAt(),
+          "INTERNAL"))
       .collect(Collectors.toList());
 
     orders.addAll(positions);

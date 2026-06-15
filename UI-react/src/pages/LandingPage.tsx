@@ -1,16 +1,13 @@
 import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { apiGet, apiPostFormUrlEncoded } from '@/lib/api';
+import { Link } from 'react-router-dom';
+import { apiGet } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
-import { useAuth } from '@/hooks/useAuth';
 import { AuthHeader } from '@/components/AuthHeader';
 
 export function LandingPage() {
   const { t } = useI18n();
   const toast = useToast();
-  const navigate = useNavigate();
-  const { refresh } = useAuth();
 
   useEffect(() => {
     document.title = t('titles.landing');
@@ -23,36 +20,6 @@ export function LandingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleDemo = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    toast.show(t('alerts.demoOk'), { variant: 'success', duration: 1800 });
-
-    const body = new URLSearchParams();
-    body.set('username', 'demo@broker.local');
-    body.set('password', 'demo123');
-
-    try {
-      const res = await apiPostFormUrlEncoded('/api/auth/login', body);
-      if (res.ok) {
-        await refresh();
-        setTimeout(() => navigate('/dashboard'), 600);
-        return;
-      }
-      try {
-        const err = await res.json();
-        if (err?.error === 'banned') {
-          toast.show(t('alerts.authBanned'), { variant: 'error', duration: 5000 });
-          return;
-        }
-      } catch {
-        /* ignore */
-      }
-      // Fallback: send to login if demo auth isn't available.
-      setTimeout(() => navigate('/login'), 600);
-    } catch {
-      setTimeout(() => navigate('/login'), 600);
-    }
-  };
 
   return (
     <>
@@ -93,14 +60,13 @@ export function LandingPage() {
           >
             {t('landing.openAccount')}
           </Link>
-          <a
-            href="#"
-            onClick={handleDemo}
+          <Link
+            to="/demo-register"
             className="btn btn-primary"
             style={{ padding: '15px 30px', fontSize: '1.1rem' }}
           >
             {t('landing.demoAccount')}
-          </a>
+          </Link>
         </div>
       </div>
 

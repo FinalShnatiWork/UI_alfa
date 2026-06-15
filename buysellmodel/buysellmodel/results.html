@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NN Training Results — Netting Broker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0e1a; --bg2: #111827; --bg3: #1a1f35;
+  --text: #f0f2f8; --muted: #8b92a8; --dim: #555d75;
+  --blue: #6366f1; --purple: #8b5cf6; --indigo: #818cf8;
+  --green: #10b981; --red: #ef4444; --gold: #f59e0b; --cyan: #06b6d4;
+  --border: rgba(255,255,255,0.06);
+  --font: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; padding: 0 24px 64px; }
+body::before {
+  content:''; position:fixed; inset:0;
+  background: radial-gradient(ellipse 700px 400px at 20% 10%, rgba(99,102,241,0.07) 0%, transparent 70%),
+              radial-gradient(ellipse 500px 350px at 80% 80%, rgba(139,92,246,0.05) 0%, transparent 70%);
+  pointer-events:none; z-index:0;
+}
+.wrap { position:relative; z-index:1; max-width:1300px; margin:0 auto; }
+
+/* Header */
+.header { padding:28px 0 20px; border-bottom:1px solid var(--border); margin-bottom:32px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.header h1 { font-size:1.6rem; font-weight:800; background:linear-gradient(135deg,var(--blue),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.header p { color:var(--muted); font-size:0.85rem; margin-top:4px; }
+.badge { padding:6px 14px; border-radius:100px; font-size:0.75rem; font-weight:700; }
+.badge-green { background:rgba(16,185,129,0.12); color:var(--green); border:1px solid rgba(16,185,129,0.25); }
+.badge-blue  { background:rgba(99,102,241,0.12);  color:var(--indigo); border:1px solid rgba(99,102,241,0.25); }
+
+/* Loading */
+#loading { text-align:center; padding:80px 20px; }
+#loading h2 { font-size:1.2rem; color:var(--muted); margin-top:16px; }
+.spinner { width:48px; height:48px; border:3px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Error */
+#error { display:none; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:12px; padding:24px; margin:32px 0; }
+#error h2 { color:var(--red); margin-bottom:8px; }
+#error pre { color:var(--muted); font-family:var(--mono); font-size:0.8rem; white-space:pre-wrap; }
+
+/* Cards */
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+.card { background:var(--bg3); border:1px solid var(--border); border-radius:16px; padding:24px; }
+.card h2 { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--dim); font-weight:600; margin-bottom:16px; }
+
+/* Metric boxes */
+.metric-box { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center; }
+.metric-val { font-family:var(--mono); font-size:1.8rem; font-weight:700; margin-bottom:4px; }
+.metric-label { font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+.metric-sub { font-size:0.7rem; color:var(--dim); margin-top:4px; }
+
+/* Canvas charts */
+canvas { width:100%; display:block; }
+
+/* Confusion matrix */
+.cm-wrap { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.cm-row { display:flex; gap:4px; }
+.cm-cell { width:110px; height:90px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:var(--mono); }
+.cm-cell .cm-n { font-size:1.5rem; font-weight:700; }
+.cm-cell .cm-lbl { font-size:0.68rem; opacity:0.7; }
+.cm-axis { font-size:0.7rem; color:var(--muted); padding:4px 8px; }
+.cm-title { font-size:0.72rem; color:var(--dim); text-transform:uppercase; letter-spacing:0.05em; }
+
+/* Samples table */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+th { padding:10px 12px; text-align:left; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; font-size:0.68rem; border-bottom:1px solid var(--border); }
+td { padding:9px 12px; border-bottom:1px solid rgba(255,255,255,0.03); font-family:var(--mono); color:var(--muted); }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(255,255,255,0.02); }
+.tag { padding:2px 8px; border-radius:100px; font-size:0.68rem; font-weight:700; }
+.tag-int { background:rgba(245,158,11,0.12); color:var(--gold); }
+.tag-ext { background:rgba(6,182,212,0.12); color:var(--cyan); }
+.tag-ok  { background:rgba(16,185,129,0.12); color:var(--green); }
+.tag-err { background:rgba(239,68,68,0.12); color:var(--red); }
+
+/* NN Diagram */
+#nnDiagram { width:100%; height:280px; }
+
+/* Section spacing */
+.section { margin-bottom:24px; }
+.section-title { font-size:1.05rem; font-weight:700; margin-bottom:16px; }
+
+@media(max-width:900px) {
+  .grid-2 { grid-template-columns:1fr; }
+  .grid-4 { grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="header">
+    <div>
+      <h1>🧠 Neural Network Training Results</h1>
+      <p>Netting Broker — Internal Match Prediction Model</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;" id="headerBadges"></div>
+  </header>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <h2>Loading training_results.json…</h2>
+    <p style="color:var(--dim);margin-top:8px;font-size:0.8rem;">Make sure you ran <code style="color:var(--indigo)">node train.js</code> first</p>
+  </div>
+
+  <div id="error">
+    <h2>⚠ Could not load training_results.json</h2>
+    <p style="color:var(--muted);margin-bottom:12px;">Run the training script first:</p>
+    <pre>node train.js</pre>
+    <p style="color:var(--muted);margin-top:12px;font-size:0.8rem;">Then serve this page via http-server (not file://):<br><code style="color:var(--indigo)">npx http-server . -p 8080</code></p>
+  </div>
+
+  <div id="content" style="display:none">
+    <!-- Metric Cards -->
+    <div class="section">
+      <div class="section-title">Key Metrics</div>
+      <div class="grid-4" id="metricCards"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="section">
+      <div class="section-title">Training Curves</div>
+      <div class="grid-2">
+        <div class="card">
+          <h2>Loss — Train vs Validation</h2>
+          <canvas id="lossChart" height="220"></canvas>
+        </div>
+        <div class="card">
+          <h2>Accuracy — Train vs Validation</h2>
+          <canvas id="accChart" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confusion Matrix + NN Diagram -->
+    <div class="section">
+      <div class="section-title">Model Evaluation</div>
+      <div class="grid-2">
+        <div class="card">
+          <h2>Confusion Matrix (Route Recommendation)</h2>
+          <div id="confMatrix" style="margin-top:8px;"></div>
+        </div>
+        <div class="card">
+          <h2>Network Architecture</h2>
+          <svg id="nnDiagram" viewBox="0 0 560 280"></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Samples -->
+    <div class="section">
+      <div class="section-title">Sample Predictions</div>
+      <div class="card">
+        <h2>Validation Set — Random Sample</h2>
+        <div class="table-wrap">
+          <table id="samplesTable">
+            <thead>
+              <tr>
+                <th>#</th><th>Buy Qty</th><th>Sell Qty</th><th>Bid</th><th>Spread</th>
+                <th>Hist.Rate</th><th>Match Prob</th><th>Savings Norm</th>
+                <th>Predicted</th><th>Actual</th><th>✓</th>
+              </tr>
+            </thead>
+            <tbody id="samplesBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Load Results ───────────────────────────────────────
+fetch('training_results.json')
+  .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+  .then(render)
+  .catch(err => {
+    document.getElementById('loading').style.display = 'none';
+    const el = document.getElementById('error');
+    el.style.display = 'block';
+    el.querySelector('pre').textContent = err.message;
+  });
+
+function render(d) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('content').style.display = 'block';
+
+  const m = d.metrics;
+  const meta = d.meta;
+
+  // Badges
+  const mins = (meta.trainTimeMs / 60000).toFixed(1);
+  document.getElementById('headerBadges').innerHTML = `
+    <span class="badge badge-green">✓ Trained ${meta.config.EPOCHS} epochs</span>
+    <span class="badge badge-blue">⏱ ${mins} min</span>
+    <span class="badge badge-green">${meta.trainSamples.toLocaleString()} samples</span>`;
+
+  // Metric cards
+  const cm = m.confusionMatrix;
+  document.getElementById('metricCards').innerHTML = [
+    { label:'Val Accuracy',  val: (m.finalValAcc*100).toFixed(2)+'%',   color:'var(--green)',  sub:'On held-out data' },
+    { label:'Precision',     val: (cm.precision*100).toFixed(2)+'%',    color:'var(--cyan)',   sub:'TP / (TP+FP)' },
+    { label:'Recall',        val: (cm.recall*100).toFixed(2)+'%',       color:'var(--gold)',   sub:'TP / (TP+FN)' },
+    { label:'F1 Score',      val: cm.f1.toFixed(4),                      color:'var(--purple)', sub:'Harmonic mean' },
+  ].map(x => `
+    <div class="metric-box">
+      <div class="metric-val" style="color:${x.color}">${x.val}</div>
+      <div class="metric-label">${x.label}</div>
+      <div class="metric-sub">${x.sub}</div>
+    </div>`).join('');
+
+  // Charts
+  drawLineChart('lossChart', d.history.trainLoss, d.history.valLoss, 'Train Loss', 'Val Loss', '#6366f1', '#f59e0b');
+  drawLineChart('accChart',  d.history.trainAcc,  d.history.valAcc,  'Train Acc',  'Val Acc',  '#10b981', '#06b6d4', true);
+
+  // Confusion matrix
+  renderConfusionMatrix(cm);
+
+  // NN diagram
+  drawNNDiagram([8,16,8,3]);
+
+  // Samples table
+  renderSamples(d.samples);
+}
+
+// ─── Line Chart ─────────────────────────────────────────
+function drawLineChart(id, series1, series2, lbl1, lbl2, col1, col2, isPct=false) {
+  const canvas = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 48;
+  const H = 220;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = { top:20, right:20, bottom:36, left:56 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top  - pad.bottom;
+
+  const allVals = [...series1, ...series2];
+  const minV = Math.min(...allVals);
+  const maxV = Math.max(...allVals);
+  const range = maxV - minV || 1;
+
+  const xOf = i => pad.left + (i / (series1.length - 1)) * cw;
+  const yOf = v => pad.top + ch - ((v - minV) / range) * ch;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 5; i++) {
+    const y = pad.top + (i / 5) * ch;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+    const v = maxV - (i / 5) * range;
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.fillText(isPct ? (v*100).toFixed(0)+'%' : v.toFixed(3), 0, y + 4);
+  }
+
+  // X axis labels
+  const step = Math.ceil(series1.length / 5);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = '10px JetBrains Mono, monospace';
+  for (let i = 0; i < series1.length; i += step) {
+    ctx.fillText(i + 1, xOf(i) - 8, H - 8);
+  }
+
+  // Draw series
+  [[series1, col1, lbl1], [series2, col2, lbl2]].forEach(([s, col, lbl]) => {
+    ctx.beginPath();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 8;
+    s.forEach((v, i) => { i === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v)); });
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  });
+
+  // Legend
+  [[lbl1, col1], [lbl2, col2]].forEach(([lbl, col], i) => {
+    const lx = pad.left + i * 140;
+    ctx.fillStyle = col;
+    ctx.fillRect(lx, 4, 14, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillText(lbl, lx + 18, 10);
+  });
+}
+
+// ─── Confusion Matrix ────────────────────────────────────
+function renderConfusionMatrix(cm) {
+  const cells = [
+    { n: cm.tn, lbl:'TN — Correct External', bg:'rgba(16,185,129,0.15)',  col:'#10b981' },
+    { n: cm.fp, lbl:'FP — Wrong Internal',   bg:'rgba(239,68,68,0.12)',   col:'#ef4444' },
+    { n: cm.fn, lbl:'FN — Wrong External',   bg:'rgba(239,68,68,0.12)',   col:'#ef4444' },
+    { n: cm.tp, lbl:'TP — Correct Internal', bg:'rgba(16,185,129,0.15)',  col:'#10b981' },
+  ];
+  document.getElementById('confMatrix').innerHTML = `
+    <div style="font-size:0.7rem;color:var(--dim);margin-bottom:8px;text-align:center">Predicted →</div>
+    <div class="cm-wrap">
+      <div class="cm-row" style="gap:4px;margin-bottom:2px;">
+        <div style="width:110px"></div>
+        <div class="cm-axis">External</div>
+        <div class="cm-axis">Internal</div>
+      </div>
+      <div class="cm-row">
+        <div class="cm-axis" style="writing-mode:vertical-rl;transform:rotate(180deg);padding:0 4px;width:30px;text-align:center">Actual ↓</div>
+        ${cells.map((c,i) => `
+          <div class="cm-cell" style="background:${c.bg};color:${c.col};">
+            <div class="cm-n">${c.n.toLocaleString()}</div>
+            <div class="cm-lbl">${c.lbl.split('—')[0].trim()}</div>
+            <div class="cm-lbl" style="opacity:0.5;font-size:0.6rem">${c.lbl.split('—')[1].trim()}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+// ─── NN Diagram ──────────────────────────────────────────
+function drawNNDiagram(layers) {
+  const svg = document.getElementById('nnDiagram');
+  const W = 560, H = 280;
+  const maxNodes = Math.max(...layers);
+  const layerLabels = ['Input\n(8)', 'Hidden 1\n(16)', 'Hidden 2\n(8)', 'Output\n(3)'];
+  const nodeColors  = ['#6366f1','#8b5cf6','#8b5cf6','#10b981'];
+  const r = 10;
+
+  let html = '';
+  const positions = layers.map((n, li) => {
+    const x = 50 + (li / (layers.length - 1)) * (W - 100);
+    return Array.from({length: n}, (_, ni) => ({
+      x, y: H/2 + (ni - (n-1)/2) * (H / (maxNodes + 2))
+    }));
+  });
+
+  // Connections (sample subset for visual clarity)
+  for (let li = 0; li < positions.length - 1; li++) {
+    const fromNodes = positions[li];
+    const toNodes   = positions[li+1];
+    const maxConn   = 5; // show max 5 per node for clarity
+    fromNodes.forEach(f => {
+      const subset = toNodes.filter((_, i) => i % Math.max(1, Math.floor(toNodes.length / maxConn)) === 0).slice(0, maxConn);
+      subset.forEach(t => {
+        html += `<line x1="${f.x}" y1="${f.y}" x2="${t.x}" y2="${t.y}" stroke="rgba(99,102,241,0.18)" stroke-width="1"/>`;
+      });
+    });
+  }
+
+  // Nodes
+  positions.forEach((nodes, li) => {
+    nodes.forEach(({x, y}) => {
+      html += `<circle cx="${x}" cy="${y}" r="${r}" fill="${nodeColors[li]}" opacity="0.85"/>
+               <circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="${nodeColors[li]}" stroke-width="1.5" opacity="0.4"/>`;
+    });
+    // Label
+    const labelY = H - 16;
+    const labelX = nodes[0]?.x ?? 0;
+    const lbl = layerLabels[li] || '';
+    lbl.split('\n').forEach((line, i) =>
+      html += `<text x="${labelX}" y="${labelY + i*13}" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="10" font-family="Inter, sans-serif">${line}</text>`
+    );
+  });
+
+  // Activation labels
+  ['—', 'ReLU', 'ReLU', 'Sigmoid'].forEach((lbl, li) => {
+    if (li === 0) return;
+    const x = positions[li][0]?.x ?? 0;
+    html += `<text x="${x}" y="18" text-anchor="middle" fill="rgba(245,158,11,0.6)" font-size="9" font-family="Inter, sans-serif">${lbl}</text>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+// ─── Samples Table ───────────────────────────────────────
+function renderSamples(samples) {
+  document.getElementById('samplesBody').innerHTML = samples.map((s, i) => {
+    const r = s.rawScenario;
+    const p = s.predicted;
+    const spread = (r.ask - r.bid).toFixed(3);
+    return `<tr>
+      <td style="color:var(--dim)">${i+1}</td>
+      <td>${r.buyQty}</td>
+      <td>${r.sellQty}</td>
+      <td>$${r.bid.toFixed(2)}</td>
+      <td>$${spread}</td>
+      <td>${(r.historicalMatchRate*100).toFixed(0)}%</td>
+      <td>${(p[0]*100).toFixed(1)}%</td>
+      <td>${(p[1]*100).toFixed(1)}%</td>
+      <td><span class="tag ${s.predictedLabel==='INTERNAL'?'tag-int':'tag-ext'}">${s.predictedLabel}</span></td>
+      <td><span class="tag ${s.actualLabel==='INTERNAL'?'tag-int':'tag-ext'}">${s.actualLabel}</span></td>
+      <td><span class="tag ${s.correct?'tag-ok':'tag-err'}">${s.correct?'✓':'✗'}</span></td>
+    </tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

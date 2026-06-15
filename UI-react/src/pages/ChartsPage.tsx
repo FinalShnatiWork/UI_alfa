@@ -692,6 +692,7 @@ export function ChartsPage() {
                 </div>
               </div>
 
+
               {/* BUY / SELL */}
               <div className="flex-gap mt-20">
                 <button type="button" className="btn btn-danger" style={{ flex: 1, padding: 14 }}

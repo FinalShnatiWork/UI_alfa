@@ -132,10 +132,10 @@
     .badge-orange { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
 
     /* Overview stat cards */
-    .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
-    .stat-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; }
-    .stat-card .sc-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
-    .stat-card .sc-value { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+    .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 14px; padding: 22px 20px; box-sizing: border-box; overflow: hidden; }
+    .stat-card .sc-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-card .sc-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .stat-card .sc-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
 
     /* Inner tabs (for Trades) */
@@ -346,6 +346,10 @@
           <div class="stat-card"><div class="sc-label">Open Positions</div><div class="sc-value" id="ov-positions">–</div><div class="sc-sub">active trades</div></div>
           <div class="stat-card"><div class="sc-label">Deposits Today</div><div class="sc-value" id="ov-deposits" style="color:var(--success)">–</div><div class="sc-sub" id="ov-deposits-sub">transactions</div></div>
           <div class="stat-card"><div class="sc-label">Login Failures</div><div class="sc-value" id="ov-failures" style="color:var(--danger)">–</div><div class="sc-sub">in audit log</div></div>
+          <div class="stat-card"><div class="sc-label">Internal Cross Rate</div><div class="sc-value" id="ov-internal-rate" style="color:#a78bfa">–</div><div class="sc-sub">AI Local Crossing %</div></div>
+          <div class="stat-card"><div class="sc-label">Total Fees Saved</div><div class="sc-value" id="ov-total-saved" style="color:var(--success)">–</div><div class="sc-sub">Exchange Fees Retained</div></div>
+          <div class="stat-card"><div class="sc-label">External Fees Paid</div><div class="sc-value" id="ov-external-paid" style="color:var(--danger)">–</div><div class="sc-sub">Paid to External Exchanges</div></div>
+          <div class="stat-card"><div class="sc-label">Net Platform Savings</div><div class="sc-value" id="ov-net-savings" style="color:var(--success)">–</div><div class="sc-sub">Retained minus Paid</div></div>
         </div>
         
         <div class="card" style="border-color: rgba(0,200,255,0.3);">
@@ -412,6 +416,13 @@
             <div class="inner-tab" onclick="setTradesTab('positions',this)">Open Positions</div>
             <div class="inner-tab" onclick="setTradesTab('orders',this)">Orders</div>
           </div>
+          <div class="table-toolbar" style="margin-top: 10px; margin-bottom: 15px;">
+            <select id="trades-filter-routing" onchange="renderTradesTable()" style="background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 8px;">
+              <option value="">All Routing</option>
+              <option value="INTERNAL">Internal Match</option>
+              <option value="EXTERNAL">External (MT5)</option>
+            </select>
+          </div>
           <table>
             <thead>
               <tr>
@@ -421,6 +432,7 @@
                 <th>Side</th>
                 <th>Volume</th>
                 <th>Type</th>
+                <th>Routing</th>
                 <th>Status</th>
                 <th>Date</th>
               </tr>
@@ -710,6 +722,22 @@
       document.getElementById('ov-deposits-sub').innerText = `${todayDeposits.length} transaction${todayDeposits.length !== 1 ? 's' : ''} today`;
       const failures = _auditData.filter(a => a.action === 'LOGIN_FAILURE').length;
       document.getElementById('ov-failures').innerText = failures;
+
+      // Calculate AI Crossing rate & savings
+      const allOrders = _tradesRaw.filter(t => t.type !== 'POSITION');
+      const internalCount = allOrders.filter(t => t.executionRouting === 'INTERNAL').length;
+      const externalCount = allOrders.filter(t => t.executionRouting !== 'INTERNAL').length;
+      const totalOrders = allOrders.length;
+      const internalRate = totalOrders > 0 ? ((internalCount / totalOrders) * 100).toFixed(0) + '%' : '0%';
+      const feesSaved = internalCount * 1.50;
+      const externalFeesPaid = externalCount * 1.50;
+      const netSavings = feesSaved - externalFeesPaid;
+
+      document.getElementById('ov-internal-rate').innerText = internalRate;
+      document.getElementById('ov-total-saved').innerText = '$' + feesSaved.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('ov-external-paid').innerText = '$' + externalFeesPaid.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('ov-net-savings').innerText = '$' + netSavings.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('ov-net-savings').style.color = netSavings >= 0 ? 'var(--success)' : 'var(--danger)';
     }
 
     // ─── Users Table ─────────────────────────────────────────────────────────
@@ -757,6 +785,12 @@
       let data = _tradesRaw;
       if (_tradesFilter === 'positions') data = data.filter(t => t.type === 'POSITION');
       else if (_tradesFilter === 'orders') data = data.filter(t => t.type !== 'POSITION');
+      
+      const routingFilter = document.getElementById('trades-filter-routing')?.value;
+      if (routingFilter) {
+        data = data.filter(t => t.executionRouting === routingFilter);
+      }
+
       const sorted = [...data].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       document.getElementById('trades-count').innerText = `${sorted.length} records`;
       document.getElementById('table-trades-body').innerHTML = sorted.length ? sorted.map((t, idx) => {
@@ -768,6 +802,10 @@
         const date = t.date ? formatAuditTime(t.date) : '–';
         const fullDate = t.date ? String(t.date).replace('T',' ').replace(/\.\d+Z?$/,'') : '';
         const typeBadge = t.type === 'POSITION' ? 'badge-orange' : 'badge-info';
+        const routeBadge = t.executionRouting === 'INTERNAL' 
+          ? `<span class="badge badge-purple">Internal</span>` 
+          : `<span class="badge badge-info">External</span>`;
+
         return `<tr>
           <td style="color:var(--text-muted)">${idx + 1}</td>
           <td>${userCell}</td>
@@ -775,10 +813,11 @@
           <td><b style="color:${sideColor}">${t.side}</b></td>
           <td>${Number(t.quantity).toFixed(2)}</td>
           <td><span class="badge ${typeBadge}">${t.type}</span></td>
+          <td>${routeBadge}</td>
           <td><span class="badge ${t.status==='ACTIVE'||t.status==='FILLED'?'badge-success':'badge-info'}">${t.status}</span></td>
           <td style="font-size:0.82rem" title="${fullDate}">${date}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No records</td></tr>';
+      }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">No records</td></tr>';
     }
 
     // ─── Accounts Table ───────────────────────────────────────────────────────

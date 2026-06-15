@@ -9,6 +9,7 @@ import { PreferenceSync } from '@/components/PreferenceSync';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
+import { DemoRegisterPage } from '@/pages/DemoRegisterPage';
 import { LandingPage } from '@/pages/LandingPage';
 import { AccountPage } from '@/pages/AccountPage';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -42,7 +43,7 @@ export function App() {
                   <Route path="/landing" element={<LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
-                  <Route path="/demo-register" element={<PlaceholderPage title="Demo Register" />} />
+                  <Route path="/demo-register" element={<DemoRegisterPage />} />
 
                   <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                   <Route path="/positions" element={<ProtectedRoute><PositionsPage /></ProtectedRoute>} />
