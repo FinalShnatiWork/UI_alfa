@@ -10,6 +10,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Scheduled service that periodically syncs MT5 terminal open positions
+ * into the local JPA positions repository.
+ */
 @Service
 public class MT5PositionSyncService {
 
@@ -17,12 +21,23 @@ public class MT5PositionSyncService {
     private final PositionRepository positionRepo;
     private final TradingAccountRepository accountRepo;
 
+    /**
+     * Constructs the MT5PositionSyncService.
+     *
+     * @param mt5Service MetaTrader 5 service integration
+     * @param positionRepo database position repository
+     * @param accountRepo database trading account repository
+     */
     public MT5PositionSyncService(MT5IntegrationService mt5Service, PositionRepository positionRepo, TradingAccountRepository accountRepo) {
         this.mt5Service = mt5Service;
         this.positionRepo = positionRepo;
         this.accountRepo = accountRepo;
     }
 
+    /**
+     * Scheduled task running every 10 seconds to sync open positions from MT5.
+     * The goal is to keep the local DB in alignment with the MT5 Expert Advisor's active trades.
+     */
     @Scheduled(fixedDelay = 10000) // Every 10 seconds
     @Transactional
     public void sync() {
@@ -52,13 +67,15 @@ public class MT5PositionSyncService {
                 double volume = p.getDouble("volume");
                 double priceOpen = p.getDouble("priceOpen");
                 int type = p.getInt("type"); // 0 = Buy, 1 = Sell
+                String side = (type == 0) ? "LONG" : "SHORT";
 
-                Position pos = positionRepo.findByTradingAccountIdAndSymbolCode(ta.getId(), symbol)
+                Position pos = positionRepo.findByTradingAccountIdAndSymbolCodeAndSide(ta.getId(), symbol, side)
                         .orElse(new Position());
                 
                 pos.setTradingAccount(ta);
                 pos.setSymbolCode(symbol);
-                pos.setQuantity(BigDecimal.valueOf(type == 0 ? volume : -volume));
+                pos.setSide(side);
+                pos.setQuantity(BigDecimal.valueOf(volume));
                 pos.setAvgPrice(BigDecimal.valueOf(priceOpen));
                 positionRepo.save(pos);
             }
@@ -67,9 +84,12 @@ public class MT5PositionSyncService {
             for (Position lp : localPositions) {
                 boolean found = false;
                 for (int i = 0; i < mt5Positions.length(); i++) {
-                    String mt5Symbol = mt5Positions.getJSONObject(i).getString("symbol");
+                    JSONObject mt5Pos = mt5Positions.getJSONObject(i);
+                    String mt5Symbol = mt5Pos.getString("symbol");
                     String cleanSymbol = mt5Symbol.endsWith(".m") ? mt5Symbol.substring(0, mt5Symbol.length() - 2) : mt5Symbol;
-                    if (cleanSymbol.equals(lp.getSymbolCode())) {
+                    int mt5Type = mt5Pos.getInt("type");
+                    String mt5Side = (mt5Type == 0) ? "LONG" : "SHORT";
+                    if (cleanSymbol.equals(lp.getSymbolCode()) && mt5Side.equals(lp.getSide())) {
                         found = true;
                         break;
                     }

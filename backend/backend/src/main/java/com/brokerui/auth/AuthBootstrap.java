@@ -11,18 +11,35 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+/**
+ * Application startup runner that bootstraps demo database records.
+ * Creates a default demo user and a default administrator account if they don't exist.
+ */
 @Component
 public class AuthBootstrap implements ApplicationRunner {
   private final AppUserRepository repo;
   private final PasswordEncoder encoder;
   private final TradingAccountRepository accountRepo;
 
+  /**
+   * Constructs the AuthBootstrap runner.
+   *
+   * @param repo user repository
+   * @param encoder password encoder utility
+   * @param accountRepo trading account repository
+   */
   public AuthBootstrap(AppUserRepository repo, PasswordEncoder encoder, TradingAccountRepository accountRepo) {
     this.repo = repo;
     this.encoder = encoder;
     this.accountRepo = accountRepo;
   }
 
+  /**
+   * Overrides Spring Boot ApplicationRunner execution method.
+   * Bootstraps the demo user account, demo trading account, and system administrator.
+   *
+   * @param args application runtime arguments
+   */
   @Override
   public void run(ApplicationArguments args) {
     AppUser demoUser = repo
@@ -55,6 +72,11 @@ public class AuthBootstrap implements ApplicationRunner {
     }
   }
 
+  /**
+   * Helper method to ensure that a default system administrator account exists.
+   * If a user with the admin email exists, updates their role to ADMIN.
+   * Otherwise, creates a new admin user account.
+   */
   private void ensureBootstrapAdmin() {
     // Demo only. Override with BROKER_ADMIN_PASSWORD for anything serious.
     String pwd = System.getenv().getOrDefault("BROKER_ADMIN_PASSWORD", "1234");

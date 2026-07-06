@@ -16,7 +16,10 @@ export const QK = {
   livePrice: (sym: string) => ['market', 'price', sym.toUpperCase()] as const,
 };
 
-/** Invalidate all data that changes after a trade (positions, overview, history). */
+/**
+ * Custom hook to invalidate React Query cache entities related to trade state.
+ * The goal of this hook is to trigger refetching of positions, overview, and history.
+ */
 export function useInvalidateAfterTrade() {
   const qc = useQueryClient();
   return () => {
@@ -26,6 +29,11 @@ export function useInvalidateAfterTrade() {
   };
 }
 
+/**
+ * Custom hook to fetch general trading account metadata (balance, margin, etc.).
+ *
+ * @returns React Query query result object
+ */
 export function useBrokerOverview() {
   return useQuery({
     queryKey: QK.overview,
@@ -35,6 +43,11 @@ export function useBrokerOverview() {
   });
 }
 
+/**
+ * Custom hook to query active open positions.
+ *
+ * @returns React Query query result object
+ */
 export function usePositions() {
   return useQuery({
     queryKey: QK.positions,
@@ -45,6 +58,11 @@ export function usePositions() {
   });
 }
 
+/**
+ * Custom hook to retrieve current alerts and system notifications.
+ *
+ * @returns React Query query result object
+ */
 export function useNotifications() {
   return useQuery({
     queryKey: QK.notifications,
@@ -55,6 +73,11 @@ export function useNotifications() {
   });
 }
 
+/**
+ * Custom hook to query the deposits/withdrawals transactional history log.
+ *
+ * @returns React Query query result object
+ */
 export function useTransactions() {
   return useQuery({
     queryKey: QK.transactions,
@@ -64,7 +87,12 @@ export function useTransactions() {
   });
 }
 
-/** Fetch a single live price — cached 5s, shared across all pages. */
+/**
+ * Custom hook to query live pricing quotes for a single asset symbol.
+ *
+ * @param symbol asset symbol string
+ * @returns React Query query result object
+ */
 export function useLivePrice(symbol: string | null) {
   return useQuery({
     queryKey: symbol ? QK.livePrice(symbol) : ['market', 'price', '__none__'],
@@ -76,7 +104,13 @@ export function useLivePrice(symbol: string | null) {
   });
 }
 
-/** Fetch live prices for an array of symbols — all share the same global cache. */
+/**
+ * Custom hook to query live pricing quotes for an array of asset symbols.
+ * Resolves queries dynamically and returns a mapping.
+ *
+ * @param symbols array of asset symbol codes
+ * @returns record of mapping symbol string to current number price
+ */
 export function useLivePrices(symbols: string[]): Record<string, number> {
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
   const results = useQueries({
@@ -97,6 +131,11 @@ export function useLivePrices(symbols: string[]): Record<string, number> {
   return prices;
 }
 
+/**
+ * Custom hook to retrieve completed orders transaction history.
+ *
+ * @returns React Query query result object
+ */
 export function useTradeHistory() {
   return useQuery({
     queryKey: QK.history,
@@ -106,6 +145,11 @@ export function useTradeHistory() {
   });
 }
 
+/**
+ * Custom hook to query pending orders that are still active/working.
+ *
+ * @returns React Query query result object
+ */
 export function usePendingOrders() {
   return useQuery({
     queryKey: QK.pendingOrders,
@@ -116,6 +160,11 @@ export function usePendingOrders() {
   });
 }
 
+/**
+ * Custom hook to cancel an active pending order.
+ *
+ * @returns React Query mutation wrapper object
+ */
 export function useCancelOrder() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -134,6 +183,11 @@ export function useCancelOrder() {
   });
 }
 
+/**
+ * Custom hook to query current authenticated user profile details.
+ *
+ * @returns React Query query result object
+ */
 export function useAuthMe() {
   return useQuery({
     queryKey: QK.me,
@@ -143,6 +197,12 @@ export function useAuthMe() {
   });
 }
 
+/**
+ * Custom hook to load general theme and language preferences.
+ *
+ * @param enabled flag to trigger query
+ * @returns React Query query result object
+ */
 export function usePreferences(enabled = true) {
   return useQuery({
     queryKey: QK.preferences,
@@ -153,6 +213,11 @@ export function usePreferences(enabled = true) {
   });
 }
 
+/**
+ * Custom hook to update and persist theme or language preferences.
+ *
+ * @returns React Query mutation wrapper object
+ */
 export function useSavePreferences() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -170,6 +235,11 @@ export function useSavePreferences() {
   });
 }
 
+/**
+ * Custom hook to deposit or withdraw funds.
+ *
+ * @returns React Query mutation wrapper object
+ */
 export function useTransactionMutation() {
   const queryClient = useQueryClient();
   return useMutation({

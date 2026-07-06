@@ -29,6 +29,9 @@ public class Position {
   @Column(name = "symbol_code", nullable = false, length = 32)
   private String symbolCode;
 
+  @Column(nullable = false, length = 8, columnDefinition = "VARCHAR(8) DEFAULT 'LONG'")
+  private String side = "LONG";
+
   @Column(nullable = false, precision = 18, scale = 8)
   private BigDecimal quantity = BigDecimal.ZERO;
 
@@ -66,6 +69,14 @@ public class Position {
 
   public void setSymbolCode(String symbolCode) {
     this.symbolCode = symbolCode;
+  }
+
+  public String getSide() {
+    return side;
+  }
+
+  public void setSide(String side) {
+    this.side = side;
   }
 
   public BigDecimal getQuantity() {
@@ -112,4 +123,3 @@ public class Position {
     return updatedAt;
   }
 }
-

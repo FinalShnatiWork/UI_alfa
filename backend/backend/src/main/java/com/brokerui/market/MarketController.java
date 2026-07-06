@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * REST controller providing market data endpoints for the frontend.
+ * Delivers real-time quotes and historical candlestick series for charting.
+ */
 @RestController
 public class MarketController {
 
@@ -19,6 +23,14 @@ public class MarketController {
     private final BinanceService binance;
     private final MarketPriceService priceService;
 
+    /**
+     * Constructs the MarketController with integrated market services.
+     *
+     * @param mt5 MetaTrader 5 service integration
+     * @param yahoo Yahoo Finance service integration
+     * @param binance Binance crypto price service integration
+     * @param priceService general market price aggregator
+     */
     public MarketController(MT5IntegrationService mt5, YahooFinanceService yahoo, BinanceService binance, MarketPriceService priceService) {
         this.mt5 = mt5;
         this.yahoo = yahoo;
@@ -26,7 +38,12 @@ public class MarketController {
         this.priceService = priceService;
     }
 
-    /** Live price: MT5 → Yahoo Finance → synthetic fallback */
+    /**
+     * Retrieves the current real-time live price quote for the symbol.
+     *
+     * @param symbol symbol code (e.g. EURUSD)
+     * @return response containing current price, symbol, and source
+     */
     @GetMapping("/api/market/price/{symbol}")
     public ResponseEntity<?> livePrice(@PathVariable String symbol) {
         String sym = symbol == null ? "" : symbol.trim().toUpperCase();
@@ -34,7 +51,13 @@ public class MarketController {
         return ResponseEntity.ok(Map.of("symbol", sym, "price", round(p, sym), "source", "api_fallback"));
     }
 
-    /** Candles for forex: MT5 → Yahoo Finance → synthetic fallback */
+    /**
+     * Retrieves historical forex candlestick series for chart plotting.
+     *
+     * @param symbol currency pair code (e.g. EURUSD)
+     * @param interval chart interval code (e.g. 1h, 1d)
+     * @return list of CandleBars
+     */
     @GetMapping("/api/market/forex/candles")
     public ResponseEntity<?> forexCandles(
             @RequestParam String symbol,
@@ -42,7 +65,13 @@ public class MarketController {
         return candlesResponse(symbol, interval);
     }
 
-    /** Candles for metals: same pipeline */
+    /**
+     * Retrieves historical precious metals candlestick series.
+     *
+     * @param symbol metal symbol (e.g. XAUUSD)
+     * @param interval chart interval code (e.g. 1h, 1d)
+     * @return list of CandleBars
+     */
     @GetMapping("/api/market/metals/candles")
     public ResponseEntity<?> metalsCandles(
             @RequestParam String symbol,
@@ -50,7 +79,13 @@ public class MarketController {
         return candlesResponse(symbol, interval);
     }
 
-    /** Candles for legacy stock endpoint */
+    /**
+     * Retrieves historical stock candlestick series.
+     *
+     * @param symbol stock ticker (e.g. AAPL)
+     * @param interval chart interval code (e.g. 1h, 1d)
+     * @return list of CandleBars
+     */
     @GetMapping("/api/market/stock/candles")
     public ResponseEntity<?> stockCandles(
             @RequestParam String symbol,
@@ -58,6 +93,13 @@ public class MarketController {
         return candlesResponse(symbol, interval);
     }
 
+    /**
+     * Helper mapping method to check and query candle endpoints sequentially (Binance -> MT5 -> Yahoo -> fallback).
+     *
+     * @param symbol target market symbol
+     * @param interval target chart resolution
+     * @return HTTP entity containing bars list
+     */
     private ResponseEntity<?> candlesResponse(String symbol, String interval) {
         // 0. Try Binance for crypto
         if (isCrypto(symbol)) {
@@ -87,11 +129,24 @@ public class MarketController {
         return ResponseEntity.ok(List.of());
     }
 
+    /**
+     * Helper to round prices based on instrument type.
+     *
+     * @param price raw double price value
+     * @param sym symbol code
+     * @return rounded BigDecimal value
+     */
     private BigDecimal round(double price, String sym) {
         int scale = sym.endsWith("JPY") ? 3 : sym.startsWith("XA") ? 2 : 5;
         return BigDecimal.valueOf(price).setScale(scale, RoundingMode.HALF_UP);
     }
 
+    /**
+     * Determines if a symbol belongs to crypto category.
+     *
+     * @param symbol code to inspect
+     * @return true if crypto, false otherwise
+     */
     private boolean isCrypto(String symbol) {
         return symbol != null && (symbol.startsWith("BTC") || symbol.startsWith("ETH") || 
                symbol.startsWith("SOL") || symbol.startsWith("XRP") || 
@@ -99,6 +154,12 @@ public class MarketController {
                symbol.startsWith("ADA") || symbol.startsWith("BNB"));
     }
 
+    /**
+     * Generates a deterministic synthetic quote for demo trades when all api connections are offline.
+     *
+     * @param symbol instrument code
+     * @return rounded base price
+     */
     private static BigDecimal syntheticDemoPrice(String symbol) {
         String s = symbol == null ? "" : symbol.trim().toUpperCase();
         if (s.isEmpty()) return BigDecimal.ZERO;

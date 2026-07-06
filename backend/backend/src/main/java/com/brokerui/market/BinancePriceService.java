@@ -8,6 +8,9 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
+/**
+ * Service for fetching live market prices from the Binance REST API.
+ */
 @Service
 public class BinancePriceService {
   private static final String BASE = "https://api.binance.com";
@@ -15,6 +18,11 @@ public class BinancePriceService {
   private final RestClient http;
   private final ObjectMapper objectMapper;
 
+  /**
+   * Constructs the BinancePriceService with HTTP rest client configurations.
+   *
+   * @param objectMapper Jackson JSON object mapper
+   */
   public BinancePriceService(ObjectMapper objectMapper) {
     this.objectMapper = objectMapper;
     SimpleClientHttpRequestFactory rf = new SimpleClientHttpRequestFactory();
@@ -27,6 +35,15 @@ public class BinancePriceService {
             .build();
   }
 
+  /**
+   * Fetches the last traded price for a specific symbol from the Binance API.
+   * The goal of this method is to fetch the price, parsing the ticker response to return it.
+   *
+   * @param symbolCode the internal system symbol code (e.g. BTCUSD, EURUSD)
+   * @return the last price as a BigDecimal
+   * @throws IllegalArgumentException if the symbol is empty/invalid
+   * @throws IllegalStateException if the price cannot be fetched
+   */
   public BigDecimal getLastPrice(String symbolCode) {
     String rawSym = symbolCode == null ? "" : symbolCode.trim().toUpperCase();
     String sym = mapToBinanceSymbol(rawSym);

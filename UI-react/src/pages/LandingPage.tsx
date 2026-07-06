@@ -5,6 +5,13 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { AuthHeader } from '@/components/AuthHeader';
 
+/**
+ * Welcome marketing landing page for the TradeAdge Broker Platform.
+ * Displays call to action buttons to direct users to register, log in, or try the demo mode.
+ * The goal of this page is to serve as the initial entrance interface of the website application.
+ *
+ * @returns Landing page layout
+ */
 export function LandingPage() {
   const { t } = useI18n();
   const toast = useToast();

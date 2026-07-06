@@ -8,6 +8,11 @@ import type { Lang } from '@/types/api';
 
 type Theme = 'dark' | 'light' | 'system';
 
+/**
+ * Internal helper to set theme styles to document elements and persist selection to local storage.
+ *
+ * @param theme style parameter theme name
+ */
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
   if (theme === 'system') {
@@ -28,6 +33,12 @@ interface ToggleRowProps {
   borderBottom?: boolean;
 }
 
+/**
+ * Helper row toggle layout component rendering checkbox control switch.
+ *
+ * @param props styling/functional parameters of toggle
+ * @returns ToggleRow container element
+ */
 function ToggleRow({ label, description, checked, onChange, disabled, borderBottom = true }: ToggleRowProps) {
   return (
     <div
@@ -57,6 +68,13 @@ function ToggleRow({ label, description, checked, onChange, disabled, borderBott
   );
 }
 
+/**
+ * Settings Page managing user preferences (Language selection, UI Dark/Light Theme modes,
+ * two-factor authentication toggles, and email reports parameters).
+ * The goal of this page is to save preferences to local storage and sync settings to the server database.
+ *
+ * @returns Settings page view layout
+ */
 export function SettingsPage() {
   const { t, lang, setLang } = useI18n();
   const toast = useToast();

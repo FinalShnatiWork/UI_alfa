@@ -23,11 +23,23 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const DEFAULT_DURATION = 4200;
 const FADE_MS = 320;
 
+/**
+ * Context Provider component managing popup alert messages.
+ * Mounts the dynamic fixed toast-container overlay in the viewport layout.
+ *
+ * @param props children layout elements
+ * @returns ToastProvider Context element
+ */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idCounter = useRef(0);
   const timersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
+  /**
+   * Internal helper to trigger transition animations and remove a toast by ID.
+   *
+   * @param id targeted toast identifier
+   */
   const remove = useCallback((id: number) => {
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
     setTimeout(() => {
@@ -36,6 +48,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, FADE_MS);
   }, []);
 
+  /**
+   * Instantiates and schedules a new popup toast alert.
+   *
+   * @param message localized message string
+   * @param options toast variants (info, success, danger) and custom durations
+   */
   const show = useCallback(
     (message: string, options: ToastOptions = {}) => {
       const variant = options.variant ?? 'info';
@@ -75,6 +93,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Custom hook to show user alerts and notification toast alerts in the viewport.
+ *
+ * @returns ToastContextValue containing `show` function trigger
+ */
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast must be used inside <ToastProvider>');

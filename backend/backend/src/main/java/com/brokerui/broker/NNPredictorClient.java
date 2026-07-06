@@ -9,11 +9,22 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 
+/**
+ * Client service connecting to the external Neural Network python server (port 3005).
+ * Sends feature arrays to get execution routing recommendations.
+ */
 @Service
 public class NNPredictorClient {
     private final RestTemplate restTemplate = new RestTemplate();
     private final String predictUrl = "http://localhost:3005/predict";
 
+    /**
+     * Posts a feature array to the NN model server and returns prediction metrics.
+     * The goal is to obtain routing recommendation labels (e.g. INTERNAL, EXTERNAL).
+     *
+     * @param features array of double values representing model inputs
+     * @return map containing matchProb, expectedSavings, and routeRecommendation, or null if query fails
+     */
     public Map<String, Object> getPrediction(double[] features) {
         try {
             HttpHeaders headers = new HttpHeaders();

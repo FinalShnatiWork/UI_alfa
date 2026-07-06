@@ -15,6 +15,12 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
+/**
+ * Login Page that handles credentials login submissions to the backend database.
+ * The goal of this page is to authenticate the user and redirect them to their target dashboard path.
+ *
+ * @returns Login page layout
+ */
 export function LoginPage() {
   const { t } = useI18n();
   const toast = useToast();

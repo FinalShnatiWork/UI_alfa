@@ -38,12 +38,20 @@ public class MT5IntegrationService {
 
     private final DateTimeFormatter fileFmt = DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm");
 
+    /**
+     * Checks if the MetaTrader 5 base path is configured.
+     *
+     * @return true if configured, false otherwise
+     */
     public boolean isConfigured() {
         return basePath != null && !basePath.isBlank();
     }
 
     /**
      * Verifies if the MT5 bridge is actually reachable.
+     * The goal is to check file path directories and verify socket connectivity.
+     *
+     * @return true if bridge is healthy and socket accepts connection
      */
     public boolean checkHealth() {
         if (!isConfigured()) return false;
@@ -61,6 +69,18 @@ public class MT5IntegrationService {
         }
     }
 
+    /**
+     * Sends a trading instruction to the MT5 bridge socket server.
+     * The goal is to execute MT5 BUY/SELL/CLOSE operations.
+     *
+     * @param symbol trading asset code
+     * @param action transaction action (e.g. BUY, SELL, CLOSE)
+     * @param price execution rate
+     * @param tp take profit rate
+     * @param sl stop loss rate
+     * @param lot transaction volume
+     * @return success string response or error prefix message
+     */
     public String sendTrade(String symbol, String action, double price, double tp, double sl, double lot) {
         try (Socket socket = new Socket(MT5_HOST, MT5_PORT);
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
@@ -77,6 +97,14 @@ public class MT5IntegrationService {
         }
     }
 
+    /**
+     * Fetches current price quote from MT5 EA using the file-bridge.
+     * The goal of this method is to return live exchange rates.
+     *
+     * @param symbol asset symbol code
+     * @return current mid quote rate as double
+     * @throws Exception if connection times out or file access fails
+     */
     public double getPrice(String symbol) throws Exception {
         File priceFile = new File(basePath, "currentPrice.json");
         File requestFile = new File(basePath, "request_price.txt");
@@ -106,6 +134,16 @@ public class MT5IntegrationService {
         return mid;
     }
 
+    /**
+     * Queries recent candlestick bars from the MT5 EA using the file-bridge.
+     * The goal of this method is to return Candle array.
+     *
+     * @param symbol target asset symbol
+     * @param count count of candles to parse
+     * @param timeframe timeframe period identifier
+     * @return array of populated Candles
+     * @throws Exception if connection times out or file access fails
+     */
     public Candle[] getRecentCandles(String symbol, int count, String timeframe) throws Exception {
         File candleFile = new File(basePath, "candles_data.json");
         File requestFile = new File(basePath, "request_candles.txt");
@@ -149,6 +187,15 @@ public class MT5IntegrationService {
         return candles;
     }
 
+    /**
+     * Converts raw Candles array into UI-compatible CandleBar lists.
+     *
+     * @param symbol target symbol
+     * @param count count of candles
+     * @param timeframe chart timeframe resolution
+     * @return list of historical CandleBars
+     * @throws Exception if fetching fails
+     */
     public List<com.brokerui.market.CandleBar> getCandlesForUi(String symbol, int count, String timeframe) throws Exception {
         Candle[] candles = getRecentCandles(symbol, count, timeframe);
         List<com.brokerui.market.CandleBar> list = new ArrayList<>();
@@ -158,6 +205,13 @@ public class MT5IntegrationService {
         return list;
     }
 
+    /**
+     * Queries current open positions from the MT5 EA terminal.
+     * The goal of this method is to audit synchronized active positions.
+     *
+     * @return JSONArray of raw MT5 open position records
+     * @throws Exception if connection times out or file access fails
+     */
     public JSONArray getOpenPositions() throws Exception {
         File posFile = new File(basePath, "positions_data.json");
         File requestFile = new File(basePath, "request_positions.txt");
@@ -184,6 +238,11 @@ public class MT5IntegrationService {
         return arr;
     }
 
+    /**
+     * Returns the base path directory for bridge files.
+     *
+     * @return basePath path string
+     */
     public String getBasePath() {
         return basePath;
     }

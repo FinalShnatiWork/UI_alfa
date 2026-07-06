@@ -5,18 +5,36 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import org.springframework.stereotype.Service;
 
+/**
+ * Aggregator service that coordinates fetching live prices from multiple adapters
+ * (Binance for crypto, MT5 for FX/metals, Yahoo Finance as secondary, and synthetic fallback).
+ */
 @Service
 public class MarketPriceService {
     private final MT5IntegrationService mt5;
     private final YahooFinanceService yahoo;
     private final BinanceService binance;
 
+    /**
+     * Constructs the MarketPriceService with required data adapters.
+     *
+     * @param mt5 MetaTrader 5 service integration
+     * @param yahoo Yahoo Finance service integration
+     * @param binance Binance crypto price service integration
+     */
     public MarketPriceService(MT5IntegrationService mt5, YahooFinanceService yahoo, BinanceService binance) {
         this.mt5 = mt5;
         this.yahoo = yahoo;
         this.binance = binance;
     }
 
+    /**
+     * Attempts to query live price quote from all configured feeds in sequence.
+     * The goal is to return a valid non-zero quote.
+     *
+     * @param symbol symbol code (e.g. BTCUSD, EURUSD)
+     * @return live quote as double
+     */
     public double getLivePrice(String symbol) {
         String sym = symbol == null ? "" : symbol.trim().toUpperCase();
 
@@ -48,6 +66,12 @@ public class MarketPriceService {
         return syntheticDemoPrice(sym).doubleValue();
     }
 
+    /**
+     * Checks if the symbol represents a cryptocurrency.
+     *
+     * @param symbol code to inspect
+     * @return true if crypto, false otherwise
+     */
     private boolean isCrypto(String symbol) {
         return symbol != null && (symbol.startsWith("BTC") || symbol.startsWith("ETH") || 
                symbol.startsWith("SOL") || symbol.startsWith("XRP") || 
@@ -55,6 +79,12 @@ public class MarketPriceService {
                symbol.startsWith("ADA") || symbol.startsWith("BNB"));
     }
 
+    /**
+     * Generates a deterministic synthetic quote based on time bucket for demo trades when off-line.
+     *
+     * @param symbol instrument code
+     * @return base price BigDecimal
+     */
     private static BigDecimal syntheticDemoPrice(String symbol) {
         String s = symbol == null ? "" : symbol.trim().toUpperCase();
         if (s.isEmpty()) return BigDecimal.ZERO;

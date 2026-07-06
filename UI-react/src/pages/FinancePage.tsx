@@ -173,6 +173,13 @@ function TxModal({ type, onClose, onConfirm, t }: TxModalProps) {
   );
 }
 
+/**
+ * Finance Page managing user deposits and withdrawal requests.
+ * Renders user account balances, status of pending transactions, and historical ledger tables.
+ * The goal of this page is to enable demo deposit/withdrawal simulations.
+ *
+ * @returns Finance page view layout
+ */
 export function FinancePage() {
   const { t } = useI18n();
   const toast = useToast();

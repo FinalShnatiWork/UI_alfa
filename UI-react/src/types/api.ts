@@ -49,6 +49,7 @@ export interface TradingAccount {
 export interface Position {
   id: number;
   symbolCode: string;
+  side?: 'LONG' | 'SHORT';
   quantity: string;
   avgPrice: string;
   unrealizedPnl?: string;
@@ -71,6 +72,8 @@ export interface BrokerOrder {
   takeProfit?: string;
   filledAt?: string;
   createdAt?: string;
+  openPrice?: string;
+  openedAt?: string;
 }
 
 export interface PlaceOrderRequest {

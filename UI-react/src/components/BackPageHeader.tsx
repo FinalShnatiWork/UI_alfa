@@ -6,6 +6,13 @@ interface Props {
   backTo?: string;
 }
 
+/**
+ * Centered page header component featuring a Back navigation link.
+ * Used across sub-screens like Charts, Finance, Settings, and History.
+ *
+ * @param props titleKey to resolve and optional backTo navigation route path
+ * @returns Centered header component with Back action
+ */
 export function BackPageHeader({ titleKey, backTo = '/dashboard' }: Props) {
   const { t } = useI18n();
 

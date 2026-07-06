@@ -6,6 +6,13 @@ interface Props {
   children: ReactNode;
 }
 
+/**
+ * Route protector wrapper component.
+ * Validates active session status and redirects unauthenticated users to the login route path.
+ *
+ * @param props children layout elements to guard
+ * @returns Guarded children layout or spinner loader
+ */
 export function ProtectedRoute({ children }: Props) {
   const { status } = useAuth();
   const location = useLocation();

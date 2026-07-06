@@ -25,6 +25,14 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
+/**
+ * Registration page for creating DEMO trading accounts.
+ * Validates fields via Zod, sets up local storage profile values, registers user credentials on the backend,
+ * and signs the user in.
+ * The goal of this page is to establish a demo account configuration for paper trading simulation.
+ *
+ * @returns Demo registration form page layout
+ */
 export function DemoRegisterPage() {
   const { t } = useI18n();
   const toast = useToast();

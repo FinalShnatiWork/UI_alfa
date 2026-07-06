@@ -6,7 +6,15 @@ import { useLogout } from '@/hooks/useLogout';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, usePositions, useNotifications, useLivePrices } from '@/hooks/useApi';
+import { getContractSize } from '@/lib/api';
 
+/**
+ * Formatting utility to render numeric values as currency localized strings.
+ *
+ * @param value raw numeric input value
+ * @param currency target currency code, defaults to USD
+ * @returns formatted currency string
+ */
 function fmtMoney(value: unknown, currency = 'USD'): string {
   const n = Number(value ?? 0);
   return new Intl.NumberFormat(undefined, {
@@ -16,6 +24,12 @@ function fmtMoney(value: unknown, currency = 'USD'): string {
   }).format(n);
 }
 
+/**
+ * Formatting utility to render numeric values as price quotes with up to 5 decimals.
+ *
+ * @param n raw numeric price quote input
+ * @returns formatted price quote string
+ */
 function fmtPrice(n: unknown): string {
   if (n == null) return '—';
   const v = Number(n);
@@ -23,6 +37,13 @@ function fmtPrice(n: unknown): string {
   return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 });
 }
 
+/**
+ * Main application dashboard landing screen.
+ * Displays user balances (Equity, Margin, Free Margin, P/L), active open positions, and notifications alerts.
+ * The goal of this page is to summarize active trading operations and notify the user on state changes.
+ *
+ * @returns Dashboard page layout element
+ */
 export function DashboardPage() {
   const { t } = useI18n();
   const toast = useToast();
@@ -51,10 +72,8 @@ export function DashboardPage() {
 
 
   const currency = overview?.currency || 'USD';
-  const balance = overview ? fmtMoney(overview.balance, currency) : '—';
-  const equity = overview ? fmtMoney(overview.equity, currency) : '—';
-  const marginUsed = overview ? fmtMoney(overview.marginUsed ?? 0, currency) : '—';
-  const freeMargin = overview ? fmtMoney(overview.freeMargin ?? 0, currency) : '—';
+  const rawBalance = overview ? Number(overview.balance ?? 0) : 0;
+  const rawMarginUsed = overview ? Number(overview.marginUsed ?? 0) : 0;
 
   const notifications = Array.isArray(notificationsData) ? notificationsData.slice(0, 5) : [];
   const positions = Array.isArray(positionsData) ? positionsData : [];
@@ -66,8 +85,18 @@ export function DashboardPage() {
     const avg = Number(p.avgPrice ?? 0);
     const live = livePrices[p.symbolCode.toUpperCase()] ?? livePrices[p.symbolCode];
     if (!live) return sum;
-    return sum + (live - avg) * qty;
+    const factor = p.side === 'SHORT' ? -1 : 1;
+    return sum + (live - avg) * qty * factor * getContractSize(p.symbolCode);
   }, 0);
+
+  const liveEquity = rawBalance + livePnl;
+  const liveFreeMargin = liveEquity - rawMarginUsed;
+
+  const balance = overview ? fmtMoney(rawBalance, currency) : '—';
+  const equity = overview ? fmtMoney(liveEquity, currency) : '—';
+  const marginUsed = overview ? fmtMoney(rawMarginUsed, currency) : '—';
+  const freeMargin = overview ? fmtMoney(liveFreeMargin, currency) : '—';
+
   const pnl = overview ? livePnl : 0;
   const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtMoney(pnl, currency)}` : '—';
   const plPositive = pnl >= 0;
@@ -146,19 +175,27 @@ export function DashboardPage() {
               <SkeletonCard rows={2} height={80} />
             ) : (() => {
               const totalUnrealized = positions.reduce((sum, p) => {
-                const liveP = livePrices[p.symbolCode];
+                const liveP = livePrices[p.symbolCode.toUpperCase()];
                 const qty = Number(p.quantity ?? 0);
                 const avg = Number(p.avgPrice ?? 0);
-                return sum + (liveP ? (liveP - avg) * qty : Number(p.unrealizedPnl ?? 0));
+                if (liveP) {
+                  const factor = p.side === 'SHORT' ? -1 : 1;
+                  return sum + (liveP - avg) * qty * factor;
+                }
+                return sum + Number(p.unrealizedPnl ?? 0);
               }, 0);
 
               const best = positions.length > 0
                 ? positions.reduce((a, b) => {
-                    const pnlA = livePrices[a.symbolCode]
-                      ? (livePrices[a.symbolCode] - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0)
+                    const liveA = livePrices[a.symbolCode.toUpperCase()];
+                    const liveB = livePrices[b.symbolCode.toUpperCase()];
+                    const factorA = a.side === 'SHORT' ? -1 : 1;
+                    const factorB = b.side === 'SHORT' ? -1 : 1;
+                    const pnlA = liveA
+                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA
                       : Number(a.unrealizedPnl ?? 0);
-                    const pnlB = livePrices[b.symbolCode]
-                      ? (livePrices[b.symbolCode] - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0)
+                    const pnlB = liveB
+                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB
                       : Number(b.unrealizedPnl ?? 0);
                     return pnlA > pnlB ? a : b;
                   })
@@ -166,24 +203,28 @@ export function DashboardPage() {
 
               const worst = positions.length > 0
                 ? positions.reduce((a, b) => {
-                    const pnlA = livePrices[a.symbolCode]
-                      ? (livePrices[a.symbolCode] - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0)
+                    const liveA = livePrices[a.symbolCode.toUpperCase()];
+                    const liveB = livePrices[b.symbolCode.toUpperCase()];
+                    const factorA = a.side === 'SHORT' ? -1 : 1;
+                    const factorB = b.side === 'SHORT' ? -1 : 1;
+                    const pnlA = liveA
+                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA
                       : Number(a.unrealizedPnl ?? 0);
-                    const pnlB = livePrices[b.symbolCode]
-                      ? (livePrices[b.symbolCode] - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0)
+                    const pnlB = liveB
+                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB
                       : Number(b.unrealizedPnl ?? 0);
                     return pnlA < pnlB ? a : b;
                   })
                 : null;
 
               const bestPnl = best
-                ? (livePrices[best.symbolCode]
-                    ? (livePrices[best.symbolCode] - Number(best.avgPrice ?? 0)) * Number(best.quantity ?? 0)
+                ? (livePrices[best.symbolCode.toUpperCase()]
+                    ? (livePrices[best.symbolCode.toUpperCase()] - Number(best.avgPrice ?? 0)) * Number(best.quantity ?? 0) * (best.side === 'SHORT' ? -1 : 1)
                     : Number(best.unrealizedPnl ?? 0))
                 : 0;
               const worstPnl = worst
-                ? (livePrices[worst.symbolCode]
-                    ? (livePrices[worst.symbolCode] - Number(worst.avgPrice ?? 0)) * Number(worst.quantity ?? 0)
+                ? (livePrices[worst.symbolCode.toUpperCase()]
+                    ? (livePrices[worst.symbolCode.toUpperCase()] - Number(worst.avgPrice ?? 0)) * Number(worst.quantity ?? 0) * (worst.side === 'SHORT' ? -1 : 1)
                     : Number(worst.unrealizedPnl ?? 0))
                 : 0;
 
@@ -316,34 +357,52 @@ export function DashboardPage() {
                   {t('dashboard.noNotifications')}
                 </li>
               ) : (
-                notifications.map((n) => (
-                  <li
-                    key={n.id}
-                    style={{
-                      padding: '10px 0',
-                      borderBottom: '1px solid var(--border-light)',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <span
-                        className="badge"
-                        style={{
-                          background: n.notifType === 'TRADE' ? 'var(--blue-soft)' : 'var(--bg-alt)',
-                          color: n.notifType === 'TRADE' ? 'var(--blue)' : 'var(--text-secondary)',
-                          flexShrink: 0,
-                          marginTop: 1,
-                        }}
-                      >
-                        {n.notifType || 'INFO'}
-                      </span>
-                      <div>
-                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{n.title}</div>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{n.body}</div>
+                notifications.map((n) => {
+                  let displayTitle = t(n.title) || n.title;
+                  let displayBody = n.body;
+                  try {
+                    const data = JSON.parse(n.body);
+                    const bodyKey = n.title.replace('.title', '.body');
+                    let bodyTemplate = t(bodyKey) || bodyKey;
+                    if (data.side) {
+                      data.side = t(`badge.${data.side.toLowerCase()}`) || data.side;
+                    }
+                    Object.keys(data).forEach((key) => {
+                      bodyTemplate = bodyTemplate.replace(`{${key}}`, data[key]);
+                    });
+                    displayBody = bodyTemplate;
+                  } catch {
+                    displayBody = t(n.body) || n.body;
+                  }
+                  return (
+                    <li
+                      key={n.id}
+                      style={{
+                        padding: '10px 0',
+                        borderBottom: '1px solid var(--border-light)',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <span
+                          className="badge"
+                          style={{
+                            background: n.notifType === 'TRADE' ? 'var(--blue-soft)' : 'var(--bg-alt)',
+                            color: n.notifType === 'TRADE' ? 'var(--blue)' : 'var(--text-secondary)',
+                            flexShrink: 0,
+                            marginTop: 1,
+                          }}
+                        >
+                          {t(`badge.${n.notifType.toLowerCase()}`) || n.notifType}
+                        </span>
+                        <div>
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{displayTitle}</div>
+                          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{displayBody}</div>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))
+                    </li>
+                  );
+                })
               )}
             </ul>
           </div>
@@ -406,9 +465,9 @@ export function DashboardPage() {
               positions.map((p) => {
                 const qty = Number(p.quantity ?? 0);
                 const unrealized = Number(p.unrealizedPnl ?? 0);
-                const livePrice = livePrices[p.symbolCode];
+                const livePrice = livePrices[p.symbolCode.toUpperCase()];
                 const livePnl = livePrice && p.avgPrice
-                  ? (livePrice - Number(p.avgPrice)) * qty
+                  ? (p.side === 'SHORT' ? -1 : 1) * (livePrice - Number(p.avgPrice)) * qty
                   : unrealized;
                 const pnlPos = livePnl;
                 return (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiPostJson } from '@/lib/api';
+import { apiPostJson, getContractSize } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
@@ -24,21 +24,53 @@ interface PairedTrade {
 function tsMs(iso?: string) { return iso ? new Date(iso).getTime() : 0; }
 
 function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
-  const bySymbol: Record<string, { buys: BrokerOrder[]; sells: BrokerOrder[] }> = {};
-  for (const o of orders) {
-    if (!bySymbol[o.symbolCode]) bySymbol[o.symbolCode] = { buys: [], sells: [] };
-    if (o.side === 'BUY') bySymbol[o.symbolCode].buys.push(o);
-    else bySymbol[o.symbolCode].sells.push(o);
-  }
+  const sorted = [...orders].sort(
+    (a, b) => tsMs(a.filledAt || a.createdAt) - tsMs(b.filledAt || b.createdAt)
+  );
+
+  const closing = sorted.filter(
+    (o) => o.realizedPnl != null && Number(o.realizedPnl) !== 0
+  );
+  const opening = sorted.filter(
+    (o) => o.realizedPnl == null || Number(o.realizedPnl) === 0
+  );
+
+  const usedOpeningIds = new Set<number>();
   const pairs: PairedTrade[] = [];
-  for (const sym of Object.keys(bySymbol)) {
-    const buys = [...bySymbol[sym].buys].sort((a, b) => tsMs(a.filledAt || a.createdAt) - tsMs(b.filledAt || b.createdAt));
-    const sells = [...bySymbol[sym].sells].sort((a, b) => tsMs(a.filledAt || a.createdAt) - tsMs(b.filledAt || b.createdAt));
-    sells.forEach((sell, i) => {
-      const buy = buys[i];
-      pairs.push({ id: sell.id, symbolCode: sym, quantity: sell.quantity, openTime: buy?.filledAt || buy?.createdAt, openPrice: buy?.entryPrice, closeTime: sell.filledAt || sell.createdAt, closePrice: sell.entryPrice, stopLoss: buy?.stopLoss, takeProfit: buy?.takeProfit, realizedPnl: sell.realizedPnl });
+
+  for (const sell of closing) {
+    let openPrice = sell.openPrice;
+    let openTime = sell.openedAt;
+
+    if (!openPrice || !openTime) {
+      const openSide = sell.side === 'SELL' ? 'BUY' : 'SELL';
+      const match = opening.find(
+        (o) =>
+          o.symbolCode === sell.symbolCode &&
+          o.side === openSide &&
+          !usedOpeningIds.has(o.id)
+      );
+      if (match) {
+        openPrice = openPrice || match.entryPrice;
+        openTime = openTime || match.filledAt || match.createdAt;
+        usedOpeningIds.add(match.id);
+      }
+    }
+
+    pairs.push({
+      id: sell.id,
+      symbolCode: sell.symbolCode,
+      quantity: sell.quantity,
+      openTime: openTime,
+      openPrice: openPrice,
+      closeTime: sell.filledAt || sell.createdAt,
+      closePrice: sell.entryPrice,
+      stopLoss: sell.stopLoss,
+      takeProfit: sell.takeProfit,
+      realizedPnl: sell.realizedPnl,
     });
   }
+
   return pairs.sort((a, b) => tsMs(b.closeTime) - tsMs(a.closeTime));
 }
 
@@ -89,6 +121,13 @@ function ConfirmModal({ message, onConfirm, onCancel, confirmLabel, cancelLabel 
   );
 }
 
+/**
+ * Positions Page displays active open positions, working pending orders, and closed trades history.
+ * Provides tabs to switch views, search filters, order cancel triggers, and close position triggers.
+ * The goal of this page is to manage the active portfolio and monitor P/L in real-time.
+ *
+ * @returns Positions management page layout
+ */
 export function PositionsPage() {
   const { t } = useI18n();
   const toast = useToast();
@@ -148,12 +187,10 @@ export function PositionsPage() {
   async function closePosition(pos: Position) {
     setClosing(pos.id);
     try {
-      const res = await apiPostJson('/api/broker/orders', {
-        side: 'SELL', symbolCode: pos.symbolCode, quantity: Number(pos.quantity), orderType: 'MARKET',
-      });
-      const data = (await res.json()) as { ok: boolean; fillPrice?: string; error?: string };
-      if (data.ok) {
-        toast.show(t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.fillPrice ? ` @ ${data.fillPrice}` : ''), { variant: 'success' });
+      const res = await apiPostJson(`/api/broker/positions/${pos.id}/close`, {});
+      const data = (await res.json()) as { ok: boolean; closePnl?: string; error?: string };
+      if (res.ok && data.ok) {
+        toast.show(t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : ''), { variant: 'success' });
         invalidateAfterTrade();
       } else {
         toast.show(`Error: ${data.error ?? ''}`, { variant: 'error' });
@@ -248,13 +285,17 @@ export function PositionsPage() {
                   const qty = Number(p.quantity ?? 0);
                   const avgPrice = Number(p.avgPrice ?? 0);
                   const livePrice = livePrices[p.symbolCode.toUpperCase()];
-                  const pnl = livePrice != null ? (livePrice - avgPrice) * qty : null;
+                  const pnl = livePrice != null ? (p.side === 'SHORT' ? (avgPrice - livePrice) * qty * getContractSize(p.symbolCode) : (livePrice - avgPrice) * qty * getContractSize(p.symbolCode)) : null;
                   const isClosing = closing === p.id;
                   return (
                     <tr key={p.id}>
                       <td className="font-bold">{p.symbolCode}</td>
                       <td>
-                        <span className="badge badge-success">{t('badge.buy')}</span>
+                        {p.side === 'SHORT' ? (
+                          <span className="badge badge-danger">{t('badge.sell')}</span>
+                        ) : (
+                          <span className="badge badge-success">{t('badge.buy')}</span>
+                        )}
                       </td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(qty)}</td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(avgPrice)}</td>
@@ -270,7 +311,7 @@ export function PositionsPage() {
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>
                         {pnl != null ? (
                           <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                            {pnl >= 0 ? '+' : ''}${fmtPrice(Math.abs(pnl))}
+                            {pnl >= 0 ? '+' : '-'}${fmtPrice(Math.abs(pnl))}
                           </span>
                         ) : (
                           <span className="text-muted">—</span>
@@ -297,7 +338,9 @@ export function PositionsPage() {
                 const qty = Number(p.quantity ?? 0);
                 const avg = Number(p.avgPrice ?? 0);
                 const live = livePrices[p.symbolCode.toUpperCase()];
-                return live != null ? sum + (live - avg) * qty : sum;
+                if (live == null) return sum;
+                const pnl = p.side === 'SHORT' ? (avg - live) * qty * getContractSize(p.symbolCode) : (live - avg) * qty * getContractSize(p.symbolCode);
+                return sum + pnl;
               }, 0);
               const pnlColor = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
               return (
@@ -307,7 +350,7 @@ export function PositionsPage() {
                       {t('table.totalPl') || 'Total P/L'}
                     </td>
                     <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
-                      {totalPnl >= 0 ? '+' : ''}${Math.abs(totalPnl).toFixed(2)}
+                      {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toFixed(2)}
                     </td>
                     <td />
                   </tr>

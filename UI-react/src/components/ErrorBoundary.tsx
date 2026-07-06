@@ -10,20 +10,46 @@ interface State {
   error: Error | null;
 }
 
+/**
+ * React ErrorBoundary component that catches runtime rendering errors in its children tree.
+ * Prevents application crashes and renders an elegant fallback UI detailing the exception.
+ */
 export class ErrorBoundary extends Component<Props, State> {
+  /**
+   * Initializes the ErrorBoundary component state.
+   *
+   * @param props component properties containing children
+   */
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
   }
 
+  /**
+   * Derives error state updates dynamically when a child throws an exception.
+   *
+   * @param error caught runtime Error object
+   * @returns updated state object
+   */
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
+  /**
+   * Lifecycle hook to log caught exception details.
+   *
+   * @param error caught error
+   * @param info error metadata (component stack trace info)
+   */
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 
+  /**
+   * Renders fallback UI if an error is caught, otherwise renders child elements.
+   *
+   * @returns fallback view or children elements
+   */
   render() {
     if (this.state.hasError) {
       return (

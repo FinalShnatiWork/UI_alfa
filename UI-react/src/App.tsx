@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { I18nProvider } from '@/hooks/useI18n';
@@ -29,13 +29,20 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Main application React entry component.
+ * Registers context providers (QueryClientProvider, ErrorBoundary, I18nProvider, ToastProvider, AuthProvider, PreferenceSync),
+ * configures page routes mapping, and enables React Query Devtools context.
+ *
+ * @returns Root application layout element with routing
+ */
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
         <I18nProvider>
           <ToastProvider>
-            <BrowserRouter>
+            <HashRouter>
               <AuthProvider>
                 <PreferenceSync>
                 <Routes>
@@ -57,7 +64,7 @@ export function App() {
                 </Routes>
                 </PreferenceSync>
               </AuthProvider>
-            </BrowserRouter>
+            </HashRouter>
           </ToastProvider>
         </I18nProvider>
       </ErrorBoundary>

@@ -26,6 +26,13 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
+/**
+ * Registration Page for registering new REAL broker client accounts.
+ * Collects personal identification files, contact information, passwords, and currency settings.
+ * The goal of this page is to securely enroll a real user account in the broker database.
+ *
+ * @returns Real account registration page layout
+ */
 export function RegisterPage() {
   const { t } = useI18n();
   const toast = useToast();

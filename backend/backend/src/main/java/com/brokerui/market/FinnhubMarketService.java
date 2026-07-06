@@ -12,6 +12,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+/**
+ * Service to retrieve market data, quotes, and klines/candles from the Finnhub REST API.
+ * Primarily handles US stock, forex, and precious metals via OANDA integration.
+ */
 @Service
 public class FinnhubMarketService {
   private static final String BASE = "https://finnhub.io/api/v1";
@@ -20,6 +24,12 @@ public class FinnhubMarketService {
   private final ObjectMapper objectMapper;
   private final String apiKey;
 
+  /**
+   * Constructs the FinnhubMarketService with ObjectMapper and configured API key.
+   *
+   * @param objectMapper Jackson JSON object mapper
+   * @param apiKey the Finnhub API token
+   */
   public FinnhubMarketService(
       ObjectMapper objectMapper,
       @Value("${broker.market.finnhub-api-key:}") String apiKey) {
@@ -28,10 +38,24 @@ public class FinnhubMarketService {
     this.http = RestClient.builder().baseUrl(BASE).build();
   }
 
+  /**
+   * Checks if the Finnhub API integration is active and has a configured API key.
+   *
+   * @return true if an API key is configured, false otherwise
+   */
   public boolean isConfigured() {
     return !apiKey.isEmpty();
   }
 
+  /**
+   * Retrieves historical stock candle bars for a US Stock.
+   * The goal of this method is to return a list of stock CandleBars.
+   *
+   * @param symbol US stock symbol (e.g. AAPL)
+   * @param intervalKey chart interval code (e.g. 1m, 1h, 1d)
+   * @return a list of historical CandleBars
+   * @throws JsonProcessingException if json string parsing fails
+   */
   public List<CandleBar> usStockCandles(String symbol, String intervalKey)
       throws JsonProcessingException {
     if (!isConfigured()) {
@@ -45,7 +69,15 @@ public class FinnhubMarketService {
     return finnhubCandles("/stock/candle", sym, intervalKey);
   }
 
-  /** Forex candles via Finnhub (OANDA symbols, e.g. OANDA:EUR_USD). */
+  /**
+   * Forex candles via Finnhub (OANDA symbols, e.g. OANDA:EUR_USD).
+   * The goal of this method is to fetch and return forex CandleBars.
+   *
+   * @param symbol internal system forex symbol code (e.g. EURUSD)
+   * @param intervalKey chart interval code (e.g. 1h, 1d)
+   * @return a list of historical CandleBars
+   * @throws JsonProcessingException if response json processing fails
+   */
   public List<CandleBar> forexCandles(String symbol, String intervalKey)
       throws JsonProcessingException {
     if (symbol == null || symbol.isBlank()) {
@@ -55,7 +87,15 @@ public class FinnhubMarketService {
     return finnhubCandles("/forex/candle", mapped, intervalKey);
   }
 
-  /** Metals candles via Finnhub (OANDA symbols, e.g. OANDA:XAU_USD). */
+  /**
+   * Metals candles via Finnhub (OANDA symbols, e.g. OANDA:XAU_USD).
+   * The goal of this method is to fetch and return precious metals CandleBars.
+   *
+   * @param symbol internal system precious metals symbol code (e.g. XAUUSD)
+   * @param intervalKey chart interval code (e.g. 1h, 1d)
+   * @return a list of historical CandleBars
+   * @throws JsonProcessingException if response json processing fails
+   */
   public List<CandleBar> metalsCandles(String symbol, String intervalKey)
       throws JsonProcessingException {
     if (symbol == null || symbol.isBlank()) {
@@ -65,7 +105,14 @@ public class FinnhubMarketService {
     return finnhubCandles("/forex/candle", mapped, intervalKey);
   }
 
-  /** Quote (last price) for Forex/Metals via Finnhub using OANDA symbols. */
+  /**
+   * Quote (last price) for Forex/Metals via Finnhub using OANDA symbols.
+   * The goal of this method is to retrieve and return the latest market bid-ask price.
+   *
+   * @param uiSymbol the symbol code (e.g. EURUSD, XAUUSD)
+   * @return the last price as a double
+   * @throws JsonProcessingException if response json processing fails
+   */
   public double oandaQuote(String uiSymbol) throws JsonProcessingException {
     if (!isConfigured()) {
       throw new IllegalStateException("finnhub_not_configured");

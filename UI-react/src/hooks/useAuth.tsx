@@ -24,6 +24,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Context Provider component managing user authentication state.
+ * Bootstraps initial session, registers unauthorized 401 interceptors, and shares credentials context.
+ *
+ * @param props children layout elements
+ * @returns AuthProvider Context element
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<AuthMeResponse | null>(null);
@@ -31,6 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registeredRef = useRef(false);
   const queryClient = useQueryClient();
 
+  /**
+   * Resets active credentials state and purges TanStack Query client cache.
+   */
   const clearUser = useCallback(() => {
     setUser(null);
     setStatus('unauthenticated');
@@ -38,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
   }, [queryClient]);
 
+  /**
+   * Re-fetches the user profile from the backend to verify session validity.
+   */
   const refresh = useCallback(async () => {
     try {
       const me = await apiGet<AuthMeResponse>('/api/auth/me');
@@ -80,6 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * Custom hook to access credentials, user profile details, and auth state helpers.
+ *
+ * @returns AuthContextValue containing state flags and callback actions
+ */
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');

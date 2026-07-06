@@ -18,6 +18,11 @@ import java.util.concurrent.TimeUnit;
 
 import org.json.*;
 
+/**
+ * Client class that acts as a file-bridge connector to the MetaTrader 5 (MT5) client terminal.
+ * Reads and writes request files to prompt the MT5 Expert Advisor (EA)
+ * for current prices and historical/recent candlestick indicators.
+ */
 public class AlpacaClient {
 
 	   private static final String REQUEST_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\request_candles.txt";
@@ -25,6 +30,15 @@ public class AlpacaClient {
 	    private static final String REQUEST_PRICE_FILE = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\request_price.txt";
 	    private static final String PRICE_FILE   = "C:\\Users\\david\\AppData\\Roaming\\MetaQuotes\\Terminal\\E7DB6AF1FE93F292652A5D3B98342601\\MQL5\\Files\\currentPrice.json";
 
+	    /**
+	     * Requests recent candlestick bars from the MT5 EA terminal.
+	     *
+	     * @param symbol trading symbol (e.g. EURUSD)
+	     * @param count count of candles to parse
+	     * @param timeframe timeframe period identifier (e.g. 1Hour)
+	     * @return array of populated Candles (candles[0] being the newest)
+	     * @throws Exception if connection times out or file access fails
+	     */
 	    public static Candle[] getRecentCandles(String symbol, int count, String timeframe) throws Exception {
 	        File candleFile = new File(CANDLE_FILE);
 	        File requestFile = new File(REQUEST_FILE);
@@ -179,6 +193,14 @@ public class AlpacaClient {
 
 	    
 	    
+	    /**
+	     * Fetches current exchange rate quote from the MT5 EA terminal.
+	     * The goal of this method is to retrieve the live bid-ask mid price.
+	     *
+	     * @param symbol trading symbol code (e.g. EURUSD)
+	     * @return current mid rate price quote
+	     * @throws Exception if connection times out or file access fails
+	     */
 public static double getExchangeRate(String symbol) throws Exception {
     File priceFile = new File(PRICE_FILE);
     File requestFile = new File(REQUEST_PRICE_FILE);

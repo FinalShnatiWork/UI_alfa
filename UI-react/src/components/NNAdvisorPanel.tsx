@@ -6,6 +6,14 @@ interface NNAdvisorPanelProps {
   currentPrice: number;
 }
 
+/**
+ * AI Neural Network Smart Routing Advisor panel.
+ * Posts normalized book/market parameters to the python predictor service (port 3005)
+ * and displays recommended routing (Internal Crossing vs. External MT5) with estimated savings.
+ *
+ * @param props symbol, active input volume quantity, and current price quote
+ * @returns Advisor panel layout or null if inputs are not positive
+ */
 export function NNAdvisorPanel({ symbol, volume, currentPrice }: NNAdvisorPanelProps) {
   const [prediction, setPrediction] = useState<{
     matchProb: number;

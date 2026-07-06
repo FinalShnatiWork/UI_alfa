@@ -14,9 +14,17 @@ public interface PositionRepository extends JpaRepository<Position, Long> {
 
   Optional<Position> findByTradingAccountIdAndSymbolCode(Long tradingAccountId, String symbolCode);
 
+  Optional<Position> findByTradingAccountIdAndSymbolCodeAndSide(
+      Long tradingAccountId, String symbolCode, String side);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT p FROM Position p WHERE p.tradingAccount.id = :accountId AND p.symbolCode = :symbolCode AND p.side = :side")
+  Optional<Position> findByTradingAccountIdAndSymbolCodeAndSideForUpdate(
+      @Param("accountId") Long accountId, @Param("symbolCode") String symbolCode, @Param("side") String side);
+
   /**
    * Pessimistic write lock on a single position – used when placing a SELL order
-   * to prevent two concurrent sells from double-counting the same position.
+   * or executing order matching where side isn't explicitly known.
    */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT p FROM Position p WHERE p.tradingAccount.id = :accountId AND p.symbolCode = :symbolCode")
@@ -30,4 +38,3 @@ public interface PositionRepository extends JpaRepository<Position, Long> {
   @Query("SELECT p FROM Position p WHERE p.id = :id")
   Optional<Position> findByIdForUpdate(@Param("id") Long id);
 }
-

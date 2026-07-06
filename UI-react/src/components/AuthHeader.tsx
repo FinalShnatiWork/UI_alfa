@@ -13,6 +13,13 @@ interface Props {
   children?: ReactNode;
 }
 
+/**
+ * Header component for authentication views (login/register).
+ * Provides logo brand linkage and general language localization switcher buttons.
+ *
+ * @param props children layout elements
+ * @returns Top navigation header component
+ */
 export function AuthHeader({ children }: Props) {
   const { lang, setLang } = useI18n();
 

@@ -10,6 +10,12 @@ type Theme = 'dark' | 'light' | 'system';
 const ALLOWED_LANGS: ReadonlySet<string> = new Set(['en', 'ru', 'he']);
 const ALLOWED_THEMES: ReadonlySet<string> = new Set(['dark', 'light', 'system']);
 
+/**
+ * Helper utility to programmatically apply the selected UI theme to documentElement attributes.
+ * Also persists the choice to localStorage.
+ *
+ * @param theme target theme style choice
+ */
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
   if (theme === 'system') {
@@ -22,9 +28,12 @@ function applyTheme(theme: Theme) {
 }
 
 /**
- * Loads user preferences from the DB once after successful authentication
+ * Sync component that loads user preferences from the DB once after successful authentication
  * and applies language + theme globally. This ensures settings are consistent
- * across devices and sessions, not just stored in localStorage.
+ * across devices and sessions.
+ *
+ * @param props children layout elements
+ * @returns Sync context wrapper element
  */
 export function PreferenceSync({ children }: { children: ReactNode }) {
   const { status } = useAuth();

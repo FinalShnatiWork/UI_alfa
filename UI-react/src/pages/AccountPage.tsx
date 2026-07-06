@@ -7,12 +7,25 @@ import { Skeleton } from '@/components/Skeleton';
 import { useBrokerOverview, useAuthMe } from '@/hooks/useApi';
 import { useLogout } from '@/hooks/useLogout';
 
+/**
+ * Formatting utility to return a dash symbol if string is null or empty.
+ *
+ * @param value raw input value
+ * @returns formatted string or dash
+ */
 function displayOrDash(value: unknown): string {
   if (value == null) return '—';
   const s = String(value).trim();
   return s || '—';
 }
 
+/**
+ * Account page displaying currently logged-in user profile attributes,
+ * security credentials, and registration files.
+ * The goal of this page is to view user personal credentials and log out.
+ *
+ * @returns Account view page element
+ */
 export function AccountPage() {
   const { t } = useI18n();
   const toast = useToast();

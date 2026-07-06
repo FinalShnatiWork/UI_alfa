@@ -10,9 +10,19 @@ import org.springframework.web.servlet.resource.PathResourceResolver;
 
 import java.io.IOException;
 
+/**
+ * MVC Configuration for SPA (Single Page Application) routing.
+ * Ensures that requests for frontend paths resolve correctly to index.html.
+ */
 @Configuration
 public class SpaRoutingConfig implements WebMvcConfigurer {
 
+  /**
+   * Sets up handlers to resolve static resources, falling back to index.html if resource is not found.
+   * This facilitates HTML5 history API navigation routing.
+   *
+   * @param registry resource handlers registry helper
+   */
   @Override
   public void addResourceHandlers(ResourceHandlerRegistry registry) {
     registry
@@ -20,6 +30,14 @@ public class SpaRoutingConfig implements WebMvcConfigurer {
         .addResourceLocations("classpath:/static/")
         .resourceChain(true)
         .addResolver(new PathResourceResolver() {
+          /**
+           * Resolves requested resource location path. Fallback to static index.html.
+           *
+           * @param resourcePath the relative resource file path
+           * @param location the base resource directory location
+           * @return resolved Resource object
+           * @throws IOException if file access fails
+           */
           @Override
           protected Resource getResource(String resourcePath, Resource location) throws IOException {
             Resource requested = location.createRelative(resourcePath);
@@ -30,6 +48,15 @@ public class SpaRoutingConfig implements WebMvcConfigurer {
             return new ClassPathResource("/static/index.html");
           }
 
+          /**
+           * Resolves resource from request path and list of locations.
+           *
+           * @param request current http servlet request
+           * @param requestPath the path of resource requested
+           * @param locations candidate static directory resource locations
+           * @param chain the resource resolver chain to proceed with
+           * @return resolved Resource object
+           */
           @Override
           protected Resource resolveResourceInternal(
               HttpServletRequest request, String requestPath, java.util.List<? extends Resource> locations,

@@ -10,6 +10,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Core service class for executing and managing limit, stop, and market orders.
+ * Feeds live pricing quotes, executes orders when conditions match, recalculates accounts equity,
+ * calls the Python NN model advisor, and routes orders either internally or forwards them to the MT5 bridge.
+ */
 @Service
 public class OrderExecutionService {
   private final TradingAccountRepository accountRepo;
@@ -25,6 +30,19 @@ public class OrderExecutionService {
   @Autowired @Lazy
   private OrderExecutionService self;
 
+  /**
+   * Constructs the OrderExecutionService with required components.
+   *
+   * @param accountRepo database trading account repository
+   * @param positionRepo database position repository
+   * @param orderRepo database order repository
+   * @param fillRepo database trade fill repository
+   * @param notificationRepo database notification alerts repository
+   * @param symbolRepo database symbols configuration repository
+   * @param mt5Service MetaTrader 5 service integration
+   * @param priceService general market price aggregator
+   * @param nnPredictorClient Neural Network server client adapter
+   */
   public OrderExecutionService(
       TradingAccountRepository accountRepo,
       PositionRepository positionRepo,
@@ -46,6 +64,10 @@ public class OrderExecutionService {
     this.nnPredictorClient = nnPredictorClient;
   }
 
+  /**
+   * Periodic scheduler tick running every 2 seconds.
+   * Scans for pending NEW orders and attempts execution.
+   */
   @Scheduled(fixedDelay = 2000)
   public void tick() {
     List<BrokerOrder> open = orderRepo.findTop50ByStatusOrderByCreatedAtAsc("NEW");
@@ -56,6 +78,11 @@ public class OrderExecutionService {
     }
   }
 
+  /**
+   * Attempts to execute a specific order by loading live price quotes and validating order fill conditions.
+   *
+   * @param orderId the order database ID
+   */
   @Transactional
   public void tryExecute(Long orderId) {
     BrokerOrder order = orderRepo.findById(orderId).orElse(null);
@@ -93,6 +120,14 @@ public class OrderExecutionService {
     executeFilled(order, last);
   }
 
+  /**
+   * Helper to verify if the limit order criteria match the current live price.
+   *
+   * @param o limit order
+   * @param side BUY or SELL side
+   * @param last last live quote
+   * @return true if order must be filled, false otherwise
+   */
   private static boolean shouldFillLimit(BrokerOrder o, String side, BigDecimal last) {
     BigDecimal limit = o.getLimitPrice();
     if (limit == null) return false;
@@ -101,6 +136,14 @@ public class OrderExecutionService {
     return false;
   }
 
+  /**
+   * Helper to verify if the stop order criteria match the current live price.
+   *
+   * @param o stop order
+   * @param side BUY or SELL side
+   * @param last last live quote
+   * @return true if order must be filled, false otherwise
+   */
   private static boolean shouldFillStop(BrokerOrder o, String side, BigDecimal last) {
     BigDecimal stop = o.getStopPrice();
     if (stop == null) return false;
@@ -109,67 +152,60 @@ public class OrderExecutionService {
     return false;
   }
 
+  /**
+   * Core logic that fills the matched order.
+   * Deducts funds/collateral, updates balance, creates position record, queries the AI advisor,
+   * logs the fill, and forwards to MT5 if internal AI matching is skipped.
+   *
+   * @param order the matched order entity
+   * @param price the actual execution price quote
+   */
   private void executeFilled(BrokerOrder order, BigDecimal price) {
     TradingAccount ta = order.getTradingAccount();
     ta = accountRepo.findByIdForUpdate(ta.getId()).orElseThrow();
 
     BigDecimal qty = order.getQuantity();
-    BigDecimal notional = price.multiply(qty);
-
-    Position pos = positionRepo.findByTradingAccountIdAndSymbolCodeForUpdate(ta.getId(), order.getSymbolCode()).orElse(null);
+    BigDecimal contractSize = BrokerApiController.getContractSize(order.getSymbolCode());
+    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
+    BigDecimal margin = price.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
     BigDecimal orderEntryPrice = price;
-    BigDecimal orderRealizedPnl = null;
+    BigDecimal orderRealizedPnl = BigDecimal.ZERO;
 
     if ("BUY".equalsIgnoreCase(order.getSide())) {
-      // Funds were already reserved (deducted) when the order was placed.
-      // Refund the reserved amount and deduct the actual fill price to handle price differences.
+      // Regular LONG BUY - Refund reserved funds, then deduct actual cost
       BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
           : (order.getStopPrice() != null ? order.getStopPrice() : price);
-      BigDecimal reserved = reservedPrice.multiply(qty);
-      BigDecimal actual = notional;
-      // Adjust balance: refund reserved, deduct actual fill cost
-      ta.setBalance(ta.getBalance().add(reserved).subtract(actual));
+      BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      ta.setBalance(ta.getBalance().add(reserved).subtract(margin));
 
-      if (pos == null) {
-        pos = new Position();
-        pos.setTradingAccount(ta);
-        pos.setSymbolCode(order.getSymbolCode());
-        pos.setQuantity(BigDecimal.ZERO);
-        pos.setOpenedAt(Instant.now());
-      }
-      BigDecimal prevQty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
-      BigDecimal prevAvg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-      BigDecimal newQty = prevQty.add(qty);
-      BigDecimal newAvg = prevQty.compareTo(BigDecimal.ZERO) == 0 ? price :
-          prevAvg.multiply(prevQty).add(price.multiply(qty)).divide(newQty, 8, RoundingMode.HALF_UP);
-      pos.setQuantity(newQty);
-      pos.setAvgPrice(newAvg);
-      pos.setUnrealizedPnl(price.subtract(newAvg).multiply(newQty));
-      positionRepo.save(pos);
-    } else { // SELL
-      BigDecimal prevQty = pos == null || pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
-      if (prevQty.compareTo(qty) < 0) {
-        order.setStatus("REJECTED");
-        orderRepo.save(order);
-        return;
-      }
-      BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-      BigDecimal realizedDelta = price.subtract(avg).multiply(qty);
-      BigDecimal realized = pos.getRealizedPnl() == null ? BigDecimal.ZERO : pos.getRealizedPnl();
-      pos.setRealizedPnl(realized.add(realizedDelta));
-      BigDecimal newQty = prevQty.subtract(qty);
-      pos.setQuantity(newQty);
-      if (newQty.compareTo(BigDecimal.ZERO) == 0) pos.setAvgPrice(null);
-      positionRepo.save(pos);
-      orderEntryPrice = avg;
-      orderRealizedPnl = realizedDelta;
-      // Credit proceeds to balance
-      ta.setBalance(ta.getBalance().add(notional));
+      Position longPos = openNewPosition(ta, order.getSymbolCode(), "LONG", qty, price);
+      positionRepo.save(longPos);
+    } else { // SELL order
+      // SELL-SHORT (open new SHORT position) - Refund reserved funds, then lock actual collateral
+      BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
+          : (order.getStopPrice() != null ? order.getStopPrice() : price);
+      BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      ta.setBalance(ta.getBalance().add(reserved).subtract(margin));
+
+      Position shortPos = openNewPosition(ta, order.getSymbolCode(), "SHORT", qty, price);
+      positionRepo.save(shortPos);
     }
 
-    ta.setEquity(ta.getBalance());
+    ta.setEquity(recalcEquity(ta));
     ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
     accountRepo.save(ta);
+
+    try {
+      Notification notif = new Notification();
+      notif.setUser(ta.getUser());
+      notif.setNotifType("TRADE");
+      notif.setTitle("notification.tradeOpened.title");
+      notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\"}", 
+          order.getSide(), qty.doubleValue(), order.getSymbolCode(), price.doubleValue()));
+      notificationRepo.save(notif);
+    } catch (Exception e) {
+      System.err.println("Failed to create notification: " + e.getMessage());
+    }
 
     order.setStatus("FILLED");
     order.setFilledAt(Instant.now());
@@ -272,5 +308,41 @@ public class OrderExecutionService {
     } else {
         System.out.println("AI Advisor matching: Routed order #" + order.getId() + " internally. Skipped external MT5 routing.");
     }
+  }
+
+  /**
+   * Recalculates the equity value of a trading account by summing balance and active unrealized P/L.
+   *
+   * @param ta the trading account
+   * @return total computed equity value
+   */
+  private BigDecimal recalcEquity(TradingAccount ta) {
+    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
+    BigDecimal totalUnrealized = positions.stream()
+        .map(p -> p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl())
+        .reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
+    return ta.getBalance().add(totalUnrealized);
+  }
+
+  /**
+   * Factory method to build a new Position instance.
+   *
+   * @param ta trading account
+   * @param symbolCode asset symbol
+   * @param side position side (LONG or SHORT)
+   * @param qty asset volume quantity
+   * @param fillPrice entry rate price
+   * @return populated Position entity
+   */
+  private Position openNewPosition(TradingAccount ta, String symbolCode, String side, BigDecimal qty, BigDecimal fillPrice) {
+    Position pos = new Position();
+    pos.setTradingAccount(ta);
+    pos.setSymbolCode(symbolCode);
+    pos.setSide(side);
+    pos.setQuantity(qty);
+    pos.setAvgPrice(fillPrice);
+    pos.setUnrealizedPnl(BigDecimal.ZERO);
+    pos.setOpenedAt(Instant.now());
+    return pos;
   }
 }

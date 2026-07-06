@@ -13,6 +13,11 @@ export interface UserProfile {
   [extra: string]: unknown;
 }
 
+/**
+ * Retrieves the cached client-side user profile information from localStorage.
+ *
+ * @returns UserProfile object or null if none is saved/parse error occurs
+ */
 export function getUserProfile(): UserProfile | null {
   try {
     const raw = localStorage.getItem(USER_PROFILE_KEY);
@@ -24,7 +29,12 @@ export function getUserProfile(): UserProfile | null {
   }
 }
 
-// Saves registration fields. Never stores passwords. Assigns a UID on first save.
+/**
+ * Saves profile data to local state (for offline support) and guarantees a unique UID.
+ *
+ * @param data partial profile fields to merge
+ * @returns updated full UserProfile object
+ */
 export function saveUserProfile(data: Partial<UserProfile>): UserProfile {
   const prev = getUserProfile() ?? {};
   const uid =

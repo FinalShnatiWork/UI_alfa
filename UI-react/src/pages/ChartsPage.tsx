@@ -4,18 +4,18 @@ import {
   CandlestickSeries, HistogramSeries,
   type IChartApi, type ISeriesApi, type UTCTimestamp,
 } from 'lightweight-charts';
-import { apiPostJson } from '@/lib/api';
+import { apiPostJson, getContractSize } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
-import { usePositions, useBrokerOverview, useInvalidateAfterTrade } from '@/hooks/useApi';
-import type { PlaceOrderResponse } from '@/types/api';
+import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices } from '@/hooks/useApi';
+import type { PlaceOrderResponse, ClosePositionResponse } from '@/types/api';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const BINANCE_PREFIX = 'https://api.binance.com';
-const BINANCE_WS = 'wss://stream.binance.com:443/ws';
-const STOCK_POLL_MS = 10_000;
+const BYBIT_KLINES_URL = 'https://api.bybit.com/v5/market/kline';
+const BYBIT_WS = 'wss://stream.bybit.com/v5/public/linear';
+const STOCK_POLL_MS = 5000;
 const FETCH_TIMEOUT_MS = 10_000;
 
 type Category = 'forex' | 'metals' | 'crypto';
@@ -47,7 +47,7 @@ const CATEGORY_CONFIG: Record<Category, { instruments: Instrument[]; source: str
     ],
   },
   crypto: {
-    source: 'binance',
+    source: 'bybit',
     instruments: [
       { id: 'SOLUSD', title: 'SOLUSD', decimals: 2 },
       { id: 'BTCUSD', title: 'BTCUSD', decimals: 2 },
@@ -66,14 +66,12 @@ const INTERVAL_SECONDS: Record<Interval, number> = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function mapToBinanceSymbol(s: string): string {
+function mapToBybitSymbol(s: string): string {
   const u = s.toUpperCase();
   const MAP: Record<string, string> = {
     BTCUSD: 'BTCUSDT', ETHUSD: 'ETHUSDT', SOLUSD: 'SOLUSDT', XRPUSD: 'XRPUSDT',
-    EURUSD: 'EURUSDT', GBPUSD: 'GBPUSDT', NZDUSD: 'NZDUSDT', USDJPY: 'JPYUSDT',
-    USDCAD: 'USDCUSDT', XAUUSD: 'XAUTUSDT', XAGUSD: 'XAGUSDT',
   };
-  return MAP[u] ?? u;
+  return MAP[u] ?? (u.endsWith('USD') ? u + 'T' : u);
 }
 
 function mulberry32(seed: number) {
@@ -166,19 +164,26 @@ async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Prom
   finally { clearTimeout(timer); }
 }
 
-async function fetchBinanceKlines(symbol: string, intervalKey: Interval): Promise<Candle[]> {
-  const mapped = mapToBinanceSymbol(symbol);
-  const url = `${BINANCE_PREFIX}/api/v3/klines?symbol=${encodeURIComponent(mapped)}&interval=${intervalKey}&limit=500`;
+async function fetchBybitKlines(symbol: string, intervalKey: Interval): Promise<Candle[]> {
+  const mapped = mapToBybitSymbol(symbol);
+  const ivMap: Record<Interval, string> = {
+    '1m': '1', '5m': '5', '1h': '60', '4h': '240',
+    '1d': 'D', '1w': 'W', '1M': 'M',
+  };
+  const iv = ivMap[intervalKey] || '60';
+  const url = `${BYBIT_KLINES_URL}?category=linear&symbol=${encodeURIComponent(mapped)}&interval=${iv}&limit=500`;
   const res = await fetchWithTimeout(url);
-  if (!res.ok) throw new Error(`Binance ${res.status}`);
-  const raw = await res.json() as unknown[][];
-  return raw.map(k => ({
+  if (!res.ok) throw new Error(`Bybit ${res.status}`);
+  const data = await res.json();
+  const list = data.result?.list;
+  if (!Array.isArray(list)) throw new Error('Invalid Bybit data');
+  return list.map(k => ({
     time: Math.floor(Number(k[0]) / 1000) as UTCTimestamp,
-    open: parseFloat(String(k[1])),
-    high: parseFloat(String(k[2])),
-    low: parseFloat(String(k[3])),
-    close: parseFloat(String(k[4])),
-  }));
+    open: parseFloat(k[1]),
+    high: parseFloat(k[2]),
+    low: parseFloat(k[3]),
+    close: parseFloat(k[4]),
+  })).sort((a, b) => a.time - b.time);
 }
 
 async function fetchYahooCandles(symbol: string, intervalKey: Interval, category: Category): Promise<Candle[]> {
@@ -215,7 +220,7 @@ function chartColors() {
       horzLine: { color: light ? 'rgba(15,23,42,0.35)' : 'rgba(234,179,8,0.5)', labelBackgroundColor: light ? '#1e293b' : '#ca8a04' },
     },
     rightPriceScale: { borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)', scaleMargins: { top: 0.08, bottom: 0.22 }, autoScale: true },
-    timeScale: { borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)', barSpacing: 8, minBarSpacing: 2, fixLeftEdge: true, fixRightEdge: true, rightOffset: 3 },
+    timeScale: { borderColor: light ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.08)', barSpacing: 8, minBarSpacing: 2, fixLeftEdge: false, fixRightEdge: false, rightOffset: 15 },
     handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: { time: true, price: true }, mouseWheel: true, pinch: true },
   };
@@ -230,6 +235,14 @@ function fmtP(n: unknown): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+/**
+ * Charts Page rendering real-time interactive asset charts (via TradingView Lightweight Charts).
+ * Provides trading forms for placing MARKET and LIMIT orders, selecting quantity lot volume,
+ * take profit, stop loss, and invoking the Neural Network Routing Advisor.
+ * The goal of this page is to view charts, analyze technical metrics, and execute trades.
+ *
+ * @returns Charts view page component
+ */
 export function ChartsPage() {
   const { t } = useI18n();
   const toast = useToast();
@@ -258,16 +271,63 @@ export function ChartsPage() {
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [volume, setVolume] = useState('1.00');
   const [entryPrice, setEntryPrice] = useState('');
-  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+  const [chartLivePrices, setChartLivePrices] = useState<Record<string, number>>({});
 
   // Shared data via React Query — same cache as Dashboard and Positions pages
   const { data: overviewData } = useBrokerOverview();
   const { data: positionsData, isLoading: posLoading } = usePositions();
   const invalidateAfterTrade = useInvalidateAfterTrade();
 
+  // Manage drawing active LIMIT order price line on the chart
+  const priceLineRef = useRef<any>(null);
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    
+    // Always clear existing line first
+    if (priceLineRef.current) {
+      try {
+        seriesRef.current.removePriceLine(priceLineRef.current);
+      } catch { /* */ }
+      priceLineRef.current = null;
+    }
+
+    if (orderType === 'LIMIT' && entryPrice) {
+      const priceVal = parseFloat(entryPrice);
+      if (priceVal > 0 && !isNaN(priceVal)) {
+        try {
+          priceLineRef.current = seriesRef.current.createPriceLine({
+            price: priceVal,
+            color: '#ca8a04', // Yellow color matching the "Limit" active button
+            lineWidth: 2,
+            lineStyle: 2, // Dashed line style
+            axisLabelVisible: true,
+            title: `${t('trading.limit') || 'Limit'} @ ${priceVal.toFixed(4)}`,
+          });
+        } catch (e) {
+          console.error("Failed to create price line on chart", e);
+        }
+      }
+    }
+
+    return () => {
+      if (priceLineRef.current && seriesRef.current) {
+        try {
+          seriesRef.current.removePriceLine(priceLineRef.current);
+        } catch { /* */ }
+        priceLineRef.current = null;
+      }
+    };
+  }, [orderType, entryPrice, seriesRef.current, t]);
+
   const positions = (Array.isArray(positionsData) ? positionsData : []).filter(
     (p) => Number(p.quantity ?? 0) !== 0,
   );
+
+  const queryLivePrices = useLivePrices(positions.map((p) => p.symbolCode));
+  const livePrices = {
+    ...queryLivePrices,
+    ...chartLivePrices,
+  };
   const balance = overviewData
     ? '$' + Number(overviewData.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
     : '—';
@@ -358,7 +418,7 @@ export function ChartsPage() {
     setLiveChange(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
     setLiveChangePct(pct);
     // Keep live price map updated so positions table reflects chart feed
-    setLivePrices(prev => ({ ...prev, [instr.id]: close }));
+    setChartLivePrices(prev => ({ ...prev, [instr.id.toUpperCase()]: close }));
   }
 
   const loadChart = useCallback(async (cat: Category, sym: string, iv: Interval) => {
@@ -373,30 +433,53 @@ export function ChartsPage() {
     const fadeIn = () => { if (mountRef.current) mountRef.current.style.opacity = '1'; };
 
     try {
-      if (source === 'binance') {
+      if (source === 'bybit') {
         let data: Candle[];
         let restOk = true;
-        try { data = await fetchBinanceKlines(sym, iv); }
+        try { data = await fetchBybitKlines(sym, iv); }
         catch { restOk = false; data = syntheticCandles(sym, iv); }
         if (gen !== liveGenRef.current) return;
         setChartData(data); chartRef.current?.timeScale().fitContent(); fadeIn();
         const last = data[data.length - 1];
         if (last) updateBidAsk(instr, last.close);
-        setStatus(restOk ? t('charts.liveBinance') : t('charts.binanceSlow'));
+        setStatus(restOk ? (t('charts.liveBybit') || 'Live (Bybit)') : t('charts.binanceSlow'));
 
-        const mapped = mapToBinanceSymbol(sym).toLowerCase();
-        const ws = new WebSocket(`${BINANCE_WS}/${mapped}@kline_${iv}`);
+        const mappedSym = mapToBybitSymbol(sym);
+        const ivMap: Record<Interval, string> = {
+          '1m': '1', '5m': '5', '1h': '60', '4h': '240',
+          '1d': 'D', '1w': 'W', '1M': 'M',
+        };
+        const mappedIv = ivMap[iv] || '60';
+
+        const ws = new WebSocket(BYBIT_WS);
         wsRef.current = ws;
+        ws.onopen = () => {
+          if (gen === liveGenRef.current) {
+            setStatus(t('charts.liveBybit') || 'Live (Bybit)');
+            ws.send(JSON.stringify({
+              op: 'subscribe',
+              args: [`kline.${mappedIv}.${mappedSym}`]
+            }));
+          }
+        };
         ws.onmessage = (ev) => {
           if (gen !== liveGenRef.current) return;
           try {
-            const msg = JSON.parse(ev.data as string) as { k: Record<string, string> };
-            const k = msg.k;
-            const bar: Candle = { time: Math.floor(Number(k.t) / 1000) as UTCTimestamp, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v };
-            updateBar(bar); updateBidAsk(instr, bar.close);
+            const msg = JSON.parse(ev.data as string);
+            if (msg.topic && msg.data && msg.data[0]) {
+              const k = msg.data[0];
+              const bar: Candle = {
+                time: Math.floor(Number(k.start) / 1000) as UTCTimestamp,
+                open: parseFloat(k.open),
+                high: parseFloat(k.high),
+                low: parseFloat(k.low),
+                close: parseFloat(k.close),
+              };
+              updateBar(bar);
+              updateBidAsk(instr, bar.close);
+            }
           } catch { /* */ }
         };
-        ws.onopen = () => { if (gen === liveGenRef.current) setStatus(t('charts.liveBinance')); };
         ws.onclose = () => {
           if (gen !== liveGenRef.current || wsRef.current !== ws) return;
           wsRef.current = null;
@@ -426,6 +509,32 @@ export function ChartsPage() {
           updateBar(currentBar);
         }
 
+        let lastPriceVal = realPrice || (lastYahoo ? lastYahoo.close : defaultPrice(sym));
+
+        const tickPrice = () => {
+          if (gen !== liveGenRef.current) return;
+          // Generate a tiny random walk around the last price
+          const jitterPercent = sym.includes('XAU') ? 0.00012 : 0.00004;
+          const change = (Math.random() - 0.5) * lastPriceVal * jitterPercent;
+          const price = lastPriceVal + change;
+          lastPriceVal = price;
+
+          updateBidAsk(instr, price);
+          const sec2 = INTERVAL_SECONDS[iv] ?? 3600;
+          const bucket = Math.floor(Math.floor(Date.now() / 1000) / sec2) * sec2;
+          if (!currentBar || bucket > currentBar.time) {
+            currentBar = { time: bucket as UTCTimestamp, open: price, high: price, low: price, close: price };
+          } else {
+            currentBar.high = Math.max(currentBar.high, price);
+            currentBar.low = Math.min(currentBar.low, price);
+            currentBar.close = price;
+          }
+          updateBar(currentBar);
+        };
+
+        // Start real-time sub-second micro-tick updates (every 500ms)
+        synthTickRef.current = setInterval(tickPrice, 500);
+
         const pollPrice = async () => {
           if (gen !== liveGenRef.current) return;
           try {
@@ -433,20 +542,12 @@ export function ChartsPage() {
             const pd = r2.ok ? await r2.json() as { price?: number } : null;
             if (pd?.price) {
               const price = Number(pd.price);
-              updateBidAsk(instr, price);
-              const sec2 = INTERVAL_SECONDS[iv] ?? 3600;
-              const bucket = Math.floor(Math.floor(Date.now() / 1000) / sec2) * sec2;
-              if (!currentBar || bucket > currentBar.time) {
-                currentBar = { time: bucket as UTCTimestamp, open: price, high: price, low: price, close: price };
-              } else {
-                currentBar.high = Math.max(currentBar.high, price);
-                currentBar.low = Math.min(currentBar.low, price);
-                currentBar.close = price;
-              }
-              updateBar(currentBar);
+              // Nudge lastPriceVal gently towards real market price
+              lastPriceVal = (lastPriceVal * 0.2) + (price * 0.8);
             }
           } catch { /* */ }
         };
+        // Sync with backend every 5 seconds
         stockPollRef.current = setInterval(pollPrice, STOCK_POLL_MS);
       }
     } catch {
@@ -487,7 +588,7 @@ export function ChartsPage() {
           const res = await fetch(`/api/market/price/${encodeURIComponent(sym)}`);
           if (res.ok) {
             const d = await res.json() as { price?: number };
-            if (d?.price) setLivePrices((prev) => ({ ...prev, [sym]: Number(d.price) }));
+            if (d?.price) setChartLivePrices((prev) => ({ ...prev, [sym.toUpperCase()]: Number(d.price) }));
           }
         } catch { /* */ }
       }),
@@ -519,12 +620,12 @@ export function ChartsPage() {
     } catch { toast.show(t('trading.errOrderFailed'), { variant: 'error' }); }
   }
 
-  async function closeInlinePosition(sym: string, qty: number) {
+  async function closeInlinePosition(id: number, sym: string) {
     try {
-      const res = await apiPostJson('/api/broker/orders', { side: 'SELL', symbolCode: sym, quantity: qty, orderType: 'MARKET' });
-      const data = await res.json() as PlaceOrderResponse;
-      if (data.ok) {
-        toast.show(t('alerts.closeOk', { symbol: sym }) + (data.fillPrice ? ` @ ${data.fillPrice}` : ''), { variant: 'success' });
+      const res = await apiPostJson(`/api/broker/positions/${id}/close`, {});
+      const data = await res.json() as ClosePositionResponse;
+      if (res.ok && data.ok) {
+        toast.show(t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : ''), { variant: 'success' });
         invalidateAfterTrade();
       } else {
         toast.show(t('alerts.closeFail'), { variant: 'error' });
@@ -652,20 +753,19 @@ export function ChartsPage() {
                 </div>
               </div>
 
-              {/* Entry price (limit only) */}
-              {orderType !== 'MARKET' && (
-                <div className="form-group">
-                  <label>{t('trading.entryPrice')}</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    placeholder={t('trading.placeholderPrice')}
-                    step="0.0001"
-                    value={entryPrice}
-                    onChange={(e) => setEntryPrice(e.target.value)}
-                  />
-                </div>
-              )}
+              {/* Entry price */}
+              <div className="form-group">
+                <label>{t('trading.entryPrice')}</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  disabled={orderType === 'MARKET'}
+                  style={orderType === 'MARKET' ? { opacity: 0.65, cursor: 'not-allowed', backgroundColor: 'var(--bg-alt)' } : undefined}
+                  placeholder={orderType === 'MARKET' ? livePrice : t('trading.placeholderPrice')}
+                  value={orderType === 'MARKET' ? livePrice : entryPrice}
+                  onChange={(e) => { if (orderType !== 'MARKET') setEntryPrice(e.target.value); }}
+                />
+              </div>
 
               {/* Volume */}
               <div className="form-group mt-16">
@@ -732,8 +832,8 @@ export function ChartsPage() {
                   positions.map((p) => {
                     const qty = Number(p.quantity ?? 0);
                     const avg = Number(p.avgPrice ?? 0);
-                    const live = livePrices[p.symbolCode];
-                    const pnl = live ? (live - avg) * qty : Number(p.unrealizedPnl ?? 0);
+                    const live = livePrices[p.symbolCode.toUpperCase()];
+                    const pnl = live ? (p.side === 'SHORT' ? -1 : 1) * (live - avg) * qty * getContractSize(p.symbolCode) : Number(p.unrealizedPnl ?? 0);
                     const pnlColor = pnl >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
                     return (
                       <tr key={p.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
@@ -751,7 +851,7 @@ export function ChartsPage() {
                         </td>
                         <td className="center">
                           <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                            onClick={() => void closeInlinePosition(p.symbolCode, qty)}>✕</button>
+                            onClick={() => void closeInlinePosition(p.id, p.symbolCode)}>✕</button>
                         </td>
                       </tr>
                     );

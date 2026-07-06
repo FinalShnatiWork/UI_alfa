@@ -9,6 +9,11 @@ if (savedTheme) {
   document.documentElement.setAttribute('data-theme', savedTheme);
 }
 
+/**
+ * Initial bootstrapper file for the React client application.
+ * Restores the persisted styling theme from localStorage before render,
+ * verifies DOM root container presence, and mounts the React application under StrictMode.
+ */
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');
 

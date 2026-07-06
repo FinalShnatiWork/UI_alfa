@@ -27,38 +27,52 @@ interface PairedTrade {
 // Returns only completed pairs (SELL side).
 
 function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
-  const bySymbol: Record<string, { buys: BrokerOrder[]; sells: BrokerOrder[] }> = {};
+  // Sort all orders by date ascending
+  const sorted = [...orders].sort(
+    (a, b) => ts(a.filledAt || a.createdAt) - ts(b.filledAt || b.createdAt)
+  );
 
-  for (const o of orders) {
-    if (!bySymbol[o.symbolCode]) bySymbol[o.symbolCode] = { buys: [], sells: [] };
-    if (o.side === 'BUY') bySymbol[o.symbolCode].buys.push(o);
-    else bySymbol[o.symbolCode].sells.push(o);
-  }
+  const closing = sorted.filter(
+    (o) => o.realizedPnl != null && Number(o.realizedPnl) !== 0
+  );
+  const opening = sorted.filter(
+    (o) => o.realizedPnl == null || Number(o.realizedPnl) === 0
+  );
 
+  const usedOpeningIds = new Set<number>();
   const pairs: PairedTrade[] = [];
 
-  for (const sym of Object.keys(bySymbol)) {
-    const buys = [...bySymbol[sym].buys].sort(
-      (a, b) => ts(a.filledAt || a.createdAt) - ts(b.filledAt || b.createdAt),
-    );
-    const sells = [...bySymbol[sym].sells].sort(
-      (a, b) => ts(a.filledAt || a.createdAt) - ts(b.filledAt || b.createdAt),
-    );
+  for (const sell of closing) {
+    let openPrice = sell.openPrice;
+    let openTime = sell.openedAt;
 
-    sells.forEach((sell, i) => {
-      const buy = buys[i];
-      pairs.push({
-        id: sell.id,
-        symbolCode: sym,
-        quantity: sell.quantity,
-        openTime: buy?.filledAt || buy?.createdAt,
-        openPrice: buy?.entryPrice,
-        closeTime: sell.filledAt || sell.createdAt,
-        closePrice: sell.entryPrice,
-        stopLoss: buy?.stopLoss,
-        takeProfit: buy?.takeProfit,
-        realizedPnl: sell.realizedPnl,
-      });
+    // Fallback if openPrice or openTime is missing (mock/legacy trades)
+    if (!openPrice || !openTime) {
+      const openSide = sell.side === 'SELL' ? 'BUY' : 'SELL';
+      const match = opening.find(
+        (o) =>
+          o.symbolCode === sell.symbolCode &&
+          o.side === openSide &&
+          !usedOpeningIds.has(o.id)
+      );
+      if (match) {
+        openPrice = openPrice || match.entryPrice;
+        openTime = openTime || match.filledAt || match.createdAt;
+        usedOpeningIds.add(match.id);
+      }
+    }
+
+    pairs.push({
+      id: sell.id,
+      symbolCode: sell.symbolCode,
+      quantity: sell.quantity,
+      openTime: openTime,
+      openPrice: openPrice,
+      closeTime: sell.filledAt || sell.createdAt,
+      closePrice: sell.entryPrice,
+      stopLoss: sell.stopLoss,
+      takeProfit: sell.takeProfit,
+      realizedPnl: sell.realizedPnl,
     });
   }
 
@@ -129,6 +143,14 @@ function exportCsv(trades: PairedTrade[], currency: string, locale: string) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+/**
+ * History Page displaying closed paired trades and ledger metrics.
+ * Provides custom date range and asset filters, win-rate metrics, CSV exports,
+ * and lists details of closed positions (entry price, close price, realized P/L).
+ * The goal of this page is to summarize user trade execution performance over time.
+ *
+ * @returns History page view layout
+ */
 export function HistoryPage() {
   const { t, lang } = useI18n();
   const toast = useToast();

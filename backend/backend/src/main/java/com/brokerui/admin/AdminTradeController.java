@@ -26,6 +26,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * REST controller for administrator functions, including server control,
+ * MT5 bridge connection management, viewing system-wide accounts, trades,
+ * audits, transactions, and updating account balances.
+ */
 @RestController
 @CrossOrigin
 @RequestMapping("/api/admin")
@@ -41,6 +46,19 @@ public class AdminTradeController {
   private final MT5ConnectionManager mt5ConnectionManager;
   private final ApplicationContext applicationContext;
 
+  /**
+   * Constructs the AdminTradeController with required repositories and services.
+   *
+   * @param orderRepo the repository for orders
+   * @param positionRepo the repository for open positions
+   * @param accountRepo the repository for trading accounts
+   * @param transactionRepo the repository for ledger transactions
+   * @param kycRepo the repository for KYC/verification cases
+   * @param notifRepo the repository for user alerts/notifications
+   * @param auditRepo the repository for system audit logs
+   * @param mt5ConnectionManager the manager for MT5 bridge socket connectivity
+   * @param applicationContext the Spring application context
+   */
   public AdminTradeController(BrokerOrderRepository orderRepo, PositionRepository positionRepo,
         TradingAccountRepository accountRepo, AccountTransactionRepository transactionRepo,
         KycCaseRepository kycRepo, NotificationRepository notifRepo,
@@ -61,6 +79,8 @@ public class AdminTradeController {
    * Gracefully shuts down the JVM after a short delay.
    * The OS process manager (or the .bat start script) should relaunch it.
    * The frontend polls /api/health until the server is back online.
+   *
+   * @return a map confirming the restart action has been initiated
    */
   @PostMapping("/server/restart")
   public Map<String, String> restartServer() {
@@ -79,6 +99,12 @@ public class AdminTradeController {
 
   public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting) {}
 
+  /**
+   * Retrieves all trades (orders and active positions) in the system.
+   * The goal is to provide a combined historical view for admin oversight.
+   *
+   * @return a list of all orders and open positions mapped to a unified DTO
+   */
   @GetMapping("/trades")
   public List<TradeDto> getAllTrades() {
     List<TradeDto> orders = orderRepo.findAll().stream()
@@ -100,7 +126,7 @@ public class AdminTradeController {
           p.getTradingAccount().getUser().getId(),
           "POSITION", 
           p.getSymbolCode(), 
-          "OPEN", 
+          "LONG".equalsIgnoreCase(p.getSide()) ? "BUY" : "SELL", 
           p.getQuantity(), 
           "ACTIVE", 
           p.getOpenedAt(),
@@ -113,6 +139,12 @@ public class AdminTradeController {
 
   public record AccountDto(Long id, Long userId, String accountType, String currency, int leverage, String status, BigDecimal balance, BigDecimal equity, BigDecimal marginUsed, BigDecimal freeMargin) {}
 
+  /**
+   * Retrieves all trading accounts in the system.
+   * The goal is to audit user balances, margins, and account settings.
+   *
+   * @return a list of all trading accounts mapped to their summary DTOs
+   */
   @GetMapping("/accounts")
   public List<AccountDto> getAccounts() {
     return accountRepo.findAll().stream()
@@ -122,6 +154,12 @@ public class AdminTradeController {
 
   public record TransactionDto(Long id, Long accountId, String txType, String status, BigDecimal amount, String currency, String method, Instant createdAt) {}
 
+  /**
+   * Retrieves all deposit and withdrawal transactions in the system.
+   * The goal is to provide financial auditing logs.
+   *
+   * @return a list of all ledger transactions
+   */
   @GetMapping("/transactions")
   public List<TransactionDto> getTransactions() {
     return transactionRepo.findAll().stream()
@@ -131,6 +169,12 @@ public class AdminTradeController {
 
   public record KycDto(Long id, Long userId, String status, Instant submittedAt, Instant reviewedAt, String note) {}
 
+  /**
+   * Retrieves all KYC/verification submissions.
+   * The goal is to support administrative verification approvals.
+   *
+   * @return a list of all KYC cases
+   */
   @GetMapping("/kyc")
   public List<KycDto> getKyc() {
     return kycRepo.findAll().stream()
@@ -140,6 +184,12 @@ public class AdminTradeController {
 
   public record NotifDto(Long id, Long userId, String notifType, String title, String body, boolean read, Instant createdAt) {}
 
+  /**
+   * Retrieves all system-wide user alerts/notifications.
+   * The goal is to audit notifications sent to client dashboards.
+   *
+   * @return a list of all user notifications
+   */
   @GetMapping("/notifications")
   public List<NotifDto> getNotifications() {
     return notifRepo.findAll().stream()
@@ -149,6 +199,12 @@ public class AdminTradeController {
 
   public record AuditDto(Long id, Long userId, String action, String detail, String ip, Instant createdAt) {}
 
+  /**
+   * Retrieves security audit logs.
+   * The goal is to trace actions, logins, and system configuration modifications.
+   *
+   * @return a list of all system audit logs
+   */
   @GetMapping("/audit")
   public List<AuditDto> getAuditLog() {
     return auditRepo.findAll().stream()
@@ -156,6 +212,12 @@ public class AdminTradeController {
       .collect(Collectors.toList());
   }
 
+  /**
+   * Checks the health and connection status of the MT5 server bridge.
+   * Attempting auto-connection if reachable but disconnected.
+   *
+   * @return a status map detailing connection, path, and bridge reachability
+   */
   @GetMapping("/mt5/status")
   public Map<String, Object> getMt5Status() {
       boolean reachable = mt5ConnectionManager.getMt5Service().checkHealth();
@@ -172,6 +234,12 @@ public class AdminTradeController {
       );
   }
 
+  /**
+   * Triggers a manual connection attempt to the MT5 bridge.
+   * The goal is to establish bridge communications if automatic ticks fail.
+   *
+   * @return a map indicating the resulting connection status
+   */
   @PostMapping("/mt5/connect")
   public Map<String, Boolean> connectMt5() {
       // Perform a real connectivity check (ping socket and verify file paths)
@@ -179,6 +247,12 @@ public class AdminTradeController {
       return Map.of("connected", success);
   }
 
+  /**
+   * Instructs the manager to disconnect from the MT5 bridge.
+   * The goal is to switch off MT5 synchronization for testing or debugging.
+   *
+   * @return a map confirming disconnection status
+   */
   @PostMapping("/mt5/disconnect")
   public Map<String, Boolean> disconnectMt5() {
       mt5ConnectionManager.setConnected(false);
@@ -187,6 +261,14 @@ public class AdminTradeController {
 
   public record UpdateBalanceRequest(BigDecimal balance) {}
 
+  /**
+   * Updates the balance of a specific trading account.
+   * The goal is to adjust demo user virtual funds.
+   *
+   * @param id the target trading account ID
+   * @param req the request containing the new balance value
+   * @return a map indicating the success of the update
+   */
   @PostMapping("/accounts/{id}/balance")
   @org.springframework.transaction.annotation.Transactional
   public Map<String, Object> updateBalance(@PathVariable Long id, @RequestBody UpdateBalanceRequest req) {
@@ -196,7 +278,7 @@ public class AdminTradeController {
       }
       var acc = accountRepo.findByIdForUpdate(id)
           .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-              org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
+               org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
       acc.setBalance(req.balance());
       acc.setEquity(req.balance());
       accountRepo.save(acc);

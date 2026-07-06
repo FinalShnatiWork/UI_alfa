@@ -28,6 +28,17 @@ public class LocalhostOnlyFilter extends OncePerRequestFilter {
             "0:0:0:0:0:0:0:1"   // IPv6 loopback long form
     );
 
+    /**
+     * Inspects incoming HTTP requests. If the request is for an admin resource,
+     * verifies that the remote address is a localhost IP (127.0.0.1 or IPv6 loopback).
+     * If not, blocks the request and returns HTTP 403 Forbidden.
+     *
+     * @param request the servlet request
+     * @param response the servlet response
+     * @param filterChain the servlet filter chain
+     * @throws ServletException if a servlet exception occurs
+     * @throws IOException if an I/O exception occurs
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,

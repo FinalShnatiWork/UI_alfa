@@ -4,6 +4,12 @@ interface Props {
   title: string;
 }
 
+/**
+ * Simple fallback page representing non-migrated endpoints or 404 targets.
+ *
+ * @param props title header key string
+ * @returns Placeholder fallback component
+ */
 export function PlaceholderPage({ title }: Props) {
   return (
     <div className="container" style={{ maxWidth: 600, marginTop: 80 }}>

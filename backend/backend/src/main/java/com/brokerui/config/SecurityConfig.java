@@ -28,6 +28,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 import java.util.Arrays;
 
+/**
+ * Configuration class for Spring Security.
+ * Defines password encoders, CORS policy, user auth providers, and requests routing rules.
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -36,17 +40,33 @@ public class SecurityConfig {
   private final AuditLogService auditLogService;
   private final AppUserRepository appUserRepository;
 
+  /**
+   * Constructs the SecurityConfig with lazily loaded audit and user repos.
+   *
+   * @param auditLogService the security audit logging service
+   * @param appUserRepository the user accounts database repository
+   */
   public SecurityConfig(@Lazy AuditLogService auditLogService,
                         @Lazy AppUserRepository appUserRepository) {
     this.auditLogService = auditLogService;
     this.appUserRepository = appUserRepository;
   }
 
+  /**
+   * Defines the standard BCrypt password hashing encoder bean.
+   *
+   * @return BCrypt password encoder instance
+   */
   @Bean
   public PasswordEncoder passwordEncoder() {
     return new BCryptPasswordEncoder();
   }
 
+  /**
+   * Builds the CORS policy allowing credentials and arbitrary origin request patterns.
+   *
+   * @return the CORS configurations source bean
+   */
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration configuration = new CorsConfiguration();
@@ -59,6 +79,13 @@ public class SecurityConfig {
     return source;
   }
 
+  /**
+   * Configures the DAO authentication provider utilizing custom details service and BCrypt.
+   *
+   * @param userDetailsService the database app user details service
+   * @param passwordEncoder the BCrypt encoder bean
+   * @return the configured DAO authentication provider bean
+   */
   @Bean
   public DaoAuthenticationProvider daoAuthenticationProvider(
       AppUserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
@@ -68,6 +95,14 @@ public class SecurityConfig {
     return p;
   }
 
+  /**
+   * Configures the primary HttpSecurity filter chain, including routing, CSRF, login/logout, and exceptions.
+   *
+   * @param http HttpSecurity configuration builder
+   * @param daoAuthenticationProvider configured database user auth provider
+   * @return the final constructed SecurityFilterChain bean
+   * @throws Exception if security building fails
+   */
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http, DaoAuthenticationProvider daoAuthenticationProvider)
       throws Exception {

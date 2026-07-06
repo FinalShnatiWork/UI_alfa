@@ -81,6 +81,12 @@ public class BrokerOrder {
   @Column(name = "nn_expected_savings", precision = 18, scale = 4)
   private BigDecimal nnExpectedSavings;
 
+  @Column(name = "open_price", precision = 18, scale = 8)
+  private BigDecimal openPrice;
+
+  @Column(name = "opened_at")
+  private Instant openedAt;
+
   public Long getId() {
     return id;
   }
@@ -227,6 +233,22 @@ public class BrokerOrder {
 
   public void setNnExpectedSavings(BigDecimal nnExpectedSavings) {
     this.nnExpectedSavings = nnExpectedSavings;
+  }
+
+  public BigDecimal getOpenPrice() {
+    return openPrice;
+  }
+
+  public void setOpenPrice(BigDecimal openPrice) {
+    this.openPrice = openPrice;
+  }
+
+  public Instant getOpenedAt() {
+    return openedAt;
+  }
+
+  public void setOpenedAt(Instant openedAt) {
+    this.openedAt = openedAt;
   }
 }
 

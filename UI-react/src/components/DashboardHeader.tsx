@@ -23,11 +23,23 @@ interface Props {
   loggingOut?: boolean;
 }
 
+/**
+ * Primary header navigation for authenticated users on the dashboard and main pages.
+ * Displays navigation links, language selector buttons, and the sign out action.
+ *
+ * @param props onLogout function and loggingOut indicator flag
+ * @returns Primary authenticated layout top navigation bar
+ */
 export function DashboardHeader({ onLogout, loggingOut }: Props) {
   const { t, lang, setLang } = useI18n();
   const { pathname } = useLocation();
   const { mutate: savePrefs } = useSavePreferences();
 
+  /**
+   * Updates language preference in app state and saves it to the backend database.
+   *
+   * @param code target language code (e.g. en, he, ru)
+   */
   const handleLangChange = (code: Lang) => {
     setLang(code);
     savePrefs({ lang: code });
