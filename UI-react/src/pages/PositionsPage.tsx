@@ -282,7 +282,7 @@ export function PositionsPage() {
                 </tr>
               ) : (
                 filteredOpen.map((p) => {
-                  const qty = Number(p.quantity ?? 0);
+                  const qty = Math.abs(Number(p.quantity ?? 0));
                   const avgPrice = Number(p.avgPrice ?? 0);
                   const livePrice = livePrices[p.symbolCode.toUpperCase()];
                   const pnl = livePrice != null ? (p.side === 'SHORT' ? (avgPrice - livePrice) * qty * getContractSize(p.symbolCode) : (livePrice - avgPrice) * qty * getContractSize(p.symbolCode)) : null;
@@ -335,7 +335,7 @@ export function PositionsPage() {
             </tbody>
             {filteredOpen.length > 0 && (() => {
               const totalPnl = filteredOpen.reduce((sum, p) => {
-                const qty = Number(p.quantity ?? 0);
+                const qty = Math.abs(Number(p.quantity ?? 0));
                 const avg = Number(p.avgPrice ?? 0);
                 const live = livePrices[p.symbolCode.toUpperCase()];
                 if (live == null) return sum;

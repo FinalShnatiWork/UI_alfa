@@ -80,7 +80,7 @@ export function DashboardPage() {
 
   // Calculate live unrealized P/L from open positions using real-time prices
   const livePnl = positions.reduce((sum, p) => {
-    const qty = Number(p.quantity ?? 0);
+    const qty = Math.abs(Number(p.quantity ?? 0));
     if (!qty) return sum;
     const avg = Number(p.avgPrice ?? 0);
     const live = livePrices[p.symbolCode.toUpperCase()] ?? livePrices[p.symbolCode];

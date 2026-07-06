@@ -237,26 +237,15 @@ async function processMockPendingOrders(): Promise<void> {
 
         // Hedging model: BUY opens a LONG position, SELL opens a SHORT position (no opposite merges).
         const sideTarget = order.side === 'BUY' ? 'LONG' : 'SHORT';
-        const existingPosIdx = positions.findIndex(p => p.symbolCode === order.symbolCode && p.side === sideTarget);
-
-        if (existingPosIdx !== -1) {
-          const p = positions[existingPosIdx];
-          const currentQty = parseFloat(p.quantity);
-          const currentVal = currentQty * parseFloat(p.avgPrice);
-          const newVal = qty * fillPrice;
-          p.quantity = (currentQty + qty).toString();
-          p.avgPrice = ((currentVal + newVal) / (currentQty + qty)).toFixed(2);
-        } else {
-          positions.push({
-            id: Date.now() + Math.random(),
-            symbolCode: order.symbolCode,
-            side: sideTarget,
-            quantity: qty.toString(),
-            avgPrice: fillPrice.toString(),
-            unrealizedPnl: '0.00',
-            openedAt: new Date().toISOString()
-          });
-        }
+        positions.push({
+          id: Date.now() + Math.random(),
+          symbolCode: order.symbolCode,
+          side: sideTarget,
+          quantity: qty.toString(),
+          avgPrice: fillPrice.toString(),
+          unrealizedPnl: '0.00',
+          openedAt: new Date().toISOString()
+        });
 
         // Move to history as FILLED
         history.unshift({
@@ -511,38 +500,17 @@ async function mockPost(path: string, body: any): Promise<Response> {
       setStorage('mock_overview', overview);
       
       const positions = getStorage<any[]>('mock_positions', []);
-      const posIdx = positions.findIndex(p => p.symbolCode === symbolCode);
+      const sideTarget = side === 'BUY' ? 'LONG' : 'SHORT';
       
-      if (posIdx !== -1) {
-        const p = positions[posIdx];
-        const currentQty = parseFloat(p.quantity);
-        let updatedQty = currentQty;
-        if (side === 'BUY') {
-          updatedQty += quantity;
-        } else {
-          updatedQty -= quantity;
-        }
-        
-        if (Math.abs(updatedQty) < 0.000001) {
-          positions.splice(posIdx, 1);
-        } else {
-          if ((currentQty > 0 && side === 'BUY') || (currentQty < 0 && side === 'SELL')) {
-            const currentVal = currentQty * parseFloat(p.avgPrice);
-            const newVal = (side === 'BUY' ? quantity : -quantity) * price;
-            p.avgPrice = ((currentVal + newVal) / updatedQty).toFixed(2);
-          }
-          p.quantity = updatedQty.toString();
-        }
-      } else {
-        positions.push({
-          id: Date.now(),
-          symbolCode,
-          quantity: (side === 'BUY' ? quantity : -quantity).toString(),
-          avgPrice: price.toString(),
-          unrealizedPnl: '0.00',
-          openedAt: new Date().toISOString()
-        });
-      }
+      positions.push({
+        id: Date.now(),
+        symbolCode,
+        side: sideTarget,
+        quantity: quantity.toString(),
+        avgPrice: price.toString(),
+        unrealizedPnl: '0.00',
+        openedAt: new Date().toISOString()
+      });
       setStorage('mock_positions', positions);
       
       const history = getStorage<any[]>('mock_history', []);
