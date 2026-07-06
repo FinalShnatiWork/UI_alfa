@@ -51,6 +51,12 @@ public class Position {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  @Column(name = "take_profit", precision = 18, scale = 8)
+  private BigDecimal takeProfit;
+
+  @Column(name = "stop_loss", precision = 18, scale = 8)
+  private BigDecimal stopLoss;
+
   public Long getId() {
     return id;
   }
@@ -121,5 +127,21 @@ public class Position {
 
   public Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  public BigDecimal getTakeProfit() {
+    return takeProfit;
+  }
+
+  public void setTakeProfit(BigDecimal takeProfit) {
+    this.takeProfit = takeProfit;
+  }
+
+  public BigDecimal getStopLoss() {
+    return stopLoss;
+  }
+
+  public void setStopLoss(BigDecimal stopLoss) {
+    this.stopLoss = stopLoss;
   }
 }

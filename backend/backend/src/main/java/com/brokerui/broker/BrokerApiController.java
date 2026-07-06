@@ -280,7 +280,8 @@ public class BrokerApiController {
   // ───────────────────────────────────────────────────────────────────────────
 
   public record PlaceOrderRequest(String symbolCode, String side, String orderType,
-      BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopPrice) {
+      BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopPrice,
+      BigDecimal takeProfit, BigDecimal stopLoss) {
   }
 
   @PostMapping("/orders")
@@ -367,6 +368,8 @@ public class BrokerApiController {
       order.setQuantity(qty);
       order.setLimitPrice(mappedLimitPrice);
       order.setStopPrice(mappedStopPrice);
+      order.setTakeProfit(body.takeProfit());
+      order.setStopLoss(body.stopLoss());
       order = orderRepo.save(order);
       auditLogService.log(u, "ORDER_PENDING", side + " " + qty + " " + symbolCode + " type=" + mappedOrderType, request);
       return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW",
@@ -396,7 +399,7 @@ public class BrokerApiController {
       }
       ta.setBalance(ta.getBalance().subtract(margin));
 
-      Position longPos = openNewPosition(ta, symbolCode, "LONG", qty, bdPrice);
+      Position longPos = openNewPosition(ta, symbolCode, "LONG", qty, bdPrice, body.takeProfit(), body.stopLoss());
       positionRepo.save(longPos);
 
       ta.setEquity(recalcEquity(ta));
@@ -423,7 +426,14 @@ public class BrokerApiController {
 
       if (routeExternal) {
         try {
-          mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue());
+          mt5Service.sendTrade(
+              symbolCode, 
+              side, 
+              price, 
+              body.takeProfit() != null ? body.takeProfit().doubleValue() : 0.0, 
+              body.stopLoss() != null ? body.stopLoss().doubleValue() : 0.0, 
+              qty.doubleValue()
+          );
         } catch (Exception ex) {
           System.err.println("MT5 Send Failed: " + ex.getMessage());
         }
@@ -441,7 +451,7 @@ public class BrokerApiController {
     }
     ta.setBalance(ta.getBalance().subtract(margin));
 
-    Position shortPos = openNewPosition(ta, symbolCode, "SHORT", qty, bdPrice);
+    Position shortPos = openNewPosition(ta, symbolCode, "SHORT", qty, bdPrice, body.takeProfit(), body.stopLoss());
     positionRepo.save(shortPos);
 
     ta.setEquity(recalcEquity(ta));
@@ -468,7 +478,14 @@ public class BrokerApiController {
 
     if (routeExternal) {
       try {
-        mt5Service.sendTrade(symbolCode, side, price, 0, 0, qty.doubleValue());
+        mt5Service.sendTrade(
+            symbolCode, 
+            side, 
+            price, 
+            body.takeProfit() != null ? body.takeProfit().doubleValue() : 0.0, 
+            body.stopLoss() != null ? body.stopLoss().doubleValue() : 0.0, 
+            qty.doubleValue()
+        );
       } catch (Exception ex) {
         System.err.println("MT5 Send Failed: " + ex.getMessage());
       }
@@ -482,7 +499,7 @@ public class BrokerApiController {
   /**
    * Creates a new Position for a specific side (Hedging model).
    */
-  private Position openNewPosition(TradingAccount ta, String symbolCode, String side, BigDecimal qty, BigDecimal fillPrice) {
+  private Position openNewPosition(TradingAccount ta, String symbolCode, String side, BigDecimal qty, BigDecimal fillPrice, BigDecimal tp, BigDecimal sl) {
     Position pos = new Position();
     pos.setTradingAccount(ta);
     pos.setSymbolCode(symbolCode);
@@ -491,6 +508,8 @@ public class BrokerApiController {
     pos.setAvgPrice(fillPrice);
     pos.setUnrealizedPnl(BigDecimal.ZERO);
     pos.setOpenedAt(Instant.now());
+    pos.setTakeProfit(tp);
+    pos.setStopLoss(sl);
     return pos;
   }
 

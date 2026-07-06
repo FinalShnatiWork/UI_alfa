@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/useToast';
 import { useLogout } from '@/hooks/useLogout';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
-import { useBrokerOverview, usePositions, useNotifications, useLivePrices } from '@/hooks/useApi';
+import { useBrokerOverview, usePositions, useNotifications, useLivePrices, useTradeHistory } from '@/hooks/useApi';
 import { getContractSize } from '@/lib/api';
 
 /**
@@ -53,6 +53,7 @@ export function DashboardPage() {
   const { data: overview, isLoading: overviewLoading, error: overviewError } = useBrokerOverview();
   const { data: positionsData, isLoading: positionsLoading } = usePositions();
   const { data: notificationsData, isLoading: notifsLoading } = useNotifications();
+  const { data: historyData } = useTradeHistory();
 
   const positionSymbols = Array.isArray(positionsData) ? positionsData.map((p) => p.symbolCode) : [];
   const livePrices = useLivePrices(positionSymbols);
@@ -89,6 +90,14 @@ export function DashboardPage() {
     return sum + (live - avg) * qty * factor * getContractSize(p.symbolCode);
   }, 0);
 
+  const history = Array.isArray(historyData) ? historyData : [];
+  const todayStr = new Date().toDateString();
+  const todayRealizedPnl = history.reduce((sum, order) => {
+    if (!order.filledAt || !order.realizedPnl) return sum;
+    const isToday = new Date(order.filledAt).toDateString() === todayStr;
+    return sum + (isToday ? Number(order.realizedPnl) : 0);
+  }, 0);
+
   const liveEquity = rawBalance + livePnl;
   const liveFreeMargin = liveEquity - rawMarginUsed;
 
@@ -97,7 +106,7 @@ export function DashboardPage() {
   const marginUsed = overview ? fmtMoney(rawMarginUsed, currency) : '—';
   const freeMargin = overview ? fmtMoney(liveFreeMargin, currency) : '—';
 
-  const pnl = overview ? livePnl : 0;
+  const pnl = overview ? (todayRealizedPnl + livePnl) : 0;
   const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtMoney(pnl, currency)}` : '—';
   const plPositive = pnl >= 0;
 

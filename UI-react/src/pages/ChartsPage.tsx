@@ -8,7 +8,7 @@ import { apiPostJson, getContractSize } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
-import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices } from '@/hooks/useApi';
+import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder } from '@/hooks/useApi';
 import type { PlaceOrderResponse, ClosePositionResponse } from '@/types/api';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -271,53 +271,19 @@ export function ChartsPage() {
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [volume, setVolume] = useState('1.00');
   const [entryPrice, setEntryPrice] = useState('');
+  const [takeProfit, setTakeProfit] = useState('');
+  const [stopLoss, setStopLoss] = useState('');
+  const [bottomTab, setBottomTab] = useState<'positions' | 'pending'>('positions');
   const [chartLivePrices, setChartLivePrices] = useState<Record<string, number>>({});
 
   // Shared data via React Query — same cache as Dashboard and Positions pages
   const { data: overviewData } = useBrokerOverview();
   const { data: positionsData, isLoading: posLoading } = usePositions();
+  const { data: pendingData } = usePendingOrders();
+  const pendingOrders = Array.isArray(pendingData) ? pendingData : [];
+  const { mutateAsync: cancelOrder } = useCancelOrder();
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const invalidateAfterTrade = useInvalidateAfterTrade();
-
-  // Manage drawing active LIMIT order price line on the chart
-  const priceLineRef = useRef<any>(null);
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    
-    // Always clear existing line first
-    if (priceLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(priceLineRef.current);
-      } catch { /* */ }
-      priceLineRef.current = null;
-    }
-
-    if (orderType === 'LIMIT' && entryPrice) {
-      const priceVal = parseFloat(entryPrice);
-      if (priceVal > 0 && !isNaN(priceVal)) {
-        try {
-          priceLineRef.current = seriesRef.current.createPriceLine({
-            price: priceVal,
-            color: '#ca8a04', // Yellow color matching the "Limit" active button
-            lineWidth: 2,
-            lineStyle: 2, // Dashed line style
-            axisLabelVisible: true,
-            title: `${t('trading.limit') || 'Limit'} @ ${priceVal.toFixed(4)}`,
-          });
-        } catch (e) {
-          console.error("Failed to create price line on chart", e);
-        }
-      }
-    }
-
-    return () => {
-      if (priceLineRef.current && seriesRef.current) {
-        try {
-          seriesRef.current.removePriceLine(priceLineRef.current);
-        } catch { /* */ }
-        priceLineRef.current = null;
-      }
-    };
-  }, [orderType, entryPrice, seriesRef.current, t]);
 
   const positions = (Array.isArray(positionsData) ? positionsData : []).filter(
     (p) => Number(p.quantity ?? 0) !== 0,
@@ -334,6 +300,131 @@ export function ChartsPage() {
   const positionQty = positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())
     ? Number(positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())!.quantity).toFixed(2)
     : '0.00';
+
+  // Manage drawing active LIMIT order price line and all position/pending price lines on the chart
+  const priceLinesRef = useRef<any[]>([]);
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    // Clear all existing price lines first
+    priceLinesRef.current.forEach((line) => {
+      try {
+        series.removePriceLine(line);
+      } catch { /* */ }
+    });
+    priceLinesRef.current = [];
+
+    // 1. Draw Active Typing Limit line
+    if (orderType === 'LIMIT' && entryPrice) {
+      const priceVal = parseFloat(entryPrice);
+      if (priceVal > 0 && !isNaN(priceVal)) {
+        try {
+          const activeLine = series.createPriceLine({
+            price: priceVal,
+            color: '#ca8a04', // Yellow color matching the "Limit" active button
+            lineWidth: 2,
+            lineStyle: 2, // Dashed line style
+            axisLabelVisible: true,
+            title: `${t('trading.limit') || 'Limit'} Order @ ${priceVal.toFixed(4)}`,
+          });
+          priceLinesRef.current.push(activeLine);
+        } catch (e) {
+          console.error("Failed to create active limit price line", e);
+        }
+      }
+    }
+
+    if (!symbol) return;
+    const currentSym = symbol.toUpperCase();
+
+    // 2. Draw Open Positions Entry Price, SL, and TP Lines
+    const activePos = positions.filter(p => p.symbolCode.toUpperCase() === currentSym);
+    activePos.forEach((p) => {
+      const avgPrice = Number(p.avgPrice ?? 0);
+      if (avgPrice > 0) {
+        const isShort = p.side === 'SHORT';
+        const qty = Math.abs(Number(p.quantity ?? 0));
+        
+        try {
+          // Entry Line
+          const entryLine = series.createPriceLine({
+            price: avgPrice,
+            color: isShort ? '#ef4444' : '#22c55e', // Red for SHORT, Green for LONG
+            lineWidth: 2,
+            lineStyle: 0, // Solid
+            axisLabelVisible: true,
+            title: `Position ${isShort ? 'SHORT' : 'LONG'} ${qty.toFixed(2)} @ ${avgPrice.toFixed(4)}`,
+          });
+          priceLinesRef.current.push(entryLine);
+
+          // Take Profit Line
+          const tp = p.takeProfit ? Number(p.takeProfit) : 0;
+          if (tp > 0) {
+            const tpLine = series.createPriceLine({
+              price: tp,
+              color: '#10b981', // Teal/Green
+              lineWidth: 1,
+              lineStyle: 1, // Dotted
+              axisLabelVisible: true,
+              title: `TP @ ${tp.toFixed(4)}`,
+            });
+            priceLinesRef.current.push(tpLine);
+          }
+
+          // Stop Loss Line
+          const sl = p.stopLoss ? Number(p.stopLoss) : 0;
+          if (sl > 0) {
+            const slLine = series.createPriceLine({
+              price: sl,
+              color: '#f43f5e', // Rose/Red
+              lineWidth: 1,
+              lineStyle: 1, // Dotted
+              axisLabelVisible: true,
+              title: `SL @ ${sl.toFixed(4)}`,
+            });
+            priceLinesRef.current.push(slLine);
+          }
+        } catch (e) {
+          console.error("Failed to draw position lines", e);
+        }
+      }
+    });
+
+    // 3. Draw Existing Pending Orders target price lines
+    const activePending = pendingOrders.filter(o => o.symbolCode.toUpperCase() === currentSym);
+    activePending.forEach((o) => {
+      const limitVal = o.limitPrice ? Number(o.limitPrice) : 0;
+      const stopVal = o.stopPrice ? Number(o.stopPrice) : 0;
+      const targetVal = limitVal > 0 ? limitVal : stopVal;
+      
+      if (targetVal > 0) {
+        try {
+          const qty = Math.abs(Number(o.quantity ?? 0));
+          const pendingLine = series.createPriceLine({
+            price: targetVal,
+            color: '#eab308', // Yellow
+            lineWidth: 1,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: `Pending ${o.side} ${o.orderType} ${qty.toFixed(2)} @ ${targetVal.toFixed(4)}`,
+          });
+          priceLinesRef.current.push(pendingLine);
+        } catch (e) {
+          console.error("Failed to draw pending order lines", e);
+        }
+      }
+    });
+
+    return () => {
+      priceLinesRef.current.forEach((line) => {
+        try {
+          series.removePriceLine(line);
+        } catch { /* */ }
+      });
+      priceLinesRef.current = [];
+    };
+  }, [orderType, entryPrice, symbol, positions, pendingOrders, seriesRef.current, t]);
 
   useEffect(() => {
     document.title = t('titles.charts');
@@ -603,7 +694,14 @@ export function ChartsPage() {
       toast.show(t('trading.errEntryPriceRequired'), { variant: 'warning' }); return;
     }
     try {
-      const payload: Record<string, unknown> = { side, symbolCode: symbol, quantity: qty, orderType };
+      const payload: Record<string, unknown> = {
+        side,
+        symbolCode: symbol,
+        quantity: qty,
+        orderType,
+        takeProfit: takeProfit ? Number(takeProfit) : undefined,
+        stopLoss: stopLoss ? Number(stopLoss) : undefined
+      };
       if (orderType === 'LIMIT') payload.limitPrice = Number(entryPrice);
       const res = await apiPostJson('/api/broker/orders', payload);
       const data = await res.json() as PlaceOrderResponse;
@@ -613,11 +711,26 @@ export function ChartsPage() {
         } else {
           toast.show(t('trading.orderFilled', { side, symbol, price: data.fillPrice ?? '', balance: Number(data.newBalance ?? 0).toFixed(2) }), { variant: 'success' });
         }
+        setTakeProfit('');
+        setStopLoss('');
         invalidateAfterTrade();
       } else {
         toast.show(t('trading.errOrderFailed') + ': ' + (data.error ?? ''), { variant: 'error' });
       }
     } catch { toast.show(t('trading.errOrderFailed'), { variant: 'error' }); }
+  }
+
+  async function handleCancelOrder(orderId: number, symbol: string) {
+    setCancellingId(orderId);
+    try {
+      await cancelOrder(orderId);
+      toast.show(`${symbol} — ${t('alerts.orderCancelled') || 'Order cancelled'}`, { variant: 'success' });
+      invalidateAfterTrade();
+    } catch (err) {
+      toast.show(err instanceof Error ? err.message : t('alerts.cancelFail') || 'Cancel failed', { variant: 'error' });
+    } finally {
+      setCancellingId(null);
+    }
   }
 
   async function closeInlinePosition(id: number, sym: string) {
@@ -780,6 +893,32 @@ export function ChartsPage() {
                 </div>
               </div>
 
+              {/* SL / TP (Optional) */}
+              <div className="flex-gap mt-16">
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('trading.stopLoss') || 'Stop Loss (SL)'}</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    className="form-control"
+                    placeholder="None"
+                    value={stopLoss}
+                    onChange={(e) => setStopLoss(e.target.value)}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('trading.takeProfit') || 'Take Profit (TP)'}</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    className="form-control"
+                    placeholder="None"
+                    value={takeProfit}
+                    onChange={(e) => setTakeProfit(e.target.value)}
+                  />
+                </div>
+              </div>
+
               {/* Portfolio summary */}
               <div className="mt-16 portfolio-summary-card">
                 <div className="flex-between mb-8">
@@ -807,58 +946,130 @@ export function ChartsPage() {
         {/* Inline positions */}
         <div className="mt-20">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>{t('trading.openPositions')}</h3>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                type="button"
+                onClick={() => setBottomTab('positions')}
+                className={`btn ${bottomTab === 'positions' ? 'btn-primary' : 'btn-outline-dark'}`}
+                style={{ fontSize: '0.85rem', padding: '6px 16px' }}
+              >
+                {t('trading.openPositions') || 'Open Positions'} ({positions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBottomTab('pending')}
+                className={`btn ${bottomTab === 'pending' ? 'btn-primary' : 'btn-outline-dark'}`}
+                style={{ fontSize: '0.85rem', padding: '6px 16px' }}
+              >
+                {t('positions.pending') || 'Pending Orders'} ({pendingOrders.length})
+              </button>
+            </div>
             <button className="btn btn-outline-dark" style={{ fontSize: '0.8rem', padding: '6px 12px' }}
               onClick={() => invalidateAfterTrade()}>{t('common.refresh')}</button>
           </div>
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <table className="positions-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-alt)' }}>
-                  <th>{t('table.symbol')}</th>
-                  <th className="num">{t('table.volume')}</th>
-                  <th className="num">{t('table.openPrice')}</th>
-                  <th className="num">{t('table.currentPrice')}</th>
-                  <th className="num">{t('table.pl')}</th>
-                  <th className="center">{t('common.close')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {posLoading ? (
-                  <tr><td colSpan={6} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{t('common.loading')}</td></tr>
-                ) : positions.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{t('trading.noPositions')}</td></tr>
-                ) : (
-                  positions.map((p) => {
-                    const qty = Number(p.quantity ?? 0);
-                    const avg = Number(p.avgPrice ?? 0);
-                    const live = livePrices[p.symbolCode.toUpperCase()];
-                    const pnl = live ? (p.side === 'SHORT' ? -1 : 1) * (live - avg) * qty * getContractSize(p.symbolCode) : Number(p.unrealizedPnl ?? 0);
-                    const pnlColor = pnl >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
-                    return (
-                      <tr key={p.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
-                        <td style={{ fontWeight: 600 }}>{p.symbolCode}</td>
-                        <td className="num">{fmtP(qty)}</td>
-                        <td className="num" style={{ color: 'var(--text-secondary)' }}>{fmtP(avg)}</td>
-                        <td className="num">
-                          {live
-                            ? <span style={{ fontWeight: 500 }}>{fmtP(live)}</span>
-                            : <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>…</span>
-                          }
-                        </td>
-                        <td className="num" style={{ fontWeight: 600, color: pnlColor }}>
-                          {pnl >= 0 ? '+' : ''}{fmtP(pnl)}
-                        </td>
-                        <td className="center">
-                          <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                            onClick={() => void closeInlinePosition(p.id, p.symbolCode)}>✕</button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+            {bottomTab === 'positions' ? (
+              <table className="positions-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-alt)' }}>
+                    <th>{t('table.symbol')}</th>
+                    <th className="num">{t('table.volume')}</th>
+                    <th className="num">{t('table.openPrice')}</th>
+                    <th className="num">{t('table.currentPrice')}</th>
+                    <th className="num">{t('table.pl')}</th>
+                    <th className="center">{t('common.close')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {posLoading ? (
+                    <tr><td colSpan={6} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{t('common.loading')}</td></tr>
+                  ) : positions.length === 0 ? (
+                    <tr><td colSpan={6} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{t('trading.noPositions')}</td></tr>
+                  ) : (
+                    positions.map((p) => {
+                      const qty = Number(p.quantity ?? 0);
+                      const avg = Number(p.avgPrice ?? 0);
+                      const live = livePrices[p.symbolCode.toUpperCase()];
+                      const pnl = live ? (p.side === 'SHORT' ? -1 : 1) * (live - avg) * qty * getContractSize(p.symbolCode) : Number(p.unrealizedPnl ?? 0);
+                      const pnlColor = pnl >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
+                      return (
+                        <tr key={p.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
+                          <td style={{ fontWeight: 600 }}>{p.symbolCode}</td>
+                          <td className="num">{fmtP(qty)}</td>
+                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{fmtP(avg)}</td>
+                          <td className="num">
+                            {live
+                              ? <span style={{ fontWeight: 500 }}>{fmtP(live)}</span>
+                              : <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>…</span>
+                            }
+                          </td>
+                          <td className="num" style={{ fontWeight: 600, color: pnlColor }}>
+                            {pnl >= 0 ? '+' : ''}{fmtP(pnl)}
+                          </td>
+                          <td className="center">
+                            <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                              onClick={() => void closeInlinePosition(p.id, p.symbolCode)}>✕</button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="positions-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-alt)' }}>
+                    <th>{t('table.symbol') || 'Symbol'}</th>
+                    <th>{t('table.type') || 'Type'}</th>
+                    <th>{t('common.side') || 'Side'}</th>
+                    <th className="num">{t('table.volume') || 'Volume'}</th>
+                    <th className="num">{t('common.limitPrice') || 'Limit Price'}</th>
+                    <th className="num">{t('common.stopPrice') || 'Stop Price'}</th>
+                    <th className="center">{t('table.action') || 'Action'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingOrders.length === 0 ? (
+                    <tr><td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{t('positions.noPending') || 'No pending orders'}</td></tr>
+                  ) : (
+                    pendingOrders.map((o) => {
+                      const isCancelling = cancellingId === o.id;
+                      const limitVal = o.limitPrice ? Number(o.limitPrice) : null;
+                      const stopVal = o.stopPrice ? Number(o.stopPrice) : null;
+                      return (
+                        <tr key={o.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
+                          <td style={{ fontWeight: 600 }}>{o.symbolCode}</td>
+                          <td>
+                            <span className="badge" style={{ background: 'var(--primary)', color: '#fff', fontSize: '0.75rem', padding: '2px 6px', borderRadius: 4 }}>
+                              {o.orderType}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${o.side === 'BUY' ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: 4 }}>
+                              {o.side}
+                            </span>
+                          </td>
+                          <td className="num">{fmtP(o.quantity)}</td>
+                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{limitVal ? fmtP(limitVal) : '—'}</td>
+                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{stopVal ? fmtP(stopVal) : '—'}</td>
+                          <td className="center">
+                            <button
+                              className="btn btn-outline-danger"
+                              style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                              disabled={isCancelling}
+                              onClick={() => void handleCancelOrder(o.id, o.symbolCode)}
+                            >
+                              {isCancelling ? '...' : '✕'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>

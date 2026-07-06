@@ -187,7 +187,124 @@ export function getContractSize(symbol: string): number {
  * deducts/adjusts margins, handles separate positions (hedging),
  * and creates trade fills.
  */
+async function processMockSlTp(): Promise<void> {
+  const positions = getStorage<any[]>('mock_positions', []);
+  if (positions.length === 0) return;
+
+  const overview = getStorage<any>('mock_overview', defaultOverview);
+  let balance = parseOverviewValue(overview.balance);
+  const history = getStorage<any[]>('mock_history', []);
+  const notifications = getStorage<any[]>('mock_notifications', defaultNotifications);
+
+  let changed = false;
+  const stillActive: any[] = [];
+
+  for (const pos of positions) {
+    const sl = pos.stopLoss ? parseFloat(pos.stopLoss) : 0;
+    const tp = pos.takeProfit ? parseFloat(pos.takeProfit) : 0;
+
+    if (sl <= 0 && tp <= 0) {
+      stillActive.push(pos);
+      continue;
+    }
+
+    const price = await getLivePrice(pos.symbolCode);
+    const qty = Math.abs(parseFloat(pos.quantity));
+    const avg = parseFloat(pos.avgPrice);
+    const isShort = pos.side === 'SHORT';
+
+    let shouldClose = false;
+    let triggerPrice = price;
+    let reason = '';
+
+    // Check Stop Loss
+    if (sl > 0) {
+      if (isShort) {
+        if (price >= sl) {
+          shouldClose = true;
+          triggerPrice = sl;
+          reason = 'STOP_LOSS';
+        }
+      } else {
+        if (price <= sl) {
+          shouldClose = true;
+          triggerPrice = sl;
+          reason = 'STOP_LOSS';
+        }
+      }
+    }
+
+    // Check Take Profit
+    if (tp > 0) {
+      if (isShort) {
+        if (price <= tp) {
+          shouldClose = true;
+          triggerPrice = tp;
+          reason = 'TAKE_PROFIT';
+        }
+      } else {
+        if (price >= tp) {
+          shouldClose = true;
+          triggerPrice = tp;
+          reason = 'TAKE_PROFIT';
+        }
+      }
+    }
+
+    if (shouldClose) {
+      changed = true;
+      const leverage = 100;
+      const contractSize = getContractSize(pos.symbolCode);
+      const pnl = isShort ? (avg - triggerPrice) * qty * contractSize : (triggerPrice - avg) * qty * contractSize;
+      const marginReturned = (qty * contractSize * avg) / leverage;
+
+      balance = balance + marginReturned + pnl;
+
+      // Add to history
+      history.unshift({
+        id: Date.now() + Math.random(),
+        symbolCode: pos.symbolCode,
+        side: isShort ? 'BUY' : 'SELL',
+        orderType: 'MARKET',
+        status: 'FILLED',
+        quantity: qty.toString(),
+        entryPrice: triggerPrice.toString(),
+        realizedPnl: pnl.toFixed(2),
+        createdAt: new Date().toISOString(),
+        filledAt: new Date().toISOString()
+      });
+
+      // Add notification
+      notifications.unshift({
+        id: Date.now() + Math.random(),
+        notifType: 'TRADE',
+        title: reason === 'STOP_LOSS' ? 'notification.tradeClosed.slTriggered' : 'notification.tradeClosed.tpTriggered',
+        body: JSON.stringify({
+          side: isShort ? 'SELL' : 'BUY',
+          qty: qty.toFixed(4),
+          symbol: pos.symbolCode,
+          price: triggerPrice.toFixed(5),
+          pnl: pnl.toFixed(2)
+        }),
+        readAt: null,
+        createdAt: new Date().toISOString()
+      });
+    } else {
+      stillActive.push(pos);
+    }
+  }
+
+  if (changed) {
+    overview.balance = balance.toFixed(2);
+    setStorage('mock_overview', overview);
+    setStorage('mock_positions', stillActive);
+    setStorage('mock_history', history);
+    setStorage('mock_notifications', notifications);
+  }
+}
+
 async function processMockPendingOrders(): Promise<void> {
+  await processMockSlTp();
   const pending = getStorage<any[]>('mock_pending', []);
   if (pending.length === 0) return;
 
@@ -244,7 +361,9 @@ async function processMockPendingOrders(): Promise<void> {
           quantity: qty.toString(),
           avgPrice: fillPrice.toString(),
           unrealizedPnl: '0.00',
-          openedAt: new Date().toISOString()
+          openedAt: new Date().toISOString(),
+          takeProfit: order.takeProfit,
+          stopLoss: order.stopLoss
         });
 
         // Move to history as FILLED
@@ -509,7 +628,9 @@ async function mockPost(path: string, body: any): Promise<Response> {
         quantity: quantity.toString(),
         avgPrice: price.toString(),
         unrealizedPnl: '0.00',
-        openedAt: new Date().toISOString()
+        openedAt: new Date().toISOString(),
+        takeProfit: orderReq.takeProfit ? orderReq.takeProfit.toString() : undefined,
+        stopLoss: orderReq.stopLoss ? orderReq.stopLoss.toString() : undefined
       });
       setStorage('mock_positions', positions);
       
@@ -596,6 +717,8 @@ async function mockPost(path: string, body: any): Promise<Response> {
         quantity: quantity.toString(),
         limitPrice: mappedLimitPrice || undefined,
         stopPrice: mappedStopPrice || undefined,
+        takeProfit: orderReq.takeProfit ? orderReq.takeProfit.toString() : undefined,
+        stopLoss: orderReq.stopLoss ? orderReq.stopLoss.toString() : undefined,
         createdAt: new Date().toISOString()
       };
       pending.unshift(newOrder);
