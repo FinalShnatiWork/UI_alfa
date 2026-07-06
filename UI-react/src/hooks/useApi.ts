@@ -1,4 +1,5 @@
-import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPostJson } from '@/lib/api';
 import type { BrokerOverview, Position, NotificationItem, Transaction, BrokerOrder, AuthMeResponse } from '@/types/api';
 
@@ -112,22 +113,42 @@ export function useLivePrice(symbol: string | null) {
  * @returns record of mapping symbol string to current number price
  */
 export function useLivePrices(symbols: string[]): Record<string, number> {
-  const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
-  const results = useQueries({
-    queries: unique.map((sym) => ({
-      queryKey: QK.livePrice(sym),
-      queryFn: () => apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(sym)}`),
-      staleTime: 5_000,
-      refetchInterval: 6_000,
-      retry: 0,
-    })),
-  });
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const symbolsKey = symbols.map((s) => s.toUpperCase()).sort().join(',');
 
-  const prices: Record<string, number> = {};
-  unique.forEach((sym, i) => {
-    const price = results[i]?.data?.price;
-    if (price) prices[sym] = Number(price);
-  });
+  useEffect(() => {
+    if (symbols.length === 0) return;
+
+    const fetchAll = async () => {
+      const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
+      const nextPrices: Record<string, number> = {};
+
+      await Promise.all(
+        unique.map(async (sym) => {
+          try {
+            const res = await apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(sym)}`);
+            if (res && res.price) {
+              nextPrices[sym] = Number(res.price);
+            }
+          } catch (e) {
+            console.error(`Failed to fetch price for ${sym}`, e);
+          }
+        })
+      );
+
+      if (Object.keys(nextPrices).length > 0) {
+        setPrices((prev) => ({
+          ...prev,
+          ...nextPrices,
+        }));
+      }
+    };
+
+    void fetchAll();
+    const interval = setInterval(fetchAll, 2500); // Poll every 2.5 seconds
+    return () => clearInterval(interval);
+  }, [symbolsKey]);
+
   return prices;
 }
 
