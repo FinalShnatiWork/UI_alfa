@@ -180,7 +180,7 @@ export function DashboardPage() {
                 const avg = Number(p.avgPrice ?? 0);
                 if (liveP) {
                   const factor = p.side === 'SHORT' ? -1 : 1;
-                  return sum + (liveP - avg) * qty * factor;
+                  return sum + (liveP - avg) * qty * factor * getContractSize(p.symbolCode);
                 }
                 return sum + Number(p.unrealizedPnl ?? 0);
               }, 0);
@@ -192,10 +192,10 @@ export function DashboardPage() {
                     const factorA = a.side === 'SHORT' ? -1 : 1;
                     const factorB = b.side === 'SHORT' ? -1 : 1;
                     const pnlA = liveA
-                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA
+                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA * getContractSize(a.symbolCode)
                       : Number(a.unrealizedPnl ?? 0);
                     const pnlB = liveB
-                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB
+                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB * getContractSize(b.symbolCode)
                       : Number(b.unrealizedPnl ?? 0);
                     return pnlA > pnlB ? a : b;
                   })
@@ -208,10 +208,10 @@ export function DashboardPage() {
                     const factorA = a.side === 'SHORT' ? -1 : 1;
                     const factorB = b.side === 'SHORT' ? -1 : 1;
                     const pnlA = liveA
-                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA
+                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA * getContractSize(a.symbolCode)
                       : Number(a.unrealizedPnl ?? 0);
                     const pnlB = liveB
-                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB
+                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB * getContractSize(b.symbolCode)
                       : Number(b.unrealizedPnl ?? 0);
                     return pnlA < pnlB ? a : b;
                   })
@@ -219,12 +219,12 @@ export function DashboardPage() {
 
               const bestPnl = best
                 ? (livePrices[best.symbolCode.toUpperCase()]
-                    ? (livePrices[best.symbolCode.toUpperCase()] - Number(best.avgPrice ?? 0)) * Number(best.quantity ?? 0) * (best.side === 'SHORT' ? -1 : 1)
+                    ? (livePrices[best.symbolCode.toUpperCase()] - Number(best.avgPrice ?? 0)) * Number(best.quantity ?? 0) * (best.side === 'SHORT' ? -1 : 1) * getContractSize(best.symbolCode)
                     : Number(best.unrealizedPnl ?? 0))
                 : 0;
               const worstPnl = worst
                 ? (livePrices[worst.symbolCode.toUpperCase()]
-                    ? (livePrices[worst.symbolCode.toUpperCase()] - Number(worst.avgPrice ?? 0)) * Number(worst.quantity ?? 0) * (worst.side === 'SHORT' ? -1 : 1)
+                    ? (livePrices[worst.symbolCode.toUpperCase()] - Number(worst.avgPrice ?? 0)) * Number(worst.quantity ?? 0) * (worst.side === 'SHORT' ? -1 : 1) * getContractSize(worst.symbolCode)
                     : Number(worst.unrealizedPnl ?? 0))
                 : 0;
 
@@ -463,11 +463,11 @@ export function DashboardPage() {
               </tr>
             ) : (
               positions.map((p) => {
-                const qty = Number(p.quantity ?? 0);
+                const qty = Math.abs(Number(p.quantity ?? 0));
                 const unrealized = Number(p.unrealizedPnl ?? 0);
                 const livePrice = livePrices[p.symbolCode.toUpperCase()];
                 const livePnl = livePrice && p.avgPrice
-                  ? (p.side === 'SHORT' ? -1 : 1) * (livePrice - Number(p.avgPrice)) * qty
+                  ? (p.side === 'SHORT' ? -1 : 1) * (livePrice - Number(p.avgPrice)) * qty * getContractSize(p.symbolCode)
                   : unrealized;
                 const pnlPos = livePnl;
                 return (
