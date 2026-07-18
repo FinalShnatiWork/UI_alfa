@@ -715,7 +715,14 @@ export function ChartsPage() {
         setStopLoss('');
         invalidateAfterTrade();
       } else {
-        toast.show(t('trading.errOrderFailed') + ': ' + (data.error ?? ''), { variant: 'error' });
+        const knownErrors: Record<string, string> = {
+          credit_limit_exceeded: t('trading.errCreditLimitExceeded'),
+          insufficient_funds: t('trading.errInsufficientFunds'),
+          insufficient_funds_for_short: t('trading.errInsufficientFunds'),
+          price_unavailable: t('trading.errPriceUnavailable'),
+        };
+        const message = (data.error && knownErrors[data.error]) || (t('trading.errOrderFailed') + ': ' + (data.error ?? ''));
+        toast.show(message, { variant: 'error' });
       }
     } catch { toast.show(t('trading.errOrderFailed'), { variant: 'error' }); }
   }

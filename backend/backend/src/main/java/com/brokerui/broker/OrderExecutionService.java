@@ -26,6 +26,7 @@ public class OrderExecutionService {
   private final MT5IntegrationService mt5Service;
   private final com.brokerui.market.MarketPriceService priceService;
   private final NNPredictorClient nnPredictorClient;
+  private final MarginLoanService marginLoanService;
 
   @Autowired @Lazy
   private OrderExecutionService self;
@@ -42,6 +43,7 @@ public class OrderExecutionService {
    * @param mt5Service MetaTrader 5 service integration
    * @param priceService general market price aggregator
    * @param nnPredictorClient Neural Network server client adapter
+   * @param marginLoanService margin credit line service
    */
   public OrderExecutionService(
       TradingAccountRepository accountRepo,
@@ -52,7 +54,8 @@ public class OrderExecutionService {
       SymbolRepository symbolRepo,
       MT5IntegrationService mt5Service,
       com.brokerui.market.MarketPriceService priceService,
-      NNPredictorClient nnPredictorClient) {
+      NNPredictorClient nnPredictorClient,
+      MarginLoanService marginLoanService) {
     this.accountRepo = accountRepo;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
@@ -62,6 +65,7 @@ public class OrderExecutionService {
     this.mt5Service = mt5Service;
     this.priceService = priceService;
     this.nnPredictorClient = nnPredictorClient;
+    this.marginLoanService = marginLoanService;
   }
 
   /**
@@ -174,21 +178,24 @@ public class OrderExecutionService {
     BigDecimal orderEntryPrice = price;
     BigDecimal orderRealizedPnl = BigDecimal.ZERO;
 
+    // Commission is only charged once the order actually fills (not on pending reservation).
+    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+
     if ("BUY".equalsIgnoreCase(order.getSide())) {
-      // Regular LONG BUY - Refund reserved funds, then deduct actual cost
+      // Regular LONG BUY - Refund reserved funds, then deduct actual cost + commission
       BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
           : (order.getStopPrice() != null ? order.getStopPrice() : price);
       BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      ta.setBalance(ta.getBalance().add(reserved).subtract(margin));
+      marginLoanService.repaySettlementOrBorrow(ta, reserved.subtract(margin).subtract(order.getCommission()));
 
       Position longPos = openNewPosition(ta, order.getSymbolCode(), "LONG", qty, price, order.getTakeProfit(), order.getStopLoss());
       positionRepo.save(longPos);
     } else { // SELL order
-      // SELL-SHORT (open new SHORT position) - Refund reserved funds, then lock actual collateral
+      // SELL-SHORT (open new SHORT position) - Refund reserved funds, then lock actual collateral + commission
       BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
           : (order.getStopPrice() != null ? order.getStopPrice() : price);
       BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      ta.setBalance(ta.getBalance().add(reserved).subtract(margin));
+      marginLoanService.repaySettlementOrBorrow(ta, reserved.subtract(margin).subtract(order.getCommission()));
 
       Position shortPos = openNewPosition(ta, order.getSymbolCode(), "SHORT", qty, price, order.getTakeProfit(), order.getStopLoss());
       positionRepo.save(shortPos);
@@ -432,11 +439,6 @@ public class OrderExecutionService {
     } else {
       pnl = closePrice.subtract(avg).multiply(qty).multiply(contractSize);
     }
-    ta.setBalance(ta.getBalance().add(marginReturned).add(pnl));
-    positionRepo.delete(pos);
-    ta.setEquity(recalcEquity(ta));
-    ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
-    accountRepo.save(ta);
 
     // Save history order
     BrokerOrder order = new BrokerOrder();
@@ -449,6 +451,15 @@ public class OrderExecutionService {
     order.setFilledAt(Instant.now());
     order.setEntryPrice(closePrice);
     order.setRealizedPnl(pnl);
+    order.setOpenPrice(pos.getAvgPrice());
+    order.setOpenedAt(pos.getOpenedAt());
+    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+
+    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(pnl).subtract(order.getCommission()));
+    positionRepo.delete(pos);
+    ta.setEquity(recalcEquity(ta));
+    ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+    accountRepo.save(ta);
     orderRepo.save(order);
 
     // Push notification

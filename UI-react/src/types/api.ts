@@ -37,6 +37,11 @@ export interface BrokerOverview {
   equity: number | string;
   marginUsed?: number | string;
   freeMargin?: number | string;
+  borrowedBalance?: number | string;
+  creditLimit?: number | string;
+  marginLevelPct?: number | string | null;
+  interestAccruedTotal?: number | string;
+  commissionPaidTotal?: number | string;
 }
 
 export interface TradingAccount {
@@ -74,6 +79,7 @@ export interface BrokerOrder {
   createdAt?: string;
   openPrice?: string;
   openedAt?: string;
+  commission?: string;
 }
 
 export interface PlaceOrderRequest {

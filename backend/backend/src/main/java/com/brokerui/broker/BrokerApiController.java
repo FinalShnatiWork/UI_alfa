@@ -36,6 +36,7 @@ public class BrokerApiController {
   private final com.brokerui.market.MarketPriceService priceService;
   private final AuditLogService auditLogService;
   private final NNPredictorClient nnPredictorClient;
+  private final MarginLoanService marginLoanService;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -51,7 +52,8 @@ public class BrokerApiController {
       MT5IntegrationService mt5Service,
       com.brokerui.market.MarketPriceService priceService,
       AuditLogService auditLogService,
-      NNPredictorClient nnPredictorClient) {
+      NNPredictorClient nnPredictorClient,
+      MarginLoanService marginLoanService) {
     this.userRepo = userRepo;
     this.accountRepo = accountRepo;
     this.symbolRepo = symbolRepo;
@@ -66,6 +68,7 @@ public class BrokerApiController {
     this.priceService = priceService;
     this.auditLogService = auditLogService;
     this.nnPredictorClient = nnPredictorClient;
+    this.marginLoanService = marginLoanService;
   }
 
   private AppUser requireUser(Authentication auth) {
@@ -97,8 +100,12 @@ public class BrokerApiController {
     TradingAccount ta = ensurePrimaryAccount(u);
     // Return live equity that includes unrealized PNL on all open positions
     BigDecimal liveEquity = recalcEquity(ta);
+    BigDecimal marginLevel = marginLoanService.computeMarginLevel(ta);
+    BigDecimal marginLevelPct = marginLevel == null ? null : marginLevel.multiply(BigDecimal.valueOf(100));
     return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(),
-        ta.getBalance(), liveEquity, ta.getMarginUsed(), ta.getFreeMargin()));
+        ta.getBalance(), liveEquity, ta.getMarginUsed(), ta.getFreeMargin(),
+        ta.getBorrowedBalance(), MarginLoanService.CREDIT_LIMIT, marginLevelPct, ta.getInterestAccruedTotal(),
+        ta.getCommissionPaidTotal()));
   }
 
   @GetMapping("/symbols")
@@ -350,11 +357,10 @@ public class BrokerApiController {
       BigDecimal contractSize = getContractSize(symbolCode);
       BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
       BigDecimal reserved = targetPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      if (ta.getBalance().compareTo(reserved) < 0) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds",
-            "required", reserved, "available", ta.getBalance()));
+      if (!marginLoanService.tryCoverShortfall(ta, reserved, u, request)) {
+        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
+            "required", reserved, "available", ta.getBalance(), "creditLimit", MarginLoanService.CREDIT_LIMIT));
       }
-      ta.setBalance(ta.getBalance().subtract(reserved));
       ta.setEquity(recalcEquity(ta));
       ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
       accountRepo.save(ta);
@@ -393,11 +399,11 @@ public class BrokerApiController {
 
     // ── BUY order ─────────────────────────────────────────────────────────────
     if ("BUY".equals(side)) {
-      if (ta.getBalance().compareTo(margin) < 0) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds",
-            "required", margin, "available", ta.getBalance()));
+      BigDecimal required = margin.add(TradingFees.COMMISSION_PER_TRADE);
+      if (!marginLoanService.tryCoverShortfall(ta, required, u, request)) {
+        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
+            "required", required, "available", ta.getBalance(), "creditLimit", MarginLoanService.CREDIT_LIMIT));
       }
-      ta.setBalance(ta.getBalance().subtract(margin));
 
       Position longPos = openNewPosition(ta, symbolCode, "LONG", qty, bdPrice, body.takeProfit(), body.stopLoss());
       positionRepo.save(longPos);
@@ -418,6 +424,8 @@ public class BrokerApiController {
       }
 
       BrokerOrder order = buildFilledOrder(ta, symbolCode, "BUY", qty, bdPrice, BigDecimal.ZERO);
+      TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+      accountRepo.save(ta);
       boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
       orderRepo.save(order);
 
@@ -445,11 +453,11 @@ public class BrokerApiController {
     }
 
     // ── SELL order ────────────────────────────────────────────────────────────
-    if (ta.getBalance().compareTo(margin) < 0) {
-      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds_for_short",
-          "required", margin, "available", ta.getBalance()));
+    BigDecimal sellRequired = margin.add(TradingFees.COMMISSION_PER_TRADE);
+    if (!marginLoanService.tryCoverShortfall(ta, sellRequired, u, request)) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
+          "required", sellRequired, "available", ta.getBalance(), "creditLimit", MarginLoanService.CREDIT_LIMIT));
     }
-    ta.setBalance(ta.getBalance().subtract(margin));
 
     Position shortPos = openNewPosition(ta, symbolCode, "SHORT", qty, bdPrice, body.takeProfit(), body.stopLoss());
     positionRepo.save(shortPos);
@@ -470,6 +478,8 @@ public class BrokerApiController {
     }
 
     BrokerOrder order = buildFilledOrder(ta, symbolCode, "SELL", qty, bdPrice, BigDecimal.ZERO);
+    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+    accountRepo.save(ta);
     boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
     orderRepo.save(order);
 
@@ -558,7 +568,13 @@ public class BrokerApiController {
       // Return margin + PNL back to balance
       pnl = bdPrice.subtract(avg).multiply(qty).multiply(contractSize);
     }
-    ta.setBalance(ta.getBalance().add(marginReturned).add(pnl));
+    String closeSide = isShort ? "BUY" : "SELL";
+    BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, pnl);
+    order.setOpenPrice(pos.getAvgPrice());
+    order.setOpenedAt(pos.getOpenedAt());
+    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+
+    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(pnl).subtract(order.getCommission()));
 
     positionRepo.delete(pos);
     ta.setEquity(recalcEquity(ta));
@@ -577,10 +593,6 @@ public class BrokerApiController {
     }
 
     // Record order history
-    String closeSide = isShort ? "BUY" : "SELL";
-    BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, pnl);
-    order.setOpenPrice(pos.getAvgPrice());
-    order.setOpenedAt(pos.getOpenedAt());
     orderRepo.save(order);
 
     auditLogService.log(u, "POSITION_CLOSED",
@@ -595,7 +607,7 @@ public class BrokerApiController {
       System.err.println("MT5 Send Failed: " + ex.getMessage());
     }
 
-    return ResponseEntity.ok(Map.of("ok", true, "closePnl", pnl, "newBalance", ta.getBalance()));
+    return ResponseEntity.ok(Map.of("ok", true, "closePnl", pnl, "commission", order.getCommission(), "newBalance", ta.getBalance()));
   }
 
   @GetMapping("/notifications")
@@ -659,7 +671,7 @@ public class BrokerApiController {
         BigDecimal contractSize = getContractSize(order.getSymbolCode());
         BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
         BigDecimal refund = reservePrice.multiply(order.getQuantity()).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-        ta.setBalance(ta.getBalance().add(refund));
+        marginLoanService.repaySettlementOrBorrow(ta, refund);
         ta.setEquity(ta.getBalance());
         ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
         accountRepo.save(ta);

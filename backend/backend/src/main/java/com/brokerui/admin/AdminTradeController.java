@@ -10,6 +10,9 @@ import com.brokerui.broker.KycCaseRepository;
 import com.brokerui.broker.NotificationRepository;
 import com.brokerui.broker.AuditLogRepository;
 import com.brokerui.broker.MT5ConnectionManager;
+import com.brokerui.broker.MarginLoanLedger;
+import com.brokerui.broker.MarginLoanLedgerRepository;
+import com.brokerui.broker.MarginLoanService;
 import org.springframework.context.ApplicationContext;
 import org.springframework.boot.SpringApplication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,6 +48,8 @@ public class AdminTradeController {
   private final AuditLogRepository auditRepo;
   private final MT5ConnectionManager mt5ConnectionManager;
   private final ApplicationContext applicationContext;
+  private final MarginLoanLedgerRepository marginLedgerRepo;
+  private final MarginLoanService marginLoanService;
 
   /**
    * Constructs the AdminTradeController with required repositories and services.
@@ -58,12 +63,15 @@ public class AdminTradeController {
    * @param auditRepo the repository for system audit logs
    * @param mt5ConnectionManager the manager for MT5 bridge socket connectivity
    * @param applicationContext the Spring application context
+   * @param marginLedgerRepo the repository for margin credit line ledger entries
+   * @param marginLoanService the margin credit line service (interest/liquidation)
    */
   public AdminTradeController(BrokerOrderRepository orderRepo, PositionRepository positionRepo,
         TradingAccountRepository accountRepo, AccountTransactionRepository transactionRepo,
         KycCaseRepository kycRepo, NotificationRepository notifRepo,
         AuditLogRepository auditRepo, MT5ConnectionManager mt5ConnectionManager,
-        ApplicationContext applicationContext) {
+        ApplicationContext applicationContext, MarginLoanLedgerRepository marginLedgerRepo,
+        MarginLoanService marginLoanService) {
     this.orderRepo = orderRepo;
     this.positionRepo = positionRepo;
     this.accountRepo = accountRepo;
@@ -73,6 +81,8 @@ public class AdminTradeController {
     this.auditRepo = auditRepo;
     this.mt5ConnectionManager = mt5ConnectionManager;
     this.applicationContext = applicationContext;
+    this.marginLedgerRepo = marginLedgerRepo;
+    this.marginLoanService = marginLoanService;
   }
 
   /**
@@ -97,7 +107,7 @@ public class AdminTradeController {
     return Map.of("status", "restarting");
   }
 
-  public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting) {}
+  public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting, BigDecimal commission) {}
 
   /**
    * Retrieves all trades (orders and active positions) in the system.
@@ -117,7 +127,8 @@ public class AdminTradeController {
           o.getQuantity(), 
           o.getStatus(), 
           o.getCreatedAt(),
-          o.getNnRouteRecommendation() != null ? o.getNnRouteRecommendation() : "EXTERNAL"))
+          o.getNnRouteRecommendation() != null ? o.getNnRouteRecommendation() : "EXTERNAL",
+          o.getCommission() != null ? o.getCommission() : BigDecimal.ZERO))
       .collect(Collectors.toList());
 
     List<TradeDto> positions = positionRepo.findAll().stream()
@@ -130,14 +141,18 @@ public class AdminTradeController {
           p.getQuantity(), 
           "ACTIVE", 
           p.getOpenedAt(),
-          "INTERNAL"))
+          "INTERNAL",
+          BigDecimal.ZERO))
       .collect(Collectors.toList());
 
     orders.addAll(positions);
     return orders;
   }
 
-  public record AccountDto(Long id, Long userId, String accountType, String currency, int leverage, String status, BigDecimal balance, BigDecimal equity, BigDecimal marginUsed, BigDecimal freeMargin) {}
+  public record AccountDto(Long id, Long userId, String accountType, String currency, int leverage, String status,
+      BigDecimal balance, BigDecimal equity, BigDecimal marginUsed, BigDecimal freeMargin,
+      BigDecimal borrowedBalance, BigDecimal marginLevelPct, BigDecimal interestAccruedTotal,
+      BigDecimal commissionPaidTotal) {}
 
   /**
    * Retrieves all trading accounts in the system.
@@ -148,8 +163,55 @@ public class AdminTradeController {
   @GetMapping("/accounts")
   public List<AccountDto> getAccounts() {
     return accountRepo.findAll().stream()
-      .map(a -> new AccountDto(a.getId(), a.getUser().getId(), a.getAccountType(), a.getCurrency(), a.getLeverage(), a.getStatus(), a.getBalance(), a.getEquity(), a.getMarginUsed(), a.getFreeMargin()))
+      .map(a -> {
+        BigDecimal level = marginLoanService.computeMarginLevel(a);
+        return new AccountDto(a.getId(), a.getUser().getId(), a.getAccountType(), a.getCurrency(), a.getLeverage(),
+            a.getStatus(), a.getBalance(), a.getEquity(), a.getMarginUsed(), a.getFreeMargin(),
+            a.getBorrowedBalance(), level == null ? null : level.multiply(BigDecimal.valueOf(100)),
+            a.getInterestAccruedTotal(), a.getCommissionPaidTotal());
+      })
       .collect(Collectors.toList());
+  }
+
+  public record MarginLedgerDto(Long id, Long accountId, Long userId, String entryType, BigDecimal amount,
+      BigDecimal borrowedAfter, BigDecimal balanceAfter, String note, Instant createdAt) {}
+
+  /**
+   * Retrieves the full margin credit line ledger (borrows, repayments, interest charges,
+   * and liquidations) across all accounts, newest first.
+   *
+   * @return a list of all margin loan ledger entries
+   */
+  @GetMapping("/margin-loans")
+  public List<MarginLedgerDto> getMarginLoans() {
+    return marginLedgerRepo.findAllByOrderByCreatedAtDesc().stream()
+      .map(e -> new MarginLedgerDto(e.getId(), e.getTradingAccount().getId(), e.getTradingAccount().getUser().getId(),
+          e.getEntryType(), e.getAmount(), e.getBorrowedAfter(), e.getBalanceAfter(), e.getNote(), e.getCreatedAt()))
+      .collect(Collectors.toList());
+  }
+
+  /**
+   * Manually triggers the daily interest accrual job for every indebted account.
+   * Intended for admin testing/demo — normally this runs automatically once every 24h.
+   *
+   * @return a map confirming the job ran
+   */
+  @PostMapping("/margin-loans/run-interest")
+  public Map<String, Object> runInterestNow() {
+    marginLoanService.accrueDailyInterest();
+    return Map.of("ok", true);
+  }
+
+  /**
+   * Manually triggers the liquidation check across all indebted accounts.
+   * Intended for admin testing/demo — normally this runs automatically every 10s.
+   *
+   * @return a map confirming the job ran
+   */
+  @PostMapping("/margin-loans/run-liquidation-check")
+  public Map<String, Object> runLiquidationCheckNow() {
+    marginLoanService.checkLiquidations();
+    return Map.of("ok", true);
   }
 
   public record TransactionDto(Long id, Long accountId, String txType, String status, BigDecimal amount, String currency, String method, Instant createdAt) {}

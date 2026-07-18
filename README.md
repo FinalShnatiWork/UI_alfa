@@ -70,6 +70,58 @@ Frontend URL: http://localhost:3001
 
 ---
 
+## Margin Credit Line (demo)
+
+When a BUY/SELL order needs more cash than the account balance holds, the backend
+automatically borrows the shortfall from a fixed credit line instead of rejecting the trade
+(similar to Bybit's Unified Margin). Rules for this demo:
+
+| Parameter | Value |
+|-----------|-------|
+| Credit limit | $10,000 per account (fixed) |
+| Interest rate | 0.5% per day on the borrowed balance, charged once every 24h |
+| Margin call | UI warning when margin level (equity / debt) drops below 110% |
+| Liquidation | Open positions are force-closed automatically when margin level drops below 100% |
+
+Implementation: `MarginLoanService.java` (borrow/repay logic + two `@Scheduled` jobs).
+Admin panel → **Credit Line** tab shows the full borrow/repay/interest/liquidation ledger,
+plus buttons to trigger the interest and liquidation jobs immediately (for testing, since
+the interest job normally waits 24h between charges per account).
+
+---
+
+## Trade Commission (real money, tied to the AI netting model)
+
+Every order fill — market open, limit/stop fill, manual close, or auto SL/TP close — now
+charges the client a flat **$1.50 commission**, debited straight from the trading account
+balance (see `TradingFees.java`). This is real money movement, not a display-only number.
+
+The commission amount deliberately matches the exchange-fee assumption already used by the
+netting-broker AI advisor (`NNPredictorClient` / `nn_route_recommendation`), so the economics
+line up cleanly without touching the buy/sell matching logic itself:
+
+- The client pays the same $1.50 commission regardless of how the order was routed.
+- If the AI advisor matched the order **internally**, the platform pays no exchange fee, so
+  the whole commission is pure profit.
+- If the order was routed **externally** (MT5 bridge), the platform is modeled as paying the
+  same $1.50 to the liquidity provider, so that trade nets to roughly $0 profit for the
+  platform — it only covers the AI's own real-world cost of routing out.
+
+Where this shows up:
+- **History page**: every closed trade shows its commission and a "Net after fees" total.
+- **Admin panel → Dashboard**: `Commission Collected` (real revenue), `Fees Saved (Internal)`
+  (real profit from AI-matched trades), `External Fees Paid` (modeled cost), and
+  `Net Platform Profit` (the real bottom line) are now computed from actual `commission`
+  values on each order instead of a flat assumption.
+- **Admin panel → Trades / Accounts**: per-trade commission column and each account's
+  lifetime `commissionPaidTotal`.
+
+Order placement math (margin/reservation checks) already accounts for the commission on top
+of the required margin, so a trade can still trip `credit_limit_exceeded` if the extra $1.50
+would push the account past the $10,000 credit line — same shortfall-covering path as margin.
+
+---
+
 ## Demo Data (auto-loaded on first startup via Flyway V14)
 
 No manual import needed. All data loads automatically.

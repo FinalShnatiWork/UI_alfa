@@ -1,6 +1,7 @@
 package com.brokerui.broker;
 
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,5 +22,8 @@ public interface TradingAccountRepository extends JpaRepository<TradingAccount, 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT ta FROM TradingAccount ta WHERE ta.id = :id")
   Optional<TradingAccount> findByIdForUpdate(@Param("id") Long id);
+
+  /** Accounts that currently owe money on the margin credit line. */
+  List<TradingAccount> findByBorrowedBalanceGreaterThan(BigDecimal threshold);
 }
 

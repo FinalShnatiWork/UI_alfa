@@ -110,6 +110,13 @@ export function DashboardPage() {
   const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtMoney(pnl, currency)}` : '—';
   const plPositive = pnl >= 0;
 
+  const borrowedBalance = overview ? Number(overview.borrowedBalance ?? 0) : 0;
+  const creditLimit = overview ? Number(overview.creditLimit ?? 10000) : 10000;
+  const marginLevelPct = overview && overview.marginLevelPct != null ? Number(overview.marginLevelPct) : null;
+  const interestAccrued = overview ? Number(overview.interestAccruedTotal ?? 0) : 0;
+  const hasDebt = borrowedBalance > 0;
+  const isMarginCall = marginLevelPct != null && marginLevelPct < 110;
+  const isLiquidationRisk = marginLevelPct != null && marginLevelPct < 105;
 
   return (
     <>
@@ -157,6 +164,84 @@ export function DashboardPage() {
             </>
           )}
         </div>
+
+        {/* ── Credit line / margin call banner ── */}
+        {!isLoading && hasDebt && isMarginCall && (
+          <div
+            className="card mb-20"
+            style={{
+              padding: '14px 20px',
+              background: isLiquidationRisk ? 'var(--red-soft, #fdecea)' : 'var(--yellow-soft, #fff8e1)',
+              border: `1px solid ${isLiquidationRisk ? 'var(--red)' : 'var(--yellow, #f0ad4e)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <span style={{ fontSize: '1.3rem' }}>{isLiquidationRisk ? '🚨' : '⚠️'}</span>
+            <div>
+              <div style={{ fontWeight: 700, color: isLiquidationRisk ? 'var(--red)' : '#8a6100' }}>
+                {isLiquidationRisk ? t('dashboard.liquidationRisk') : t('dashboard.marginCallWarning')}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                {t('dashboard.marginLevel')}: {marginLevelPct?.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Credit line card ── */}
+        {!isLoading && hasDebt && (
+          <div className="card mb-20" style={{ padding: '20px 24px' }}>
+            <div className="flex-between mb-20">
+              <h3 style={{ margin: 0 }}>{t('dashboard.creditLine')}</h3>
+              <span
+                className="badge"
+                style={{
+                  background: isLiquidationRisk ? 'var(--red-soft, #fdecea)' : isMarginCall ? 'var(--yellow-soft, #fff8e1)' : 'var(--green-soft)',
+                  color: isLiquidationRisk ? 'var(--red)' : isMarginCall ? '#8a6100' : 'var(--green)',
+                }}
+              >
+                {marginLevelPct != null ? `${t('dashboard.marginLevel')}: ${marginLevelPct.toFixed(1)}%` : '—'}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {t('dashboard.borrowed')}
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{fmtMoney(borrowedBalance, currency)}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                  / {fmtMoney(creditLimit, currency)} {t('dashboard.creditLimit')}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {t('dashboard.interestAccrued')}
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{fmtMoney(interestAccrued, currency)}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>0.5% / day</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {t('dashboard.marginLevel')}
+                </div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: '1.1rem',
+                    color: isLiquidationRisk ? 'var(--red)' : isMarginCall ? '#c99400' : 'var(--green)',
+                  }}
+                >
+                  {marginLevelPct != null ? `${marginLevelPct.toFixed(1)}%` : '—'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                  100% = liquidation
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Quick Actions + Alerts ── */}
         <div className="grid-2 mb-20" style={{ gridTemplateColumns: '2fr 1fr' }}>

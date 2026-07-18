@@ -50,6 +50,21 @@ public class TradingAccount {
   @Column(name = "free_margin", nullable = false, precision = 18, scale = 8)
   private BigDecimal freeMargin = BigDecimal.ZERO;
 
+  // Amount currently borrowed from the broker's credit line (margin loan).
+  @Column(name = "borrowed_balance", nullable = false, precision = 18, scale = 8)
+  private BigDecimal borrowedBalance = BigDecimal.ZERO;
+
+  // Lifetime sum of interest charged on the credit line, for statistics/history.
+  @Column(name = "interest_accrued_total", nullable = false, precision = 18, scale = 8)
+  private BigDecimal interestAccruedTotal = BigDecimal.ZERO;
+
+  @Column(name = "last_interest_at")
+  private Instant lastInterestAt;
+
+  // Lifetime sum of real commission charged to this account, for statistics/history.
+  @Column(name = "commission_paid_total", nullable = false, precision = 18, scale = 8)
+  private BigDecimal commissionPaidTotal = BigDecimal.ZERO;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
@@ -140,6 +155,38 @@ public class TradingAccount {
 
   public Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  public BigDecimal getBorrowedBalance() {
+    return borrowedBalance;
+  }
+
+  public void setBorrowedBalance(BigDecimal borrowedBalance) {
+    this.borrowedBalance = borrowedBalance;
+  }
+
+  public BigDecimal getInterestAccruedTotal() {
+    return interestAccruedTotal;
+  }
+
+  public void setInterestAccruedTotal(BigDecimal interestAccruedTotal) {
+    this.interestAccruedTotal = interestAccruedTotal;
+  }
+
+  public Instant getLastInterestAt() {
+    return lastInterestAt;
+  }
+
+  public void setLastInterestAt(Instant lastInterestAt) {
+    this.lastInterestAt = lastInterestAt;
+  }
+
+  public BigDecimal getCommissionPaidTotal() {
+    return commissionPaidTotal;
+  }
+
+  public void setCommissionPaidTotal(BigDecimal commissionPaidTotal) {
+    this.commissionPaidTotal = commissionPaidTotal;
   }
 }
 

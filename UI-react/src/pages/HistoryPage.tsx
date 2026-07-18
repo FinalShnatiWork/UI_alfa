@@ -20,6 +20,7 @@ interface PairedTrade {
   stopLoss?: string;
   takeProfit?: string;
   realizedPnl?: string;
+  commission?: string;
 }
 
 // ── Pairing logic ─────────────────────────────────────────────────────────────
@@ -46,21 +47,23 @@ function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
     let openPrice = sell.openPrice;
     let openTime = sell.openedAt;
 
-    // Fallback if openPrice or openTime is missing (mock/legacy trades)
-    if (!openPrice || !openTime) {
-      const openSide = sell.side === 'SELL' ? 'BUY' : 'SELL';
-      const match = opening.find(
-        (o) =>
-          o.symbolCode === sell.symbolCode &&
-          o.side === openSide &&
-          !usedOpeningIds.has(o.id)
-      );
-      if (match) {
-        openPrice = openPrice || match.entryPrice;
-        openTime = openTime || match.filledAt || match.createdAt;
-        usedOpeningIds.add(match.id);
-      }
+    // Find the matching opening order — needed for its commission even when
+    // openPrice/openTime are already populated directly on the closing order.
+    const openSide = sell.side === 'SELL' ? 'BUY' : 'SELL';
+    const match = opening.find(
+      (o) =>
+        o.symbolCode === sell.symbolCode &&
+        o.side === openSide &&
+        !usedOpeningIds.has(o.id)
+    );
+    if (match) {
+      openPrice = openPrice || match.entryPrice;
+      openTime = openTime || match.filledAt || match.createdAt;
+      usedOpeningIds.add(match.id);
     }
+
+    const openCommission = Number(match?.commission ?? 0);
+    const closeCommission = Number(sell.commission ?? 0);
 
     pairs.push({
       id: sell.id,
@@ -73,6 +76,7 @@ function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
       stopLoss: sell.stopLoss,
       takeProfit: sell.takeProfit,
       realizedPnl: sell.realizedPnl,
+      commission: (openCommission + closeCommission).toFixed(2),
     });
   }
 
@@ -121,12 +125,13 @@ function fmtPl(n: unknown, currency: string, locale: string): string {
 }
 
 function exportCsv(trades: PairedTrade[], currency: string, locale: string) {
-  const headers = ['#', 'Symbol', 'Volume', 'Open Time', 'Open Price', 'Close Time', 'Close Price', 'S/L', 'T/P', 'P/L'];
+  const headers = ['#', 'Symbol', 'Volume', 'Open Time', 'Open Price', 'Close Time', 'Close Price', 'S/L', 'T/P', 'Commission', 'P/L'];
   const rows = trades.map((t) => [
     t.id, t.symbolCode, fmtQty(t.quantity),
     fmtTime(t.openTime, locale), fmtPrice(t.openPrice),
     fmtTime(t.closeTime, locale), fmtPrice(t.closePrice),
     fmtPrice(t.stopLoss), fmtPrice(t.takeProfit),
+    t.commission != null ? `-$${Number(t.commission).toFixed(2)}` : '',
     t.realizedPnl != null ? fmtPl(t.realizedPnl, currency, locale) : '',
   ]);
   const csv = [headers, ...rows]
@@ -214,10 +219,13 @@ export function HistoryPage() {
   const grossProfit = withPl.filter((o) => Number(o.realizedPnl) > 0).reduce((s, o) => s + Number(o.realizedPnl), 0);
   const grossLoss = Math.abs(withPl.filter((o) => Number(o.realizedPnl) <= 0).reduce((s, o) => s + Number(o.realizedPnl), 0));
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : null;
+  const commissionTotal = filtered.reduce((s, o) => s + Number(o.commission ?? 0), 0);
+  const netPlAfterFees = netPl - commissionTotal;
 
   const stats = [
     { label: t('history.totalTrades'), value: isLoading ? '…' : String(filtered.length), sub: `${withPl.length} ${t('history.closedTrades').toLowerCase()}` },
     { label: t('history.netPl'), value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(netPl, currency, lang) : '—'), colored: withPl.length > 0, positive: netPl >= 0 },
+    { label: t('history.commissionPaid'), value: isLoading ? '…' : (filtered.length > 0 ? `−$${commissionTotal.toFixed(2)}` : '—'), colored: filtered.length > 0, positive: false, sub: filtered.length > 0 ? t('history.netAfterFees') + ': ' + fmtPl(netPlAfterFees, currency, lang) : undefined },
     { label: t('history.winRate'), value: isLoading ? '…' : (winRate != null ? `${winRate.toFixed(1)}%` : '—'), sub: withPl.length > 0 ? `${wins}W / ${losses}L` : t('history.noData'), colored: winRate != null, positive: (winRate ?? 0) >= 50 },
     { label: t('history.avgPl'), value: isLoading ? '…' : (avgPl != null ? fmtPl(avgPl, currency, lang) : '—'), colored: avgPl != null, positive: (avgPl ?? 0) >= 0 },
     { label: t('history.bestTrade'), value: isLoading ? '…' : (bestPl != null ? fmtPl(bestPl, currency, lang) : '—'), colored: bestPl != null, positive: true },
@@ -286,6 +294,7 @@ export function HistoryPage() {
               <th style={{ textAlign: 'right' }}>{t('history.volume')}</th>
               <th style={{ textAlign: 'right' }}>S/L</th>
               <th style={{ textAlign: 'right' }}>T/P</th>
+              <th style={{ textAlign: 'right' }}>{t('history.commission')}</th>
               <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
             </tr>
           </thead>
@@ -294,7 +303,7 @@ export function HistoryPage() {
               <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                <td colSpan={11} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
                   {t('history.noTrades')}
                 </td>
               </tr>
@@ -313,6 +322,9 @@ export function HistoryPage() {
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
+                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>
+                      {trade.commission != null ? `−$${Number(trade.commission).toFixed(2)}` : '—'}
+                    </td>
                     <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
                       {pl != null ? `${pl >= 0 ? '+' : ''}$${Math.abs(pl).toFixed(2)}` : '—'}
                     </td>
@@ -326,6 +338,9 @@ export function HistoryPage() {
               <tr>
                 <td colSpan={9} className="text-muted text-sm">
                   {t('history.totalPl')} ({withPl.length}):
+                </td>
+                <td className="dir-ltr font-bold text-danger">
+                  −${commissionTotal.toFixed(2)}
                 </td>
                 <td className={`dir-ltr font-bold ${netPl >= 0 ? 'text-success' : 'text-danger'}`}>
                   {netPl >= 0 ? '+' : ''}${Math.abs(netPl).toFixed(2)}

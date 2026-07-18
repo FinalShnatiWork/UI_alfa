@@ -10,5 +10,10 @@ public record BrokerOverviewDto(
     BigDecimal balance,
     BigDecimal equity,
     BigDecimal marginUsed,
-    BigDecimal freeMargin) {}
+    BigDecimal freeMargin,
+    BigDecimal borrowedBalance,
+    BigDecimal creditLimit,
+    BigDecimal marginLevelPct,
+    BigDecimal interestAccruedTotal,
+    BigDecimal commissionPaidTotal) {}
 
