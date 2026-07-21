@@ -6,6 +6,7 @@ import type { Lang } from '@/types/api';
 const NAV_LINKS = [
   { to: '/positions', key: 'nav.positions' },
   { to: '/charts', key: 'nav.charts' },
+  { to: '/analyzer', key: 'nav.analyzer' },
   { to: '/finance', key: 'nav.finance' },
   { to: '/history', key: 'nav.history' },
   { to: '/account', key: 'nav.account' },

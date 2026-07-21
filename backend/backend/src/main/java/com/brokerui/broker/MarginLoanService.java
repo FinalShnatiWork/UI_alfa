@@ -90,8 +90,8 @@ public class MarginLoanService {
 
     BigDecimal shortfall = required.subtract(ta.getBalance());
     BigDecimal currentDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
-    if (currentDebt.add(shortfall).compareTo(CREDIT_LIMIT) > 0) {
-      return false; // would exceed the credit line — reject the trade
+    if (currentDebt.add(shortfall).compareTo(ta.getCreditLimit()) > 0) {
+      return false; // would exceed the account's credit line — reject the trade
     }
 
     ta.setBalance(BigDecimal.ZERO);
@@ -270,13 +270,14 @@ public class MarginLoanService {
     BigDecimal debt = ta.getBorrowedBalance();
     if (debt == null || debt.compareTo(BigDecimal.ZERO) <= 0) return;
 
-    BigDecimal interest = debt.multiply(DAILY_INTEREST_RATE).setScale(8, RoundingMode.HALF_UP);
+    BigDecimal rate = ta.getDailyInterestRate() == null ? DAILY_INTEREST_RATE : ta.getDailyInterestRate();
+    BigDecimal interest = debt.multiply(rate).setScale(8, RoundingMode.HALF_UP);
     ta.setBorrowedBalance(debt.add(interest));
     ta.setInterestAccruedTotal(
         (ta.getInterestAccruedTotal() == null ? BigDecimal.ZERO : ta.getInterestAccruedTotal()).add(interest));
     ta.setLastInterestAt(Instant.now());
     accountRepo.save(ta);
-    writeLedger(ta, "INTEREST", interest, "Daily interest charge (" + DAILY_INTEREST_RATE.multiply(BigDecimal.valueOf(100)) + "%/day)");
+    writeLedger(ta, "INTEREST", interest, "Daily interest charge (" + rate.multiply(BigDecimal.valueOf(100)) + "%/day)");
   }
 
   /**

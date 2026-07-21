@@ -1,0 +1,2 @@
+ALTER TABLE trading_account ADD COLUMN IF NOT EXISTS credit_limit NUMERIC(18, 8) DEFAULT 10000.00;
+ALTER TABLE trading_account ADD COLUMN IF NOT EXISTS daily_interest_rate NUMERIC(18, 8) DEFAULT 0.005;

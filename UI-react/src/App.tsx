@@ -18,6 +18,7 @@ import { PositionsPage } from '@/pages/PositionsPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { FinancePage } from '@/pages/FinancePage';
 import { ChartsPage } from '@/pages/ChartsPage';
+import { AnalyzerPage } from '@/pages/AnalyzerPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
 
 const queryClient = new QueryClient({
@@ -55,6 +56,7 @@ export function App() {
                   <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                   <Route path="/positions" element={<ProtectedRoute><PositionsPage /></ProtectedRoute>} />
                   <Route path="/charts" element={<ProtectedRoute><ChartsPage /></ProtectedRoute>} />
+                  <Route path="/analyzer" element={<ProtectedRoute><AnalyzerPage /></ProtectedRoute>} />
                   <Route path="/finance" element={<ProtectedRoute><FinancePage /></ProtectedRoute>} />
                   <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
                   <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />

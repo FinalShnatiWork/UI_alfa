@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   createChart, ColorType, CrosshairMode,
   CandlestickSeries, HistogramSeries,
@@ -8,7 +9,9 @@ import { apiPostJson, getContractSize } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
+import { LoanOfferModal, type LoanOfferDetails } from '@/components/LoanOfferModal';
 import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder } from '@/hooks/useApi';
+
 import type { PlaceOrderResponse, ClosePositionResponse } from '@/types/api';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -260,8 +263,12 @@ export function ChartsPage() {
   const sessionOpenPriceRef = useRef<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [category, setCategory] = useState<Category>('forex');
-  const [symbol, setSymbol] = useState('EURUSD');
+  const [searchParams] = useSearchParams();
+  const paramSymbol = searchParams.get('symbol');
+  const paramCategory = searchParams.get('category');
+
+  const [category, setCategory] = useState<Category>((paramCategory as Category) || 'forex');
+  const [symbol, setSymbol] = useState(paramSymbol || 'EURUSD');
   const [interval, setInterval_] = useState<Interval>('1h');
   const [bidAsk, setBidAsk] = useState('—');
   const [livePrice, setLivePrice] = useState(t('common.loading'));
@@ -301,11 +308,16 @@ export function ChartsPage() {
     ? Number(positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())!.quantity).toFixed(2)
     : '0.00';
 
+  const [isChartReady, setIsChartReady] = useState(false);
+
   // Manage drawing active LIMIT order price line and all position/pending price lines on the chart
   const priceLinesRef = useRef<any[]>([]);
+  const positionsKey = JSON.stringify(positions.map((p) => `${p.id}_${p.symbolCode}_${p.side}_${p.avgPrice}_${p.stopLoss}_${p.takeProfit}`));
+  const pendingKey = JSON.stringify(pendingOrders.map((o) => `${o.id}_${o.symbolCode}_${o.side}_${o.limitPrice}_${o.stopPrice}`));
+
   useEffect(() => {
     const series = seriesRef.current;
-    if (!series) return;
+    if (!series || !isChartReady) return;
 
     // Clear all existing price lines first
     priceLinesRef.current.forEach((line) => {
@@ -424,7 +436,7 @@ export function ChartsPage() {
       });
       priceLinesRef.current = [];
     };
-  }, [orderType, entryPrice, symbol, positions, pendingOrders, seriesRef.current, t]);
+  }, [orderType, entryPrice, symbol, positionsKey, pendingKey, isChartReady, t]);
 
   useEffect(() => {
     document.title = t('titles.charts');
@@ -444,6 +456,7 @@ export function ChartsPage() {
       upColor: '#22c55e', downColor: '#ef4444',
       borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444',
     });
+    setIsChartReady(true);
     volSeriesRef.current = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' }, priceScaleId: 'volume', color: '#6366f120',
     });
@@ -687,7 +700,9 @@ export function ChartsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionsData]);
 
-  async function placeOrder(side: 'BUY' | 'SELL') {
+  const [loanOffer, setLoanOffer] = useState<LoanOfferDetails | null>(null);
+
+  async function placeOrder(side: 'BUY' | 'SELL', acceptLoan = false) {
     const qty = Number(volume);
     if (!symbol || !qty || qty <= 0) { toast.show(t('trading.errBadOrder'), { variant: 'warning' }); return; }
     if (orderType !== 'MARKET' && (!entryPrice || Number(entryPrice) <= 0)) {
@@ -700,11 +715,18 @@ export function ChartsPage() {
         quantity: qty,
         orderType,
         takeProfit: takeProfit ? Number(takeProfit) : undefined,
-        stopLoss: stopLoss ? Number(stopLoss) : undefined
+        stopLoss: stopLoss ? Number(stopLoss) : undefined,
+        acceptLoan: acceptLoan ? true : undefined,
       };
       if (orderType === 'LIMIT') payload.limitPrice = Number(entryPrice);
       const res = await apiPostJson('/api/broker/orders', payload);
-      const data = await res.json() as PlaceOrderResponse;
+      const data = await res.json() as PlaceOrderResponse & {
+        shortfall?: number;
+        required?: number;
+        cashBalance?: number;
+        creditLimit?: number;
+        dailyInterestRate?: number;
+      };
       if (res.ok) {
         if (data.status === 'NEW') {
           toast.show(t('trading.orderPlaced', { side, symbol }), { variant: 'success' });
@@ -715,6 +737,24 @@ export function ChartsPage() {
         setStopLoss('');
         invalidateAfterTrade();
       } else {
+        if (data.error === 'credit_offer_available') {
+          setLoanOffer({
+            shortfall: Number(data.shortfall ?? 0),
+            required: Number(data.required ?? 0),
+            cashBalance: Number(data.cashBalance ?? 0),
+            creditLimit: Number(data.creditLimit ?? 10000),
+            dailyInterestRate: Number(data.dailyInterestRate ?? 0.005),
+            symbol,
+            side,
+            onConfirm: () => {
+              setLoanOffer(null);
+              void placeOrder(side, true);
+            },
+            onCancel: () => setLoanOffer(null),
+          });
+          return;
+        }
+
         const knownErrors: Record<string, string> = {
           credit_limit_exceeded: t('trading.errCreditLimitExceeded'),
           insufficient_funds: t('trading.errInsufficientFunds'),
@@ -726,6 +766,7 @@ export function ChartsPage() {
       }
     } catch { toast.show(t('trading.errOrderFailed'), { variant: 'error' }); }
   }
+
 
   async function handleCancelOrder(orderId: number, symbol: string) {
     setCancellingId(orderId);
@@ -1080,6 +1121,8 @@ export function ChartsPage() {
           </div>
         </div>
       </div>
+      {loanOffer && <LoanOfferModal {...loanOffer} />}
     </>
   );
 }
+

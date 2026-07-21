@@ -15,5 +15,7 @@ public record BrokerOverviewDto(
     BigDecimal creditLimit,
     BigDecimal marginLevelPct,
     BigDecimal interestAccruedTotal,
-    BigDecimal commissionPaidTotal) {}
+    BigDecimal commissionPaidTotal,
+    BigDecimal dailyInterestRate) {}
+
 

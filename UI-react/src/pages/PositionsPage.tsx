@@ -29,10 +29,10 @@ function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
   );
 
   const closing = sorted.filter(
-    (o) => o.realizedPnl != null && Number(o.realizedPnl) !== 0
+    (o) => o.realizedPnl != null || o.openPrice != null
   );
   const opening = sorted.filter(
-    (o) => o.realizedPnl == null || Number(o.realizedPnl) === 0
+    (o) => o.realizedPnl == null && o.openPrice == null
   );
 
   const usedOpeningIds = new Set<number>();
@@ -79,8 +79,10 @@ type Tab = 'open' | 'closed' | 'pending';
 function fmtPrice(n: unknown): string {
   const v = Number(n ?? 0);
   if (!Number.isFinite(v) || v === 0) return '—';
-  if (v > 1000) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  const abs = Math.abs(v);
+  const minDecimals = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
+  const maxDecimals = abs > 0 && abs < 10 ? 6 : (abs >= 10 && abs < 500 ? 4 : 2);
+  return v.toLocaleString(undefined, { minimumFractionDigits: minDecimals, maximumFractionDigits: maxDecimals });
 }
 
 function fmtQty(n: unknown): string {
@@ -308,15 +310,15 @@ export function PositionsPage() {
                           <span className="text-muted">—</span>
                         )}
                       </td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>
-                        {pnl != null ? (
-                          <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                            {pnl >= 0 ? '+' : '-'}${fmtPrice(Math.abs(pnl))}
-                          </span>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
+                        <td className="dir-ltr" style={{ textAlign: 'right' }}>
+                          {pnl != null ? (
+                            <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                              {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                            </span>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
                       <td style={{ textAlign: 'center' }}>
                         <button
                           type="button"
@@ -350,7 +352,7 @@ export function PositionsPage() {
                       {t('table.totalPl') || 'Total P/L'}
                     </td>
                     <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
-                      {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toFixed(2)}
+                      {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
                     </td>
                     <td />
                   </tr>
@@ -402,7 +404,7 @@ export function PositionsPage() {
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
                       <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
-                        {pl != null ? `${pl >= 0 ? '+' : ''}$${Math.abs(pl).toFixed(2)}` : '—'}
+                        {pl != null ? `${pl >= 0 ? '+' : '-'}$${Math.abs(pl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}` : '—'}
                       </td>
                     </tr>
                   );

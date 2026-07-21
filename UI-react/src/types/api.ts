@@ -42,7 +42,9 @@ export interface BrokerOverview {
   marginLevelPct?: number | string | null;
   interestAccruedTotal?: number | string;
   commissionPaidTotal?: number | string;
+  dailyInterestRate?: number | string;
 }
+
 
 export interface TradingAccount {
   id: number;

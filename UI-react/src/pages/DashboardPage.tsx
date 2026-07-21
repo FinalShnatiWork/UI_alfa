@@ -20,8 +20,16 @@ function fmtMoney(value: unknown, currency = 'USD'): string {
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n);
+}
+
+function fmtPnl(n: unknown): string {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v)) return '—';
+  if (Math.abs(v) > 1000) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 });
 }
 
 /**
@@ -34,7 +42,10 @@ function fmtPrice(n: unknown): string {
   if (n == null) return '—';
   const v = Number(n);
   if (isNaN(v)) return '—';
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 });
+  const abs = Math.abs(v);
+  const minDecimals = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
+  const maxDecimals = abs > 0 && abs < 10 ? 6 : (abs >= 10 && abs < 500 ? 4 : 2);
+  return v.toLocaleString(undefined, { minimumFractionDigits: minDecimals, maximumFractionDigits: maxDecimals });
 }
 
 /**
@@ -91,10 +102,20 @@ export function DashboardPage() {
   }, 0);
 
   const history = Array.isArray(historyData) ? historyData : [];
-  const todayStr = new Date().toDateString();
+
+  const totalRealizedPnl = history.reduce((sum, order) => {
+    if (order.realizedPnl == null) return sum;
+    return sum + Number(order.realizedPnl);
+  }, 0);
+
+  const nowMs = Date.now();
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
   const todayRealizedPnl = history.reduce((sum, order) => {
-    if (!order.filledAt || !order.realizedPnl) return sum;
-    const isToday = new Date(order.filledAt).toDateString() === todayStr;
+    if (order.realizedPnl == null) return sum;
+    const dateToCheck = order.filledAt || order.createdAt;
+    if (!dateToCheck) return sum;
+    const orderMs = new Date(dateToCheck).getTime();
+    const isToday = (nowMs - orderMs) <= ONE_DAY_MS;
     return sum + (isToday ? Number(order.realizedPnl) : 0);
   }, 0);
 
@@ -106,15 +127,18 @@ export function DashboardPage() {
   const marginUsed = overview ? fmtMoney(rawMarginUsed, currency) : '—';
   const freeMargin = overview ? fmtMoney(liveFreeMargin, currency) : '—';
 
-  const pnl = overview ? (todayRealizedPnl + livePnl) : 0;
-  const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtMoney(pnl, currency)}` : '—';
+  const pnl = overview ? (totalRealizedPnl + livePnl) : 0;
+  const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtPnl(pnl)}` : '—';
   const plPositive = pnl >= 0;
 
   const borrowedBalance = overview ? Number(overview.borrowedBalance ?? 0) : 0;
   const creditLimit = overview ? Number(overview.creditLimit ?? 10000) : 10000;
   const marginLevelPct = overview && overview.marginLevelPct != null ? Number(overview.marginLevelPct) : null;
   const interestAccrued = overview ? Number(overview.interestAccruedTotal ?? 0) : 0;
+  const dailyInterestRate = overview && overview.dailyInterestRate ? Number(overview.dailyInterestRate) : 0.005;
+  const dailyInterestStr = `${(dailyInterestRate * 100).toFixed(1)}% / day`;
   const hasDebt = borrowedBalance > 0;
+
   const isMarginCall = marginLevelPct != null && marginLevelPct < 110;
   const isLiquidationRisk = marginLevelPct != null && marginLevelPct < 105;
 
@@ -190,53 +214,100 @@ export function DashboardPage() {
           </div>
         )}
 
-        {/* ── Credit line card ── */}
+        {/* ── Dedicated Credit Line & Margin Loan Section (Shown ONLY when active loan exists) ── */}
         {!isLoading && hasDebt && (
           <div className="card mb-20" style={{ padding: '20px 24px' }}>
             <div className="flex-between mb-20">
-              <h3 style={{ margin: 0 }}>{t('dashboard.creditLine')}</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '1.2rem' }}>📜</span>
+                <h3 style={{ margin: 0 }}>{t('dashboard.creditLine')} &amp; Margin Loan</h3>
+              </div>
               <span
                 className="badge"
                 style={{
-                  background: isLiquidationRisk ? 'var(--red-soft, #fdecea)' : isMarginCall ? 'var(--yellow-soft, #fff8e1)' : 'var(--green-soft)',
-                  color: isLiquidationRisk ? 'var(--red)' : isMarginCall ? '#8a6100' : 'var(--green)',
+                  background: !hasDebt
+                    ? 'var(--green-soft)'
+                    : isLiquidationRisk
+                    ? 'var(--red-soft, #fdecea)'
+                    : isMarginCall
+                    ? 'var(--yellow-soft, #fff8e1)'
+                    : 'var(--blue-soft, #e3f2fd)',
+                  color: !hasDebt
+                    ? 'var(--green)'
+                    : isLiquidationRisk
+                    ? 'var(--red)'
+                    : isMarginCall
+                    ? '#8a6100'
+                    : 'var(--blue, #1976d2)',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  padding: '4px 12px',
+                  borderRadius: 20
                 }}
               >
-                {marginLevelPct != null ? `${t('dashboard.marginLevel')}: ${marginLevelPct.toFixed(1)}%` : '—'}
+                {!hasDebt
+                  ? '🟢 Credit Available'
+                  : isLiquidationRisk
+                  ? `🚨 Liquidation Risk (${marginLevelPct?.toFixed(1)}%)`
+                  : isMarginCall
+                  ? `⚠️ Margin Call (${marginLevelPct?.toFixed(1)}%)`
+                  : `🔵 Active Debt (${marginLevelPct?.toFixed(1)}%)`}
               </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-              <div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                  {t('dashboard.borrowed')}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Borrowed Debt
                 </div>
-                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{fmtMoney(borrowedBalance, currency)}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                  / {fmtMoney(creditLimit, currency)} {t('dashboard.creditLimit')}
+                <div style={{ fontWeight: 700, fontSize: '1.2rem', color: hasDebt ? 'var(--red)' : 'inherit' }}>
+                  {fmtMoney(borrowedBalance, currency)}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                  / {fmtMoney(creditLimit, currency)} Credit Limit
                 </div>
               </div>
-              <div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                  {t('dashboard.interestAccrued')}
+
+              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Available Credit
                 </div>
-                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{fmtMoney(interestAccrued, currency)}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>0.5% / day</div>
+                <div style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--green)' }}>
+                  {fmtMoney(Math.max(0, creditLimit - borrowedBalance), currency)}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                  Auto-borrow limit
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                  {t('dashboard.marginLevel')}
+
+              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Interest Accrued
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>
+                  {fmtMoney(interestAccrued, currency)}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                  {dailyInterestStr}
+                </div>
+              </div>
+
+
+              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Margin Level
                 </div>
                 <div
                   style={{
                     fontWeight: 700,
-                    fontSize: '1.1rem',
-                    color: isLiquidationRisk ? 'var(--red)' : isMarginCall ? '#c99400' : 'var(--green)',
+                    fontSize: '1.2rem',
+                    color: isLiquidationRisk ? 'var(--red)' : isMarginCall ? '#c99400' : hasDebt ? 'var(--green)' : 'var(--text-secondary)',
                   }}
                 >
-                  {marginLevelPct != null ? `${marginLevelPct.toFixed(1)}%` : '—'}
+                  {marginLevelPct != null ? `${marginLevelPct.toFixed(1)}%` : '— No Debt'}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                  100% = liquidation
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                  100% = Liquidation
                 </div>
               </div>
             </div>
@@ -249,7 +320,7 @@ export function DashboardPage() {
           {/* Trading Summary */}
           <div className="card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div className="flex-between" style={{ marginBottom: 20 }}>
-              <h3 style={{ margin: 0 }}>{t('dashboard.tradingSummary')}</h3>
+              <h3 style={{ margin: 0 }}>Trading Performance &amp; Summary</h3>
               <span
                 style={{
                   background: 'var(--green-soft)',
@@ -324,8 +395,8 @@ export function DashboardPage() {
 
               return (
                 <>
-                  {/* Big numbers row */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  {/* PnL & Performance Breakdown Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
                     <div
                       style={{
                         background: 'var(--bg-alt)',
@@ -334,31 +405,70 @@ export function DashboardPage() {
                       }}
                     >
                       <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                        {t('dashboard.openPositions')}
-                      </div>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 700, lineHeight: 1 }}>
-                        {positions.length}
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        background: 'var(--bg-alt)',
-                        borderRadius: 10,
-                        padding: '14px 16px',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                        {t('dashboard.unrealizedPl')}
+                        Realized PnL
                       </div>
                       <div
                         style={{
-                          fontSize: '1.4rem',
+                          fontSize: '1.3rem',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          color: todayRealizedPnl >= 0 ? 'var(--green)' : 'var(--red)',
+                        }}
+                      >
+                        {todayRealizedPnl >= 0 ? '+' : ''}{fmtPnl(todayRealizedPnl)}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                        Closed Trades Today
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        background: 'var(--bg-alt)',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                        Unrealized PnL
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '1.3rem',
                           fontWeight: 700,
                           lineHeight: 1,
                           color: totalUnrealized >= 0 ? 'var(--green)' : 'var(--red)',
                         }}
                       >
-                        {totalUnrealized >= 0 ? '+' : ''}{fmtMoney(totalUnrealized, currency)}
+                        {totalUnrealized >= 0 ? '+' : ''}{fmtPnl(totalUnrealized)}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                        {positions.length} Open Position{positions.length === 1 ? '' : 's'}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        background: 'var(--bg-alt)',
+                        borderRadius: 10,
+                        padding: '14px 16px',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                        Net PnL
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '1.3rem',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          color: pnl >= 0 ? 'var(--green)' : 'var(--red)',
+                        }}
+                      >
+                        {pl}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                        Total Realized + Live
                       </div>
                     </div>
                   </div>
@@ -370,7 +480,7 @@ export function DashboardPage() {
                         <div style={{ color: 'var(--text-secondary)', marginBottom: 3 }}>↑ {t('dashboard.bestPosition')}</div>
                         <span style={{ fontWeight: 600 }}>{best?.symbolCode}</span>{' '}
                         <span style={{ color: 'var(--green)', fontWeight: 600 }}>
-                          {bestPnl >= 0 ? '+' : ''}{fmtMoney(bestPnl, currency)}
+                          {bestPnl >= 0 ? '+' : ''}{fmtPnl(bestPnl)}
                         </span>
                       </div>
                       {positions.length > 1 && (
@@ -378,7 +488,7 @@ export function DashboardPage() {
                           <div style={{ color: 'var(--text-secondary)', marginBottom: 3 }}>↓ {t('dashboard.worstPosition')}</div>
                           <span style={{ fontWeight: 600 }}>{worst?.symbolCode}</span>{' '}
                           <span style={{ color: 'var(--red)', fontWeight: 600 }}>
-                            {worstPnl >= 0 ? '+' : ''}{fmtMoney(worstPnl, currency)}
+                            {fmtPnl(worstPnl)}
                           </span>
                         </div>
                       )}
@@ -579,7 +689,7 @@ export function DashboardPage() {
                       )}
                     </td>
                     <td className={`font-bold dir-ltr ${pnlPos >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {pnlPos >= 0 ? '+' : ''}{fmtMoney(pnlPos, currency)}
+                      {pnlPos >= 0 ? '+' : ''}{fmtPnl(pnlPos)}
                     </td>
                     <td>
                       <span className="badge badge-success">{t('badge.open')}</span>

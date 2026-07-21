@@ -104,8 +104,8 @@ public class BrokerApiController {
     BigDecimal marginLevelPct = marginLevel == null ? null : marginLevel.multiply(BigDecimal.valueOf(100));
     return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(),
         ta.getBalance(), liveEquity, ta.getMarginUsed(), ta.getFreeMargin(),
-        ta.getBorrowedBalance(), MarginLoanService.CREDIT_LIMIT, marginLevelPct, ta.getInterestAccruedTotal(),
-        ta.getCommissionPaidTotal()));
+        ta.getBorrowedBalance(), ta.getCreditLimit(), marginLevelPct, ta.getInterestAccruedTotal(),
+        ta.getCommissionPaidTotal(), ta.getDailyInterestRate()));
   }
 
   @GetMapping("/symbols")
@@ -288,7 +288,7 @@ public class BrokerApiController {
 
   public record PlaceOrderRequest(String symbolCode, String side, String orderType,
       BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopPrice,
-      BigDecimal takeProfit, BigDecimal stopLoss) {
+      BigDecimal takeProfit, BigDecimal stopLoss, Boolean acceptLoan) {
   }
 
   @PostMapping("/orders")
@@ -359,7 +359,7 @@ public class BrokerApiController {
       BigDecimal reserved = targetPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
       if (!marginLoanService.tryCoverShortfall(ta, reserved, u, request)) {
         return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
-            "required", reserved, "available", ta.getBalance(), "creditLimit", MarginLoanService.CREDIT_LIMIT));
+            "required", reserved, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit()));
       }
       ta.setEquity(recalcEquity(ta));
       ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
@@ -399,10 +399,28 @@ public class BrokerApiController {
 
     // ── BUY order ─────────────────────────────────────────────────────────────
     if ("BUY".equals(side)) {
-      BigDecimal required = margin.add(TradingFees.COMMISSION_PER_TRADE);
+      BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
+      BigDecimal required = margin.add(commission);
+
+      if (ta.getBalance().compareTo(required) < 0 && !Boolean.TRUE.equals(body.acceptLoan())) {
+        BigDecimal shortfall = required.subtract(ta.getBalance());
+        BigDecimal currentDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
+        if (currentDebt.add(shortfall).compareTo(ta.getCreditLimit()) <= 0) {
+          return ResponseEntity.badRequest().body(Map.of(
+              "ok", false,
+              "error", "credit_offer_available",
+              "shortfall", shortfall,
+              "required", required,
+              "cashBalance", ta.getBalance(),
+              "creditLimit", ta.getCreditLimit(),
+              "dailyInterestRate", ta.getDailyInterestRate()
+          ));
+        }
+      }
+
       if (!marginLoanService.tryCoverShortfall(ta, required, u, request)) {
         return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
-            "required", required, "available", ta.getBalance(), "creditLimit", MarginLoanService.CREDIT_LIMIT));
+            "required", required, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit()));
       }
 
       Position longPos = openNewPosition(ta, symbolCode, "LONG", qty, bdPrice, body.takeProfit(), body.stopLoss());
@@ -423,8 +441,8 @@ public class BrokerApiController {
         System.err.println("Failed to create notification: " + e.getMessage());
       }
 
-      BrokerOrder order = buildFilledOrder(ta, symbolCode, "BUY", qty, bdPrice, BigDecimal.ZERO);
-      TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+      BrokerOrder order = buildFilledOrder(ta, symbolCode, "BUY", qty, bdPrice, null);
+      TradingFees.charge(ta, order, commission);
       accountRepo.save(ta);
       boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
       orderRepo.save(order);
@@ -453,10 +471,28 @@ public class BrokerApiController {
     }
 
     // ── SELL order ────────────────────────────────────────────────────────────
-    BigDecimal sellRequired = margin.add(TradingFees.COMMISSION_PER_TRADE);
+    BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
+    BigDecimal sellRequired = margin.add(commission);
+
+    if (ta.getBalance().compareTo(sellRequired) < 0 && !Boolean.TRUE.equals(body.acceptLoan())) {
+      BigDecimal shortfall = sellRequired.subtract(ta.getBalance());
+      BigDecimal currentDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
+      if (currentDebt.add(shortfall).compareTo(ta.getCreditLimit()) <= 0) {
+        return ResponseEntity.badRequest().body(Map.of(
+            "ok", false,
+            "error", "credit_offer_available",
+            "shortfall", shortfall,
+            "required", sellRequired,
+            "cashBalance", ta.getBalance(),
+            "creditLimit", ta.getCreditLimit(),
+            "dailyInterestRate", ta.getDailyInterestRate()
+        ));
+      }
+    }
+
     if (!marginLoanService.tryCoverShortfall(ta, sellRequired, u, request)) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
-          "required", sellRequired, "available", ta.getBalance(), "creditLimit", MarginLoanService.CREDIT_LIMIT));
+          "required", sellRequired, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit()));
     }
 
     Position shortPos = openNewPosition(ta, symbolCode, "SHORT", qty, bdPrice, body.takeProfit(), body.stopLoss());
@@ -477,8 +513,8 @@ public class BrokerApiController {
       System.err.println("Failed to create notification: " + e.getMessage());
     }
 
-    BrokerOrder order = buildFilledOrder(ta, symbolCode, "SELL", qty, bdPrice, BigDecimal.ZERO);
-    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+    BrokerOrder order = buildFilledOrder(ta, symbolCode, "SELL", qty, bdPrice, null);
+    TradingFees.charge(ta, order, commission);
     accountRepo.save(ta);
     boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
     orderRepo.save(order);
@@ -558,27 +594,52 @@ public class BrokerApiController {
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     BigDecimal marginReturned = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
 
-    BigDecimal pnl;
+    BigDecimal grossPnl;
     if (isShort) {
       // SHORT close: profit = (avgEntry - closePrice) * qty * contractSize
-      // Return margin + PNL back to balance
-      pnl = avg.subtract(bdPrice).multiply(qty).multiply(contractSize);
+      grossPnl = avg.subtract(bdPrice).multiply(qty).multiply(contractSize);
     } else {
       // LONG close: profit = (closePrice - avgEntry) * qty * contractSize
-      // Return margin + PNL back to balance
-      pnl = bdPrice.subtract(avg).multiply(qty).multiply(contractSize);
+      grossPnl = bdPrice.subtract(avg).multiply(qty).multiply(contractSize);
     }
     String closeSide = isShort ? "BUY" : "SELL";
-    BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, pnl);
+
+    BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
+    BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, bdPrice);
+    BigDecimal totalFees = openCommission.add(closeCommission);
+
+    // Client Profit Safety Guard:
+    // On winning trades, total commission is capped to max 20% of gross profit
+    // so the client ALWAYS keeps at least 80% of their gains.
+    if (grossPnl != null && grossPnl.compareTo(BigDecimal.ZERO) > 0) {
+      BigDecimal maxFee = grossPnl.multiply(new BigDecimal("0.20")).setScale(2, RoundingMode.HALF_UP);
+      if (maxFee.compareTo(new BigDecimal("0.05")) >= 0 && totalFees.compareTo(maxFee) > 0) {
+        totalFees = maxFee;
+        closeCommission = totalFees.divide(new BigDecimal("2"), 2, RoundingMode.HALF_UP);
+      }
+    }
+    BigDecimal netPnl = grossPnl.subtract(totalFees);
+
+    BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, netPnl);
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
-    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+    TradingFees.charge(ta, order, closeCommission);
 
-    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(pnl).subtract(order.getCommission()));
+    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(grossPnl).subtract(order.getCommission()));
 
     positionRepo.delete(pos);
     ta.setEquity(recalcEquity(ta));
     accountRepo.save(ta);
+
+    // Record permanent transaction in database memory
+    AccountTransaction tx = new AccountTransaction();
+    tx.setTradingAccount(ta);
+    tx.setTxType("TRADE_CLOSE");
+    tx.setStatus("COMPLETED");
+    tx.setAmount(netPnl);
+    tx.setMethod("SYSTEM");
+    tx.setNote("Closed position " + pos.getSymbolCode() + " " + pos.getSide() + " qty=" + qty + " Net PnL=" + netPnl + " (Gross: " + grossPnl + ", Fees: " + totalFees + ")");
+    txRepo.save(tx);
 
     try {
       Notification notif = new Notification();
@@ -586,7 +647,7 @@ public class BrokerApiController {
       notif.setNotifType("TRADE");
       notif.setTitle("notification.tradeClosed.title");
       notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}", 
-          pos.getSide(), qty.doubleValue(), pos.getSymbolCode(), bdPrice.doubleValue(), pnl.doubleValue()));
+          pos.getSide(), qty.doubleValue(), pos.getSymbolCode(), bdPrice.doubleValue(), netPnl.doubleValue()));
       notificationRepo.save(notif);
     } catch (Exception e) {
       System.err.println("Failed to create notification: " + e.getMessage());
@@ -597,7 +658,7 @@ public class BrokerApiController {
 
     auditLogService.log(u, "POSITION_CLOSED",
         (isShort ? "SHORT" : "LONG") + " " + pos.getSymbolCode() +
-            " qty=" + qty + " @ " + bdPrice + " pnl=" + pnl,
+            " qty=" + qty + " @ " + bdPrice + " pnl=" + netPnl,
         request);
 
     // Forward to MT5
@@ -607,7 +668,7 @@ public class BrokerApiController {
       System.err.println("MT5 Send Failed: " + ex.getMessage());
     }
 
-    return ResponseEntity.ok(Map.of("ok", true, "closePnl", pnl, "commission", order.getCommission(), "newBalance", ta.getBalance()));
+    return ResponseEntity.ok(Map.of("ok", true, "closePnl", netPnl, "commission", order.getCommission(), "newBalance", ta.getBalance()));
   }
 
   @GetMapping("/notifications")

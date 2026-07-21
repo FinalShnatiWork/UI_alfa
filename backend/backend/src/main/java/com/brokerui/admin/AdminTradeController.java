@@ -346,5 +346,41 @@ public class AdminTradeController {
       accountRepo.save(acc);
       return Map.of("ok", true);
   }
+
+  public record UpdateLoanRequest(BigDecimal borrowedBalance) {}
+
+  /**
+   * Updates the margin loan borrowed balance of a specific trading account for demo testing.
+   *
+   * @param id the target trading account ID
+   * @param req the request containing the new borrowedBalance value
+   * @return a map indicating the success of the update
+   */
+  @PostMapping("/accounts/{id}/loan")
+  @org.springframework.transaction.annotation.Transactional
+  public Map<String, Object> updateLoan(@PathVariable Long id, @RequestBody UpdateLoanRequest req) {
+      var acc = accountRepo.findByIdForUpdate(id)
+          .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+               org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
+      BigDecimal newBorrowed = (req != null && req.borrowedBalance() != null) ? req.borrowedBalance() : new BigDecimal("3500.00");
+      acc.setBorrowedBalance(newBorrowed);
+      if (acc.getInterestAccruedTotal() == null || acc.getInterestAccruedTotal().compareTo(BigDecimal.ZERO) == 0) {
+        acc.setInterestAccruedTotal(new BigDecimal("17.50"));
+      }
+      acc.setLastInterestAt(Instant.now());
+      accountRepo.save(acc);
+
+      MarginLoanLedger entry = new MarginLoanLedger();
+      entry.setTradingAccount(acc);
+      entry.setEntryType("BORROW");
+      entry.setAmount(newBorrowed);
+      entry.setBorrowedAfter(newBorrowed);
+      entry.setBalanceAfter(acc.getBalance());
+      entry.setNote("Manual margin loan activation for demo");
+      marginLedgerRepo.save(entry);
+
+      return Map.of("ok", true, "borrowedBalance", acc.getBorrowedBalance());
+  }
 }
+
 

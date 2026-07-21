@@ -34,10 +34,10 @@ function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
   );
 
   const closing = sorted.filter(
-    (o) => o.realizedPnl != null && Number(o.realizedPnl) !== 0
+    (o) => o.realizedPnl != null || o.openPrice != null
   );
   const opening = sorted.filter(
-    (o) => o.realizedPnl == null || Number(o.realizedPnl) === 0
+    (o) => o.realizedPnl == null && o.openPrice == null
   );
 
   const usedOpeningIds = new Set<number>();
@@ -210,6 +210,9 @@ export function HistoryPage() {
   // Stats
   const withPl = filtered.filter((o) => o.realizedPnl != null);
   const netPl = withPl.reduce((s, o) => s + Number(o.realizedPnl), 0);
+  const commissionTotal = filtered.reduce((s, o) => s + Number(o.commission ?? 0), 0);
+  const grossTradePl = withPl.reduce((s, o) => s + (Number(o.realizedPnl) + Number(o.commission ?? 0)), 0);
+
   const wins = withPl.filter((o) => Number(o.realizedPnl) > 0).length;
   const losses = withPl.filter((o) => Number(o.realizedPnl) <= 0).length;
   const winRate = withPl.length > 0 ? (wins / withPl.length) * 100 : null;
@@ -219,13 +222,12 @@ export function HistoryPage() {
   const grossProfit = withPl.filter((o) => Number(o.realizedPnl) > 0).reduce((s, o) => s + Number(o.realizedPnl), 0);
   const grossLoss = Math.abs(withPl.filter((o) => Number(o.realizedPnl) <= 0).reduce((s, o) => s + Number(o.realizedPnl), 0));
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : null;
-  const commissionTotal = filtered.reduce((s, o) => s + Number(o.commission ?? 0), 0);
-  const netPlAfterFees = netPl - commissionTotal;
 
   const stats = [
     { label: t('history.totalTrades'), value: isLoading ? '…' : String(filtered.length), sub: `${withPl.length} ${t('history.closedTrades').toLowerCase()}` },
-    { label: t('history.netPl'), value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(netPl, currency, lang) : '—'), colored: withPl.length > 0, positive: netPl >= 0 },
-    { label: t('history.commissionPaid'), value: isLoading ? '…' : (filtered.length > 0 ? `−$${commissionTotal.toFixed(2)}` : '—'), colored: filtered.length > 0, positive: false, sub: filtered.length > 0 ? t('history.netAfterFees') + ': ' + fmtPl(netPlAfterFees, currency, lang) : undefined },
+    { label: 'Gross Trade P/L', value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(grossTradePl, currency, lang) : '—'), colored: withPl.length > 0, positive: grossTradePl >= 0, sub: 'Before fees' },
+    { label: t('history.commissionPaid'), value: isLoading ? '…' : (filtered.length > 0 ? `−$${commissionTotal.toFixed(2)}` : '—'), colored: filtered.length > 0, positive: false, sub: 'Total fees deducted' },
+    { label: t('history.netPl'), value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(netPl, currency, lang) : '—'), colored: withPl.length > 0, positive: netPl >= 0, sub: 'Final Net Result' },
     { label: t('history.winRate'), value: isLoading ? '…' : (winRate != null ? `${winRate.toFixed(1)}%` : '—'), sub: withPl.length > 0 ? `${wins}W / ${losses}L` : t('history.noData'), colored: winRate != null, positive: (winRate ?? 0) >= 50 },
     { label: t('history.avgPl'), value: isLoading ? '…' : (avgPl != null ? fmtPl(avgPl, currency, lang) : '—'), colored: avgPl != null, positive: (avgPl ?? 0) >= 0 },
     { label: t('history.bestTrade'), value: isLoading ? '…' : (bestPl != null ? fmtPl(bestPl, currency, lang) : '—'), colored: bestPl != null, positive: true },
@@ -295,7 +297,7 @@ export function HistoryPage() {
               <th style={{ textAlign: 'right' }}>S/L</th>
               <th style={{ textAlign: 'right' }}>T/P</th>
               <th style={{ textAlign: 'right' }}>{t('history.commission')}</th>
-              <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
+              <th style={{ textAlign: 'right' }}>NET P/L</th>
             </tr>
           </thead>
           <tbody>
@@ -326,7 +328,7 @@ export function HistoryPage() {
                       {trade.commission != null ? `−$${Number(trade.commission).toFixed(2)}` : '—'}
                     </td>
                     <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
-                      {pl != null ? `${pl >= 0 ? '+' : ''}$${Math.abs(pl).toFixed(2)}` : '—'}
+                      {pl != null ? `${pl >= 0 ? '+' : '-'}$${Math.abs(pl).toFixed(2)}` : '—'}
                     </td>
                   </tr>
                 );
@@ -343,7 +345,7 @@ export function HistoryPage() {
                   −${commissionTotal.toFixed(2)}
                 </td>
                 <td className={`dir-ltr font-bold ${netPl >= 0 ? 'text-success' : 'text-danger'}`}>
-                  {netPl >= 0 ? '+' : ''}${Math.abs(netPl).toFixed(2)}
+                  {netPl >= 0 ? '+' : '-'}$${Math.abs(netPl).toFixed(2)}
                 </td>
               </tr>
             </tfoot>

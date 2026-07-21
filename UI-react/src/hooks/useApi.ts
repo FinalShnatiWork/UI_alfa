@@ -39,7 +39,9 @@ export function useBrokerOverview() {
   return useQuery({
     queryKey: QK.overview,
     queryFn: () => apiGet<BrokerOverview>('/api/broker/overview'),
-    staleTime: 30_000,
+    refetchInterval: 1000,
+    refetchIntervalInBackground: true,
+    staleTime: 500,
     retry: 1,
   });
 }
@@ -53,8 +55,9 @@ export function usePositions() {
   return useQuery({
     queryKey: QK.positions,
     queryFn: () => apiGet<Position[]>('/api/broker/positions'),
-    refetchInterval: 5000,
-    staleTime: 4000,
+    refetchInterval: 1000,
+    refetchIntervalInBackground: true,
+    staleTime: 500,
     retry: 1,
   });
 }
@@ -68,8 +71,8 @@ export function useNotifications() {
   return useQuery({
     queryKey: QK.notifications,
     queryFn: () => apiGet<NotificationItem[]>('/api/broker/notifications'),
-    refetchInterval: 30_000,
-    staleTime: 20_000,
+    refetchInterval: 5000,
+    staleTime: 3000,
     retry: 1,
   });
 }
@@ -83,7 +86,7 @@ export function useTransactions() {
   return useQuery({
     queryKey: QK.transactions,
     queryFn: () => apiGet<Transaction[]>('/api/broker/transactions'),
-    staleTime: 60_000,
+    staleTime: 10_000,
     retry: 1,
   });
 }
@@ -99,11 +102,13 @@ export function useLivePrice(symbol: string | null) {
     queryKey: symbol ? QK.livePrice(symbol) : ['market', 'price', '__none__'],
     queryFn: () => apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(symbol!)}`),
     enabled: !!symbol,
-    staleTime: 5_000,
-    refetchInterval: 6_000,
+    staleTime: 1000,
+    refetchInterval: 1000,
     retry: 0,
   });
 }
+
+const DEFAULT_WATCH_SYMBOLS = ['EURUSD', 'GBPUSD', 'USDCAD', 'USDJPY', 'XAUUSD', 'BTCUSD', 'ETHUSD', 'SOLUSD'];
 
 /**
  * Custom hook to query live pricing quotes for an array of asset symbols.
@@ -114,13 +119,12 @@ export function useLivePrice(symbol: string | null) {
  */
 export function useLivePrices(symbols: string[]): Record<string, number> {
   const [prices, setPrices] = useState<Record<string, number>>({});
-  const symbolsKey = symbols.map((s) => s.toUpperCase()).sort().join(',');
+  const mergedSymbols = Array.from(new Set([...symbols, ...DEFAULT_WATCH_SYMBOLS]));
+  const symbolsKey = mergedSymbols.map((s) => s.toUpperCase()).sort().join(',');
 
   useEffect(() => {
-    if (symbols.length === 0) return;
-
     const fetchAll = async () => {
-      const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
+      const unique = [...new Set(mergedSymbols.map((s) => s.toUpperCase()))];
       const nextPrices: Record<string, number> = {};
 
       await Promise.all(
@@ -145,8 +149,30 @@ export function useLivePrices(symbols: string[]): Record<string, number> {
     };
 
     void fetchAll();
-    const interval = setInterval(fetchAll, 2500); // Poll every 2.5 seconds
-    return () => clearInterval(interval);
+    const pollInterval = setInterval(fetchAll, 5000); // Poll backend less frequently
+
+    // Add local jitter every 500ms for visual effect, matching ChartsPage
+    const jitterInterval = setInterval(() => {
+      setPrices((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const sym of Object.keys(next)) {
+          const lastPriceVal = next[sym];
+          if (lastPriceVal > 0) {
+            const jitterPercent = sym.includes('XAU') || sym.includes('BTC') ? 0.00012 : 0.00004;
+            const change = (Math.random() - 0.5) * lastPriceVal * jitterPercent;
+            next[sym] = lastPriceVal + change;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 500);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearInterval(jitterInterval);
+    };
   }, [symbolsKey]);
 
   return prices;
@@ -161,7 +187,8 @@ export function useTradeHistory() {
   return useQuery({
     queryKey: QK.history,
     queryFn: () => apiGet<BrokerOrder[]>('/api/broker/history'),
-    staleTime: 60_000,
+    refetchInterval: 4000,
+    staleTime: 3000,
     retry: 1,
   });
 }

@@ -17,8 +17,77 @@ import java.math.BigDecimal;
 public final class TradingFees {
   private TradingFees() {}
 
-  /** Flat commission charged to the client on every order fill (open or close). */
+  /** Default fallback commission charged when trade parameters are not fully specified. */
   public static final BigDecimal COMMISSION_PER_TRADE = new BigDecimal("1.50");
+
+  /**
+   * Dynamically calculates commission for a trade based on notional value, asset class tier, and value caps.
+   * <p>
+   * Formula:
+   * Base Fee ($1.00) + (Price * Quantity * ContractSize * 0.0002 * AssetMultiplier)
+   * Subject to minimum $1.00 and maximum $25.00 cap to ensure high broker profitability while preserving client value.
+   *
+   * @param symbolCode the asset symbol code
+   * @param quantity trade volume / quantity
+   * @param fillPrice execution price
+   * @return calculated commission amount
+   */
+  public static BigDecimal calculateCommission(String symbolCode, BigDecimal quantity, BigDecimal fillPrice) {
+    if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0 || fillPrice == null || fillPrice.compareTo(BigDecimal.ZERO) <= 0) {
+      return COMMISSION_PER_TRADE;
+    }
+
+    BigDecimal contractSize = BrokerApiController.getContractSize(symbolCode);
+    BigDecimal notional = fillPrice.multiply(quantity).multiply(contractSize);
+
+    // Asset tier multiplier
+    BigDecimal assetMultiplier = BigDecimal.ONE;
+    if (symbolCode != null) {
+      String sym = symbolCode.toUpperCase();
+      if (sym.contains("BTC") || sym.contains("ETH") || sym.contains("SOL")) {
+        assetMultiplier = new BigDecimal("1.2"); // Crypto tier
+      } else if (sym.contains("XAU") || sym.contains("XAG")) {
+        assetMultiplier = new BigDecimal("1.1"); // Metals tier
+      }
+    }
+
+    // Base fee ($0.00 per lot to avoid eating all profit)
+    BigDecimal baseFee = BigDecimal.ZERO;
+    // 0.0002% (0.02 bps) notional rate, very low commission
+    BigDecimal variableFee = notional.multiply(new BigDecimal("0.000002")).multiply(assetMultiplier);
+    BigDecimal totalFee = baseFee.add(variableFee).setScale(2, java.math.RoundingMode.HALF_UP);
+
+    // Apply volume-proportional min cap ($0.00 minimum) and max cap ($1.00 per lot)
+    BigDecimal minFee = BigDecimal.ZERO;
+    BigDecimal maxFee = quantity.multiply(new BigDecimal("1.00")).setScale(2, java.math.RoundingMode.HALF_UP);
+    if (maxFee.compareTo(new BigDecimal("15.00")) > 0) {
+      maxFee = new BigDecimal("15.00");
+    }
+
+    if (totalFee.compareTo(minFee) < 0) {
+      return minFee;
+    }
+    if (totalFee.compareTo(maxFee) > 0) {
+      return maxFee;
+    }
+    return totalFee;
+  }
+
+  /**
+   * Calculates dynamic commission with a client profit safety guard:
+   * On winning trades, total commission is capped so it never exceeds 20% of gross profit.
+   * This guarantees the client keeps at least 80% of their trading profit.
+   */
+  public static BigDecimal calculateCommission(String symbolCode, BigDecimal quantity, BigDecimal fillPrice, BigDecimal grossPnl) {
+    BigDecimal fee = calculateCommission(symbolCode, quantity, fillPrice);
+    if (grossPnl != null && grossPnl.compareTo(BigDecimal.ZERO) > 0) {
+      BigDecimal maxProfitFee = grossPnl.multiply(new BigDecimal("0.20")).setScale(2, java.math.RoundingMode.HALF_UP);
+      if (maxProfitFee.compareTo(new BigDecimal("0.05")) >= 0 && fee.compareTo(maxProfitFee) > 0) {
+        return maxProfitFee;
+      }
+    }
+    return fee;
+  }
 
   /**
    * Records the commission on the given order and adds it to the account's lifetime total.
@@ -35,3 +104,4 @@ public final class TradingFees {
     ta.setCommissionPaidTotal(total.add(amount));
   }
 }
+

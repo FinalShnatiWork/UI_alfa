@@ -61,6 +61,14 @@ public class TradingAccount {
   @Column(name = "last_interest_at")
   private Instant lastInterestAt;
 
+  // Per-account credit line limit (defaults to $10,000).
+  @Column(name = "credit_limit", precision = 18, scale = 8)
+  private BigDecimal creditLimit = new BigDecimal("10000.00");
+
+  // Per-account daily interest rate (defaults to 0.005 = 0.5%/day).
+  @Column(name = "daily_interest_rate", precision = 18, scale = 8)
+  private BigDecimal dailyInterestRate = new BigDecimal("0.005");
+
   // Lifetime sum of real commission charged to this account, for statistics/history.
   @Column(name = "commission_paid_total", nullable = false, precision = 18, scale = 8)
   private BigDecimal commissionPaidTotal = BigDecimal.ZERO;
@@ -75,6 +83,10 @@ public class TradingAccount {
 
   public Long getId() {
     return id;
+  }
+
+  public void setId(Long id) {
+    this.id = id;
   }
 
   public AppUser getUser() {
@@ -188,5 +200,20 @@ public class TradingAccount {
   public void setCommissionPaidTotal(BigDecimal commissionPaidTotal) {
     this.commissionPaidTotal = commissionPaidTotal;
   }
-}
 
+  public BigDecimal getCreditLimit() {
+    return creditLimit == null ? new BigDecimal("10000.00") : creditLimit;
+  }
+
+  public void setCreditLimit(BigDecimal creditLimit) {
+    this.creditLimit = creditLimit;
+  }
+
+  public BigDecimal getDailyInterestRate() {
+    return dailyInterestRate == null ? new BigDecimal("0.005") : dailyInterestRate;
+  }
+
+  public void setDailyInterestRate(BigDecimal dailyInterestRate) {
+    this.dailyInterestRate = dailyInterestRate;
+  }
+}
