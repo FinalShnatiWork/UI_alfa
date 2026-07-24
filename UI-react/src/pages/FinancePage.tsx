@@ -231,6 +231,10 @@ export function FinancePage() {
       const msg = err instanceof Error ? err.message : '';
       if (msg === 'insufficient_funds') {
         toast.show(t('alerts.insufficientFunds') || 'Insufficient funds', { variant: 'error' });
+      } else if (msg === 'withdrawal_exceeds_free_margin') {
+        toast.show(t('finance.errWithdrawFreeMargin') || 'This amount is locked as margin in your open positions', { variant: 'error' });
+      } else if (msg === 'withdrawal_would_trigger_margin_call') {
+        toast.show(t('finance.errWithdrawMarginCall') || 'Withdrawing this much would put your credit line into margin call', { variant: 'error' });
       } else {
         toast.show(t('finance.toastError') || 'Transaction failed', { variant: 'error' });
       }

@@ -624,6 +624,10 @@ export function ChartsPage() {
           lastPriceVal = price;
 
           updateBidAsk(instr, price);
+          // Keep chartLivePrices in sync so the positions table below the chart
+          // shows sub-second price updates for the currently active symbol,
+          // matching the same 500ms jitter behaviour as PositionsPage.
+          setChartLivePrices((prev) => ({ ...prev, [sym.toUpperCase()]: price }));
           const sec2 = INTERVAL_SECONDS[iv] ?? 3600;
           const bucket = Math.floor(Math.floor(Date.now() / 1000) / sec2) * sec2;
           if (!currentBar || bucket > currentBar.time) {
@@ -682,23 +686,9 @@ export function ChartsPage() {
     }
   });
 
-  // Fetch live prices for open positions (Charts page tracks them locally for chart price updates too)
-  useEffect(() => {
-    if (positions.length === 0) return;
-    const syms = [...new Set(positions.map((p) => p.symbolCode))];
-    void Promise.all(
-      syms.map(async (sym) => {
-        try {
-          const res = await fetch(`/api/market/price/${encodeURIComponent(sym)}`);
-          if (res.ok) {
-            const d = await res.json() as { price?: number };
-            if (d?.price) setChartLivePrices((prev) => ({ ...prev, [sym.toUpperCase()]: Number(d.price) }));
-          }
-        } catch { /* */ }
-      }),
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [positionsData]);
+  // chartLivePrices is updated inside tickPrice (every 500ms) for the active chart symbol.
+  // All other position symbols get live prices through queryLivePrices (useLivePrices hook),
+  // which already runs its own 500ms jitter + 5s backend poll — same as PositionsPage.
 
   const [loanOffer, setLoanOffer] = useState<LoanOfferDetails | null>(null);
 

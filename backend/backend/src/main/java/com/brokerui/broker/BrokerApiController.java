@@ -102,8 +102,10 @@ public class BrokerApiController {
     BigDecimal liveEquity = recalcEquity(ta);
     BigDecimal marginLevel = marginLoanService.computeMarginLevel(ta);
     BigDecimal marginLevelPct = marginLevel == null ? null : marginLevel.multiply(BigDecimal.valueOf(100));
+    BigDecimal marginUsed = computeMarginUsed(ta);
+    BigDecimal freeMargin = ta.getBalance().subtract(marginUsed);
     return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(),
-        ta.getBalance(), liveEquity, ta.getMarginUsed(), ta.getFreeMargin(),
+        ta.getBalance(), liveEquity, marginUsed, freeMargin,
         ta.getBorrowedBalance(), ta.getCreditLimit(), marginLevelPct, ta.getInterestAccruedTotal(),
         ta.getCommissionPaidTotal(), ta.getDailyInterestRate()));
   }
@@ -163,8 +165,24 @@ public class BrokerApiController {
     if (amount.compareTo(BigDecimal.ZERO) <= 0) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "amount_must_be_positive"));
     }
-    if ("WITHDRAWAL".equals(type) && ta.getBalance().compareTo(amount) < 0) {
-      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
+    if ("WITHDRAWAL".equals(type)) {
+      if (ta.getBalance().compareTo(amount) < 0) {
+        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
+      }
+      // Cash locked into open positions' margin can't be withdrawn.
+      BigDecimal marginUsed = computeMarginUsed(ta);
+      BigDecimal balanceAfter = ta.getBalance().subtract(amount);
+      if (balanceAfter.compareTo(marginUsed) < 0) {
+        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "withdrawal_exceeds_free_margin",
+            "freeMargin", ta.getBalance().subtract(marginUsed)));
+      }
+      // If there's an outstanding credit-line debt, withdrawing cannot be allowed to push
+      // the account straight into margin call — the collateral backing the loan must stay intact.
+      BigDecimal levelAfter = marginLoanService.simulateMarginLevelAfterWithdrawal(ta, amount);
+      if (levelAfter != null && levelAfter.compareTo(MarginLoanService.MARGIN_CALL_LEVEL) < 0) {
+        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "withdrawal_would_trigger_margin_call",
+            "marginLevelAfterPct", levelAfter.multiply(BigDecimal.valueOf(100))));
+      }
     }
 
     AccountTransaction tx = new AccountTransaction();
@@ -205,6 +223,25 @@ public class BrokerApiController {
         .map(p -> p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl())
         .reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
     return ta.getBalance().add(totalUnrealized);
+  }
+
+  /**
+   * Margin currently locked into open positions (entry price basis, not live price), computed
+   * fresh from the position table rather than trusted from the {@code marginUsed} column —
+   * that column is only ever initialized to zero and never incremented/decremented as positions
+   * open and close, so it would otherwise always read back as zero.
+   */
+  private BigDecimal computeMarginUsed(TradingAccount ta) {
+    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
+    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
+    BigDecimal used = BigDecimal.ZERO;
+    for (Position p : positions) {
+      BigDecimal contractSize = getContractSize(p.getSymbolCode());
+      BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
+      BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
+      used = used.add(avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP));
+    }
+    return used;
   }
 
   /**
@@ -606,18 +643,24 @@ public class BrokerApiController {
 
     BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
     BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, bdPrice);
-    BigDecimal totalFees = openCommission.add(closeCommission);
 
     // Client Profit Safety Guard:
-    // On winning trades, total commission is capped to max 20% of gross profit
-    // so the client ALWAYS keeps at least 80% of their gains.
+    // On winning trades, total commission (open + close) is capped to max 20% of gross
+    // profit so the client ALWAYS keeps at least 80% of their gains. The open-leg fee was
+    // already charged to the balance when the position was opened and can't be refunded
+    // retroactively, so the cap can only be enforced by reducing the close-leg fee. We then
+    // recompute totalFees from what was ACTUALLY charged on both legs so the net P/L shown
+    // to the client always matches the real balance impact of the trade.
     if (grossPnl != null && grossPnl.compareTo(BigDecimal.ZERO) > 0) {
       BigDecimal maxFee = grossPnl.multiply(new BigDecimal("0.20")).setScale(2, RoundingMode.HALF_UP);
-      if (maxFee.compareTo(new BigDecimal("0.05")) >= 0 && totalFees.compareTo(maxFee) > 0) {
-        totalFees = maxFee;
-        closeCommission = totalFees.divide(new BigDecimal("2"), 2, RoundingMode.HALF_UP);
+      if (maxFee.compareTo(new BigDecimal("0.05")) >= 0 && openCommission.add(closeCommission).compareTo(maxFee) > 0) {
+        closeCommission = maxFee.subtract(openCommission);
+        if (closeCommission.compareTo(BigDecimal.ZERO) < 0) {
+          closeCommission = BigDecimal.ZERO;
+        }
       }
     }
+    BigDecimal totalFees = openCommission.add(closeCommission);
     BigDecimal netPnl = grossPnl.subtract(totalFees);
 
     BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, netPnl);

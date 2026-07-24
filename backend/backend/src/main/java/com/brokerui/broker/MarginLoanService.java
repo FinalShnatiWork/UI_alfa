@@ -185,6 +185,19 @@ public class MarginLoanService {
   }
 
   /**
+   * Returns what the margin level would become if {@code cashAmount} were withdrawn from
+   * the account right now (equity drops by exactly that much, debt is unchanged). Used to
+   * block withdrawals that would immediately put an indebted account into margin call.
+   * Returns null if the account has no outstanding debt (withdrawal is unrestricted).
+   */
+  public BigDecimal simulateMarginLevelAfterWithdrawal(TradingAccount ta, BigDecimal cashAmount) {
+    BigDecimal debt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
+    if (debt.compareTo(BigDecimal.ZERO) <= 0) return null;
+    BigDecimal equityAfter = liveEquity(ta).subtract(cashAmount == null ? BigDecimal.ZERO : cashAmount);
+    return equityAfter.divide(debt, 4, RoundingMode.HALF_UP);
+  }
+
+  /**
    * Computes the account's total liquidation value: cash balance plus, for every open
    * position, the margin that would be released on close plus its unrealized P/L.
    * <p>
@@ -326,9 +339,10 @@ public class MarginLoanService {
     positions.sort((a, b) -> unrealizedPnlOf(a).compareTo(unrealizedPnlOf(b)));
 
     int closedCount = 0;
+    boolean recovered = false;
     for (Position pos : positions) {
       BigDecimal level = computeMarginLevel(ta);
-      if (level != null && level.compareTo(MARGIN_CALL_LEVEL) >= 0) break; // recovered above safe threshold
+      if (level != null && level.compareTo(MARGIN_CALL_LEVEL) >= 0) { recovered = true; break; } // recovered above safe threshold
 
       double live;
       try {
@@ -379,10 +393,12 @@ public class MarginLoanService {
       } catch (Exception ignored) {}
     }
 
-    // Write off any debt that couldn't be covered by liquidated positions, so the
-    // account doesn't remain permanently stuck with unpayable negative net worth.
+    // Only write off remaining debt when every position has been liquidated and it is
+    // truly unpayable. If the loop stopped early because the margin level already
+    // recovered (`recovered == true`), the client still holds enough collateral to cover
+    // the remaining debt, so it must NOT be forgiven — it stays on the books as normal debt.
     BigDecimal remainingDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
-    if (remainingDebt.compareTo(BigDecimal.ZERO) > 0) {
+    if (remainingDebt.compareTo(BigDecimal.ZERO) > 0 && !recovered) {
       writeLedger(ta, "LIQUIDATION", remainingDebt, "Liquidation complete — " + closedCount
           + " position(s) closed; residual debt written off");
       ta.setBorrowedBalance(BigDecimal.ZERO);

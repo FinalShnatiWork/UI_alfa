@@ -179,7 +179,9 @@ public class OrderExecutionService {
     BigDecimal orderRealizedPnl = BigDecimal.ZERO;
 
     // Commission is only charged once the order actually fills (not on pending reservation).
-    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+    // Uses the same dynamic formula as MARKET orders so LIMIT/STOP fills aren't charged a
+    // different (flat) fee for an equivalent trade.
+    TradingFees.charge(ta, order, TradingFees.calculateCommission(order.getSymbolCode(), qty, price));
 
     if ("BUY".equalsIgnoreCase(order.getSide())) {
       // Regular LONG BUY - Refund reserved funds, then deduct actual cost + commission
@@ -453,7 +455,9 @@ public class OrderExecutionService {
     order.setRealizedPnl(pnl);
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
-    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+    // Same dynamic formula as manual close, so an SL/TP auto-close isn't cheaper/pricier
+    // than a manual close of the same size.
+    TradingFees.charge(ta, order, TradingFees.calculateCommission(pos.getSymbolCode(), qty, closePrice));
 
     marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(pnl).subtract(order.getCommission()));
     positionRepo.delete(pos);

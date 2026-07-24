@@ -2,6 +2,7 @@ package com.brokerui.broker;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -10,13 +11,26 @@ import java.util.Map;
 import java.util.List;
 
 /**
- * Client service connecting to the external Neural Network python server (port 3005).
+ * Client service connecting to the external Neural Network Node.js server (port 3005).
  * Sends feature arrays to get execution routing recommendations.
  */
 @Service
 public class NNPredictorClient {
-    private final RestTemplate restTemplate = new RestTemplate();
+    // Bounded timeouts so a stuck/unresponsive NN server can never hang order execution
+    // indefinitely — callers always get a prompt exception (caught below) and fall back
+    // to EXTERNAL routing instead of blocking the request thread.
+    private static final int CONNECT_TIMEOUT_MS = 2000;
+    private static final int READ_TIMEOUT_MS = 3000;
+
+    private final RestTemplate restTemplate = buildRestTemplate();
     private final String predictUrl = "http://localhost:3005/predict";
+
+    private static RestTemplate buildRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        factory.setReadTimeout(READ_TIMEOUT_MS);
+        return new RestTemplate(factory);
+    }
 
     /**
      * Posts a feature array to the NN model server and returns prediction metrics.
