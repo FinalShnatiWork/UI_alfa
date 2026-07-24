@@ -105,7 +105,9 @@ function fmtPrice(n: unknown): string {
   if (n == null) return '—';
   const v = Number(n);
   if (isNaN(v) || v === 0) return '—';
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 });
+  const abs = Math.abs(v);
+  const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
+  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 function fmtQty(n: unknown): string {

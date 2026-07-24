@@ -232,8 +232,17 @@ function chartColors() {
 function fmtP(n: unknown): string {
   const v = Number(n ?? 0);
   if (!Number.isFinite(v)) return '—';
-  if (Math.abs(v) > 1000) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  const abs = Math.abs(v);
+  // Fixed decimals within each band — variable maxFractionDigits made the
+  // positions table under the chart jump on every live tick.
+  const d = abs > 1000 ? 2 : abs >= 10 ? 4 : 5;
+  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function fmtMoney2(n: unknown): string {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v)) return '—';
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -1038,11 +1047,11 @@ export function ChartsPage() {
                           <td className="num">
                             {live
                               ? <span style={{ fontWeight: 500 }}>{fmtP(live)}</span>
-                              : <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>…</span>
+                              : <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', display: 'inline-block', minWidth: '7ch', textAlign: 'end' }}>…</span>
                             }
                           </td>
                           <td className="num" style={{ fontWeight: 600, color: pnlColor }}>
-                            {pnl >= 0 ? '+' : ''}{fmtP(pnl)}
+                            {pnl >= 0 ? '+' : ''}{fmtMoney2(pnl)}
                           </td>
                           <td className="center">
                             <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}

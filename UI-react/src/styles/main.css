@@ -412,7 +412,9 @@ table th {
 table td { 
   padding: 20px 24px; 
   border-bottom: 1px solid rgba(255,255,255,0.03); 
-  transition: all 0.2s ease;
+  /* Only animate color — `transition: all` was animating width when live
+     prices/P/L changed digit count, which made tables look like they jump. */
+  transition: background-color 0.2s ease;
 }
 table tr:last-child td { border-bottom: none; }
 table tr { transition: transform 0.2s ease, background 0.2s ease; }
@@ -446,6 +448,7 @@ table tr:active { transform: scale(0.995); }
 .positions-table th.num {
   text-align: end;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 .positions-table td.center,
 .positions-table th.center {
@@ -525,7 +528,12 @@ table tr:active { transform: scale(0.995); }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 24px; }
 .stats-grid > * { min-width: 0; }
 
-.dir-ltr { direction: ltr; }
+.dir-ltr {
+  direction: ltr;
+  /* Equal-width digits so live price / P/L ticks don't reflow table columns */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
 .dir-rtl { direction: rtl; }
 
 /* Toggle Switch Component */

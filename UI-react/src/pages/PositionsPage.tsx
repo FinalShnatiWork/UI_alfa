@@ -80,9 +80,9 @@ function fmtPrice(n: unknown): string {
   const v = Number(n ?? 0);
   if (!Number.isFinite(v) || v === 0) return '—';
   const abs = Math.abs(v);
-  const minDecimals = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
-  const maxDecimals = abs > 0 && abs < 10 ? 6 : (abs >= 10 && abs < 500 ? 4 : 2);
-  return v.toLocaleString(undefined, { minimumFractionDigits: minDecimals, maximumFractionDigits: maxDecimals });
+  // Fixed decimals within each magnitude band so live ticks don't change string length.
+  const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
+  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 function fmtPnl(n: unknown): string {
@@ -92,7 +92,7 @@ function fmtPnl(n: unknown): string {
 
 function fmtQty(n: unknown): string {
   const v = Number(n ?? 0);
-  return Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 }) : '0';
+  return Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '0.0000';
 }
 
 function fmtTime(iso: string | undefined): string {
