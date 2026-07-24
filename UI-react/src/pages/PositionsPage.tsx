@@ -85,6 +85,11 @@ function fmtPrice(n: unknown): string {
   return v.toLocaleString(undefined, { minimumFractionDigits: minDecimals, maximumFractionDigits: maxDecimals });
 }
 
+function fmtPnl(n: unknown): string {
+  const v = Number(n ?? 0);
+  return Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+}
+
 function fmtQty(n: unknown): string {
   const v = Number(n ?? 0);
   return Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 8 }) : '0';
@@ -313,7 +318,7 @@ export function PositionsPage() {
                         <td className="dir-ltr" style={{ textAlign: 'right' }}>
                           {pnl != null ? (
                             <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                              {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                              {pnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(pnl))}
                             </span>
                           ) : (
                             <span className="text-muted">—</span>
@@ -352,7 +357,7 @@ export function PositionsPage() {
                       {t('table.totalPl') || 'Total P/L'}
                     </td>
                     <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
-                      {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                      {totalPnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(totalPnl))}
                     </td>
                     <td />
                   </tr>
@@ -404,7 +409,7 @@ export function PositionsPage() {
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
                       <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
-                        {pl != null ? `${pl >= 0 ? '+' : '-'}$${Math.abs(pl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}` : '—'}
+                        {pl != null ? `${pl >= 0 ? '+' : '-'}$${fmtPnl(Math.abs(pl))}` : '—'}
                       </td>
                     </tr>
                   );

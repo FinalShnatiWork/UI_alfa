@@ -135,4 +135,39 @@ class MarginLoanServiceLiquidationTest {
     assertEquals(0, ta.getBorrowedBalance().compareTo(BigDecimal.ZERO),
         "genuinely unpayable debt (no positions left) must still be written off as before");
   }
+
+  @Test
+  void doesNotWriteOffDebt_whenPricesUnavailableAndPositionsRemain() {
+    // Both positions stay open because live prices never arrive (0 / missing).
+    // Before the fix this still wrote off the debt because recovered stayed false.
+    Position posA = position("BTCUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    Position posB = position("ETHUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    TradingAccount ta = account(BigDecimal.ZERO, new BigDecimal("50"), 100);
+    setUp(ta, List.of(posA, posB));
+    // no livePrices entries → getLivePrice returns 0.0 → continue
+
+    service.liquidateAccount(1L);
+
+    assertEquals(2, livePositions.size(), "positions must stay open when prices are unavailable");
+    assertEquals(0, ta.getBorrowedBalance().compareTo(new BigDecimal("50")),
+        "debt must NOT be forgiven while positions remain due to missing prices — got " + ta.getBorrowedBalance());
+  }
+
+  @Test
+  void doesNotWriteOffDebt_whenOnePositionClosedButAnotherHasNoPrice() {
+    Position posA = position("BTCUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    Position posB = position("ETHUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    TradingAccount ta = account(BigDecimal.ZERO, new BigDecimal("80"), 100);
+    setUp(ta, List.of(posA, posB));
+
+    livePrices.put("BTCUSD", 10.0); // closable at a loss
+    // ETHUSD has no price → skipped, remains open
+
+    service.liquidateAccount(1L);
+
+    assertFalse(livePositions.contains(posA), "priced position should have been closed");
+    assertTrue(livePositions.contains(posB), "unpriced position must remain");
+    assertTrue(ta.getBorrowedBalance().compareTo(BigDecimal.ZERO) > 0,
+        "debt must remain while any position is still open — got " + ta.getBorrowedBalance());
+  }
 }

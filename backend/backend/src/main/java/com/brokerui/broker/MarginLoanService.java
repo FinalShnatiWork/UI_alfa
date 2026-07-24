@@ -393,18 +393,25 @@ public class MarginLoanService {
       } catch (Exception ignored) {}
     }
 
-    // Only write off remaining debt when every position has been liquidated and it is
-    // truly unpayable. If the loop stopped early because the margin level already
-    // recovered (`recovered == true`), the client still holds enough collateral to cover
-    // the remaining debt, so it must NOT be forgiven — it stays on the books as normal debt.
+    // Only write off remaining debt when every position has actually been liquidated and
+    // the debt is truly unpayable. Do NOT forgive debt when:
+    //  - the loop stopped early because margin level recovered (`recovered`), or
+    //  - positions still remain (e.g. live prices were unavailable and we `continue`d) —
+    //    otherwise a temporary quote outage would erase the client's credit-line debt
+    //    while their positions are still open.
     BigDecimal remainingDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
-    if (remainingDebt.compareTo(BigDecimal.ZERO) > 0 && !recovered) {
+    List<Position> stillOpen = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
+    boolean positionsRemain = stillOpen != null && !stillOpen.isEmpty();
+    if (remainingDebt.compareTo(BigDecimal.ZERO) > 0 && !recovered && !positionsRemain) {
       writeLedger(ta, "LIQUIDATION", remainingDebt, "Liquidation complete — " + closedCount
           + " position(s) closed; residual debt written off");
       ta.setBorrowedBalance(BigDecimal.ZERO);
-    } else if (closedCount > 0) {
+    } else if (closedCount > 0 && recovered) {
       writeLedger(ta, "LIQUIDATION", BigDecimal.ZERO, "Liquidation complete — " + closedCount
           + " position(s) closed; margin level recovered");
+    } else if (closedCount > 0 && positionsRemain) {
+      writeLedger(ta, "LIQUIDATION", BigDecimal.ZERO, "Liquidation incomplete — " + closedCount
+          + " position(s) closed, " + stillOpen.size() + " remain (prices unavailable?); debt kept");
     }
 
     ta.setEquity(liveEquity(ta));

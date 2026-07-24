@@ -92,7 +92,9 @@ public class OrderExecutionService {
    */
   @Transactional
   public void tryExecute(Long orderId) {
-    BrokerOrder order = orderRepo.findById(orderId).orElse(null);
+    // Lock the order row first (before the account) so cancelOrder cannot refund the
+    // reservation while this fill is in flight — both paths share this lock order.
+    BrokerOrder order = orderRepo.findByIdForUpdate(orderId).orElse(null);
     if (order == null) return;
     if (!"NEW".equalsIgnoreCase(order.getStatus())) return;
 
@@ -123,6 +125,10 @@ public class OrderExecutionService {
           default -> false;
         };
     if (!shouldFill) return;
+
+    // Re-check under the same row lock: a concurrent cancel that already finished would
+    // have flipped status away from NEW before we could acquire the lock.
+    if (!"NEW".equalsIgnoreCase(order.getStatus())) return;
 
     executeFilled(order, last);
   }
@@ -204,7 +210,8 @@ public class OrderExecutionService {
     }
 
     ta.setEquity(recalcEquity(ta));
-    ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+    // Prepaid-margin model: remaining balance is free cash.
+    ta.setFreeMargin(ta.getBalance());
     accountRepo.save(ta);
 
     try {
@@ -323,16 +330,24 @@ public class OrderExecutionService {
   }
 
   /**
-   * Recalculates the equity value of a trading account by summing balance and active unrealized P/L.
-   *
-   * @param ta the trading account
-   * @return total computed equity value
+   * Recalculates equity as cash balance + live floating P/L (prepaid-margin model).
+   * Same definition as {@link BrokerApiController} overview equity / Dashboard.
    */
   private BigDecimal recalcEquity(TradingAccount ta) {
     List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    BigDecimal totalUnrealized = positions.stream()
-        .map(p -> p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl())
-        .reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
+    BigDecimal totalUnrealized = BigDecimal.ZERO;
+    for (Position p : positions) {
+      try {
+        double live = priceService.getLivePrice(p.getSymbolCode());
+        if (live <= 0) {
+          totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
+          continue;
+        }
+        totalUnrealized = totalUnrealized.add(BrokerApiController.liveUnrealizedPnl(p, BigDecimal.valueOf(live)));
+      } catch (Exception e) {
+        totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
+      }
+    }
     return ta.getBalance().add(totalUnrealized);
   }
 
@@ -363,11 +378,6 @@ public class OrderExecutionService {
   private void checkPositionsSlTp() {
     List<Position> active = positionRepo.findAll();
     for (Position pos : active) {
-      BigDecimal sl = pos.getStopLoss();
-      BigDecimal tp = pos.getTakeProfit();
-      if ((sl == null || sl.compareTo(BigDecimal.ZERO) <= 0) && (tp == null || tp.compareTo(BigDecimal.ZERO) <= 0)) {
-        continue;
-      }
       double currentPrice;
       try {
         currentPrice = priceService.getLivePrice(pos.getSymbolCode());
@@ -376,37 +386,40 @@ public class OrderExecutionService {
         continue;
       }
       BigDecimal last = BigDecimal.valueOf(currentPrice);
+
+      // Keep stored floating P/L fresh so equity/API stay aligned with live prices
+      // even when the position has no SL/TP attached.
+      try {
+        BigDecimal uPnl = BrokerApiController.liveUnrealizedPnl(pos, last);
+        if (pos.getUnrealizedPnl() == null || pos.getUnrealizedPnl().compareTo(uPnl) != 0) {
+          pos.setUnrealizedPnl(uPnl);
+          positionRepo.save(pos);
+        }
+      } catch (Exception ignored) {}
+
+      BigDecimal sl = pos.getStopLoss();
+      BigDecimal tp = pos.getTakeProfit();
+      if ((sl == null || sl.compareTo(BigDecimal.ZERO) <= 0) && (tp == null || tp.compareTo(BigDecimal.ZERO) <= 0)) {
+        continue;
+      }
+
       boolean isShort = "SHORT".equals(pos.getSide());
       boolean shouldClose = false;
       String reason = "";
 
-      // Check Stop Loss
       if (sl != null && sl.compareTo(BigDecimal.ZERO) > 0) {
         if (isShort) {
-          if (last.compareTo(sl) >= 0) {
-            shouldClose = true;
-            reason = "STOP_LOSS";
-          }
+          if (last.compareTo(sl) >= 0) { shouldClose = true; reason = "STOP_LOSS"; }
         } else {
-          if (last.compareTo(sl) <= 0) {
-            shouldClose = true;
-            reason = "STOP_LOSS";
-          }
+          if (last.compareTo(sl) <= 0) { shouldClose = true; reason = "STOP_LOSS"; }
         }
       }
 
-      // Check Take Profit
       if (tp != null && tp.compareTo(BigDecimal.ZERO) > 0) {
         if (isShort) {
-          if (last.compareTo(tp) <= 0) {
-            shouldClose = true;
-            reason = "TAKE_PROFIT";
-          }
+          if (last.compareTo(tp) <= 0) { shouldClose = true; reason = "TAKE_PROFIT"; }
         } else {
-          if (last.compareTo(tp) >= 0) {
-            shouldClose = true;
-            reason = "TAKE_PROFIT";
-          }
+          if (last.compareTo(tp) >= 0) { shouldClose = true; reason = "TAKE_PROFIT"; }
         }
       }
 
@@ -435,14 +448,21 @@ public class OrderExecutionService {
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     BigDecimal marginReturned = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
 
-    BigDecimal pnl;
+    BigDecimal grossPnl;
     if (isShort) {
-      pnl = avg.subtract(closePrice).multiply(qty).multiply(contractSize);
+      grossPnl = avg.subtract(closePrice).multiply(qty).multiply(contractSize);
     } else {
-      pnl = closePrice.subtract(avg).multiply(qty).multiply(contractSize);
+      grossPnl = closePrice.subtract(avg).multiply(qty).multiply(contractSize);
     }
 
-    // Save history order
+    // Same profit-safety guard + net P/L as manual closePosition (BrokerApiController),
+    // so SL/TP auto-closes are not stricter on fees and History shows net, not gross.
+    BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
+    BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, closePrice);
+    closeCommission = TradingFees.applyProfitSafetyGuard(openCommission, closeCommission, grossPnl);
+    BigDecimal totalFees = openCommission.add(closeCommission);
+    BigDecimal netPnl = grossPnl.subtract(totalFees);
+
     BrokerOrder order = new BrokerOrder();
     order.setTradingAccount(ta);
     order.setSymbolCode(pos.getSymbolCode());
@@ -452,28 +472,25 @@ public class OrderExecutionService {
     order.setQuantity(qty);
     order.setFilledAt(Instant.now());
     order.setEntryPrice(closePrice);
-    order.setRealizedPnl(pnl);
+    order.setRealizedPnl(netPnl);
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
-    // Same dynamic formula as manual close, so an SL/TP auto-close isn't cheaper/pricier
-    // than a manual close of the same size.
-    TradingFees.charge(ta, order, TradingFees.calculateCommission(pos.getSymbolCode(), qty, closePrice));
+    TradingFees.charge(ta, order, closeCommission);
 
-    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(pnl).subtract(order.getCommission()));
+    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(grossPnl).subtract(order.getCommission()));
     positionRepo.delete(pos);
     ta.setEquity(recalcEquity(ta));
-    ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+    ta.setFreeMargin(ta.getBalance());
     accountRepo.save(ta);
     orderRepo.save(order);
 
-    // Push notification
     try {
       Notification notif = new Notification();
       notif.setUser(ta.getUser());
       notif.setNotifType("TRADE");
       notif.setTitle(reason.equals("STOP_LOSS") ? "notification.tradeClosed.slTriggered" : "notification.tradeClosed.tpTriggered");
-      notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}", 
-          isShort ? "BUY" : "SELL", qty.doubleValue(), pos.getSymbolCode(), closePrice.doubleValue(), pnl.doubleValue()));
+      notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",
+          pos.getSide(), qty.doubleValue(), pos.getSymbolCode(), closePrice.doubleValue(), netPnl.doubleValue()));
       notificationRepo.save(notif);
     } catch (Exception e) {
       System.err.println("Failed to push SL/TP close notification: " + e.getMessage());

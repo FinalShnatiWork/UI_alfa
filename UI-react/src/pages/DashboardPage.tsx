@@ -28,8 +28,7 @@ function fmtMoney(value: unknown, currency = 'USD'): string {
 function fmtPnl(n: unknown): string {
   const v = Number(n ?? 0);
   if (!Number.isFinite(v)) return '—';
-  if (Math.abs(v) > 1000) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return v.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /**
@@ -120,7 +119,9 @@ export function DashboardPage() {
   }, 0);
 
   const liveEquity = rawBalance + livePnl;
-  const liveFreeMargin = liveEquity - rawMarginUsed;
+  // Prepaid-margin model (same as backend overview): margin is already deducted from
+  // balance on open, so free margin is remaining cash + floating P/L — not equity - marginUsed.
+  const liveFreeMargin = rawBalance + livePnl;
 
   const balance = overview ? fmtMoney(rawBalance, currency) : '—';
   const equity = overview ? fmtMoney(liveEquity, currency) : '—';

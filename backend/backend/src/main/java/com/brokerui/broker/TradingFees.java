@@ -90,6 +90,30 @@ public final class TradingFees {
   }
 
   /**
+   * Client Profit Safety Guard for the close leg.
+   * On winning trades, total commission (open + close) is capped to max 20% of gross
+   * profit so the client keeps at least 80% of gains. The open-leg fee was already
+   * charged and cannot be refunded, so only {@code closeCommission} may be reduced.
+   *
+   * @return the close-leg commission to actually charge (never negative)
+   */
+  public static BigDecimal applyProfitSafetyGuard(
+      BigDecimal openCommission, BigDecimal closeCommission, BigDecimal grossPnl) {
+    BigDecimal open = openCommission == null ? BigDecimal.ZERO : openCommission;
+    BigDecimal close = closeCommission == null ? BigDecimal.ZERO : closeCommission;
+    if (grossPnl != null && grossPnl.compareTo(BigDecimal.ZERO) > 0) {
+      BigDecimal maxFee = grossPnl.multiply(new BigDecimal("0.20")).setScale(2, java.math.RoundingMode.HALF_UP);
+      if (maxFee.compareTo(new BigDecimal("0.05")) >= 0 && open.add(close).compareTo(maxFee) > 0) {
+        close = maxFee.subtract(open);
+        if (close.compareTo(BigDecimal.ZERO) < 0) {
+          close = BigDecimal.ZERO;
+        }
+      }
+    }
+    return close;
+  }
+
+  /**
    * Records the commission on the given order and adds it to the account's lifetime total.
    * Does not touch cash balance — callers are responsible for folding the commission into
    * their own settlement math (margin required on open, or net proceeds on close).

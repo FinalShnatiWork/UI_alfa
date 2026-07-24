@@ -103,7 +103,10 @@ public class BrokerApiController {
     BigDecimal marginLevel = marginLoanService.computeMarginLevel(ta);
     BigDecimal marginLevelPct = marginLevel == null ? null : marginLevel.multiply(BigDecimal.valueOf(100));
     BigDecimal marginUsed = computeMarginUsed(ta);
-    BigDecimal freeMargin = ta.getBalance().subtract(marginUsed);
+    // Prepaid-margin model: placeOrder already deducts margin from balance via
+    // tryCoverShortfall, so remaining balance IS free cash. Subtracting marginUsed
+    // again would double-count and understate freeMargin / block valid withdrawals.
+    BigDecimal freeMargin = ta.getBalance();
     return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(),
         ta.getBalance(), liveEquity, marginUsed, freeMargin,
         ta.getBorrowedBalance(), ta.getCreditLimit(), marginLevelPct, ta.getInterestAccruedTotal(),
@@ -166,15 +169,10 @@ public class BrokerApiController {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "amount_must_be_positive"));
     }
     if ("WITHDRAWAL".equals(type)) {
+      // Balance already excludes margin prepaid into open positions / pending reserves,
+      // so the whole cash balance is withdrawable — do NOT subtract marginUsed again.
       if (ta.getBalance().compareTo(amount) < 0) {
         return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
-      }
-      // Cash locked into open positions' margin can't be withdrawn.
-      BigDecimal marginUsed = computeMarginUsed(ta);
-      BigDecimal balanceAfter = ta.getBalance().subtract(amount);
-      if (balanceAfter.compareTo(marginUsed) < 0) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "withdrawal_exceeds_free_margin",
-            "freeMargin", ta.getBalance().subtract(marginUsed)));
       }
       // If there's an outstanding credit-line debt, withdrawing cannot be allowed to push
       // the account straight into margin call — the collateral backing the loan must stay intact.
@@ -211,18 +209,40 @@ public class BrokerApiController {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * Equity = cash balance + sum of unrealized PNL across ALL open positions.
-   * LONG unrealized = (currentPrice - avgEntry) * qty
-   * SHORT unrealized = (avgEntry - currentPrice) * qty
-   * (These are already stored on each Position entity and updated on every
-   * trade.)
+   * Equity for display / account bookkeeping: cash balance + live floating P/L on open
+   * positions (prepaid-margin model — margin is already out of balance, so it is NOT
+   * added back here). Matches the Dashboard formula. Distinct from
+   * {@link MarginLoanService}'s collateral equity used for margin-call ratios.
+   * Falls back to the last stored {@code unrealizedPnl} when a live quote is unavailable.
    */
   private BigDecimal recalcEquity(TradingAccount ta) {
     List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    BigDecimal totalUnrealized = positions.stream()
-        .map(p -> p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl())
-        .reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
+    BigDecimal totalUnrealized = BigDecimal.ZERO;
+    for (Position p : positions) {
+      try {
+        double live = priceService.getLivePrice(p.getSymbolCode());
+        if (live <= 0) {
+          totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
+          continue;
+        }
+        totalUnrealized = totalUnrealized.add(liveUnrealizedPnl(p, BigDecimal.valueOf(live)));
+      } catch (Exception e) {
+        totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
+      }
+    }
     return ta.getBalance().add(totalUnrealized);
+  }
+
+  /** Floating P/L for one position at {@code livePrice} (LONG/SHORT + contract size). */
+  public static BigDecimal liveUnrealizedPnl(Position p, BigDecimal livePrice) {
+    if (p == null || livePrice == null) return BigDecimal.ZERO;
+    BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
+    BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity().abs();
+    BigDecimal contractSize = getContractSize(p.getSymbolCode());
+    if ("SHORT".equals(p.getSide())) {
+      return avg.subtract(livePrice).multiply(qty).multiply(contractSize);
+    }
+    return livePrice.subtract(avg).multiply(qty).multiply(contractSize);
   }
 
   /**
@@ -399,7 +419,8 @@ public class BrokerApiController {
             "required", reserved, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit()));
       }
       ta.setEquity(recalcEquity(ta));
-      ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+      // Prepaid-margin model: remaining balance is free cash.
+      ta.setFreeMargin(ta.getBalance());
       accountRepo.save(ta);
 
       BrokerOrder order = new BrokerOrder();
@@ -643,23 +664,7 @@ public class BrokerApiController {
 
     BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
     BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, bdPrice);
-
-    // Client Profit Safety Guard:
-    // On winning trades, total commission (open + close) is capped to max 20% of gross
-    // profit so the client ALWAYS keeps at least 80% of their gains. The open-leg fee was
-    // already charged to the balance when the position was opened and can't be refunded
-    // retroactively, so the cap can only be enforced by reducing the close-leg fee. We then
-    // recompute totalFees from what was ACTUALLY charged on both legs so the net P/L shown
-    // to the client always matches the real balance impact of the trade.
-    if (grossPnl != null && grossPnl.compareTo(BigDecimal.ZERO) > 0) {
-      BigDecimal maxFee = grossPnl.multiply(new BigDecimal("0.20")).setScale(2, RoundingMode.HALF_UP);
-      if (maxFee.compareTo(new BigDecimal("0.05")) >= 0 && openCommission.add(closeCommission).compareTo(maxFee) > 0) {
-        closeCommission = maxFee.subtract(openCommission);
-        if (closeCommission.compareTo(BigDecimal.ZERO) < 0) {
-          closeCommission = BigDecimal.ZERO;
-        }
-      }
-    }
+    closeCommission = TradingFees.applyProfitSafetyGuard(openCommission, closeCommission, grossPnl);
     BigDecimal totalFees = openCommission.add(closeCommission);
     BigDecimal netPnl = grossPnl.subtract(totalFees);
 
@@ -672,6 +677,8 @@ public class BrokerApiController {
 
     positionRepo.delete(pos);
     ta.setEquity(recalcEquity(ta));
+    // Prepaid-margin model: remaining balance is free cash.
+    ta.setFreeMargin(ta.getBalance());
     accountRepo.save(ta);
 
     // Record permanent transaction in database memory
@@ -759,14 +766,20 @@ public class BrokerApiController {
   @Transactional
   public ResponseEntity<?> cancelOrder(Authentication auth, @PathVariable Long id) {
     AppUser u = requireUser(auth);
-    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId()).orElseThrow();
-    BrokerOrder order = orderRepo.findById(id).orElse(null);
-    if (order == null || !order.getTradingAccount().getId().equals(ta.getId())) {
+    // Lock order FIRST, then account — same order as OrderExecutionService.tryExecute,
+    // so a fill and a cancel cannot both pass the NEW check and settle the reservation.
+    BrokerOrder order = orderRepo.findByIdForUpdate(id).orElse(null);
+    if (order == null) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "order_not_found"));
+    }
+    TradingAccount owned = ensurePrimaryAccount(u);
+    if (order.getTradingAccount() == null || !order.getTradingAccount().getId().equals(owned.getId())) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "order_not_found"));
     }
     if (!"NEW".equalsIgnoreCase(order.getStatus())) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "order_not_cancellable"));
     }
+    TradingAccount ta = accountRepo.findByIdForUpdate(owned.getId()).orElseThrow();
     // Refund reserved balance for BUY and SELL orders
     if ("BUY".equalsIgnoreCase(order.getSide()) || "SELL".equalsIgnoreCase(order.getSide())) {
       BigDecimal reservePrice = order.getLimitPrice() != null ? order.getLimitPrice()
@@ -777,7 +790,8 @@ public class BrokerApiController {
         BigDecimal refund = reservePrice.multiply(order.getQuantity()).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
         marginLoanService.repaySettlementOrBorrow(ta, refund);
         ta.setEquity(ta.getBalance());
-        ta.setFreeMargin(ta.getBalance().subtract(ta.getMarginUsed() == null ? BigDecimal.ZERO : ta.getMarginUsed()));
+        // Prepaid-margin model: free cash is the remaining balance (margin already deducted).
+        ta.setFreeMargin(ta.getBalance());
         accountRepo.save(ta);
       }
     }
