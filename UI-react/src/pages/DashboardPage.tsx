@@ -28,8 +28,10 @@ function fmtMoney(value: unknown, currency = 'USD'): string {
 function fmtPnl(n: unknown): string {
   const v = Number(n ?? 0);
   if (!Number.isFinite(v)) return '—';
-  if (Math.abs(v) > 1000) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return v.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+  const abs = Math.abs(v);
+  if (abs === 0) return '0.00';
+  if (abs >= 0.01) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 });
 }
 
 /**

@@ -1,0 +1,303 @@
+================================================================================
+  DOCUMENTATION: 06 Frontend Pages And Components
+================================================================================
+
+[FRONTEND MODULE] AuthHeader.tsx
+File Path: src/components/AuthHeader.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: AuthHeader()
+    Purpose: React Functional Component rendering AuthHeader UI.
+
+
+[FRONTEND MODULE] BackPageHeader.tsx
+File Path: src/components/BackPageHeader.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: BackPageHeader()
+    Purpose: React Functional Component rendering BackPageHeader UI.
+
+
+[FRONTEND MODULE] DashboardHeader.tsx
+File Path: src/components/DashboardHeader.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: DashboardHeader()
+    Purpose: React Functional Component rendering DashboardHeader UI.
+  * Function / Component: and()
+    Purpose: Helper utility executing and.
+  * Function / Component: handleLangChange()
+    Purpose: User event handler function triggered on handleLangChange.
+
+
+[FRONTEND MODULE] ErrorBoundary.tsx
+File Path: src/components/ErrorBoundary.tsx
+--------------------------------------------------------------------------------
+  * Exports Type Definitions / Interfaces / Configuration Constants.
+
+[FRONTEND MODULE] LoanOfferModal.tsx
+File Path: src/components/LoanOfferModal.tsx
+--------------------------------------------------------------------------------
+  * Exports Type Definitions / Interfaces / Configuration Constants.
+
+[FRONTEND MODULE] NNAdvisorPanel.tsx
+File Path: src/components/NNAdvisorPanel.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: NNAdvisorPanel()
+    Purpose: React Functional Component rendering NNAdvisorPanel UI.
+  * Function / Component: fetchLivePrediction()
+    Purpose: Asynchronously fetches data or API payload for fetchLivePrediction.
+
+
+[FRONTEND MODULE] PreferenceSync.tsx
+File Path: src/components/PreferenceSync.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: PreferenceSync()
+    Purpose: React Functional Component rendering PreferenceSync UI.
+  * Function / Component: applyTheme()
+    Purpose: Helper utility executing applyTheme.
+
+
+[FRONTEND MODULE] ProtectedRoute.tsx
+File Path: src/components/ProtectedRoute.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: ProtectedRoute()
+    Purpose: React Functional Component rendering ProtectedRoute UI.
+
+
+[FRONTEND MODULE] Skeleton.tsx
+File Path: src/components/Skeleton.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: Skeleton()
+    Purpose: React Functional Component rendering Skeleton UI.
+  * Function / Component: SkeletonCard()
+    Purpose: React Functional Component rendering SkeletonCard UI.
+  * Function / Component: SkeletonRow()
+    Purpose: React Functional Component rendering SkeletonRow UI.
+
+
+[FRONTEND MODULE] AccountPage.tsx
+File Path: src/pages/AccountPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: AccountPage()
+    Purpose: React Functional Component rendering AccountPage UI.
+  * Function / Component: displayOrDash()
+    Purpose: Helper utility executing displayOrDash.
+  * Function / Component: handleEdit()
+    Purpose: User event handler function triggered on handleEdit.
+  * Function / Component: handleLogout()
+    Purpose: User event handler function triggered on handleLogout.
+
+
+[FRONTEND MODULE] AnalyzerPage.tsx
+File Path: src/pages/AnalyzerPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: AnalyzerPage()
+    Purpose: React Functional Component rendering AnalyzerPage UI.
+  * Function / Component: fetchAnalysis()
+    Purpose: Asynchronously fetches data or API payload for fetchAnalysis.
+  * Function / Component: fetchOverview()
+    Purpose: Asynchronously fetches data or API payload for fetchOverview.
+  * Function / Component: getRecBadgeClass()
+    Purpose: Asynchronously fetches data or API payload for getRecBadgeClass.
+  * Function / Component: handleAssetSelect()
+    Purpose: User event handler function triggered on handleAssetSelect.
+  * Function / Component: handleTradeNow()
+    Purpose: User event handler function triggered on handleTradeNow.
+
+
+[FRONTEND MODULE] ChartsPage.tsx
+File Path: src/pages/ChartsPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: ChartsPage()
+    Purpose: React Functional Component rendering ChartsPage UI.
+  * Function / Component: chartColors()
+    Purpose: Helper utility executing chartColors.
+  * Function / Component: closeInlinePosition()
+    Purpose: Helper utility executing closeInlinePosition.
+  * Function / Component: debouncedLoad()
+    Purpose: Helper utility executing debouncedLoad.
+  * Function / Component: defaultPrice()
+    Purpose: Helper utility executing defaultPrice.
+  * Function / Component: fadeIn()
+    Purpose: Helper utility executing fadeIn.
+  * Function / Component: fetchBybitKlines()
+    Purpose: Asynchronously fetches data or API payload for fetchBybitKlines.
+  * Function / Component: fetchWithTimeout()
+    Purpose: Asynchronously fetches data or API payload for fetchWithTimeout.
+  * Function / Component: fetchYahooCandles()
+    Purpose: Asynchronously fetches data or API payload for fetchYahooCandles.
+  * Function / Component: fmtP()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: handleCancelOrder()
+    Purpose: User event handler function triggered on handleCancelOrder.
+  * Function / Component: isLightTheme()
+    Purpose: Helper utility executing isLightTheme.
+  * Function / Component: mapToBybitSymbol()
+    Purpose: Helper utility executing mapToBybitSymbol.
+  * Function / Component: mulberry32()
+    Purpose: Helper utility executing mulberry32.
+  * Function / Component: onResize()
+    Purpose: User event handler function triggered on onResize.
+  * Function / Component: placeOrder()
+    Purpose: Helper utility executing placeOrder.
+  * Function / Component: pollPrice()
+    Purpose: Helper utility executing pollPrice.
+  * Function / Component: setChartData()
+    Purpose: Helper utility executing setChartData.
+  * Function / Component: stopLive()
+    Purpose: Helper utility executing stopLive.
+  * Function / Component: symbolAnnualVol()
+    Purpose: Helper utility executing symbolAnnualVol.
+  * Function / Component: syntheticCandles()
+    Purpose: Helper utility executing syntheticCandles.
+  * Function / Component: tickPrice()
+    Purpose: Helper utility executing tickPrice.
+  * Function / Component: updateBar()
+    Purpose: Helper utility executing updateBar.
+  * Function / Component: updateBidAsk()
+    Purpose: Helper utility executing updateBidAsk.
+
+
+[FRONTEND MODULE] DashboardPage.tsx
+File Path: src/pages/DashboardPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: DashboardPage()
+    Purpose: React Functional Component rendering DashboardPage UI.
+  * Function / Component: fmtMoney()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtPnl()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtPrice()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+
+
+[FRONTEND MODULE] DemoRegisterPage.tsx
+File Path: src/pages/DemoRegisterPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: DemoRegisterPage()
+    Purpose: React Functional Component rendering DemoRegisterPage UI.
+  * Function / Component: onSubmit()
+    Purpose: User event handler function triggered on onSubmit.
+
+
+[FRONTEND MODULE] FinancePage.tsx
+File Path: src/pages/FinancePage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: FinancePage()
+    Purpose: React Functional Component rendering FinancePage UI.
+  * Function / Component: TxModal()
+    Purpose: React Functional Component rendering TxModal UI.
+  * Function / Component: fmtMoney()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtTime()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: handleConfirm()
+    Purpose: User event handler function triggered on handleConfirm.
+  * Function / Component: selectPreset()
+    Purpose: Helper utility executing selectPreset.
+
+
+[FRONTEND MODULE] HistoryPage.tsx
+File Path: src/pages/HistoryPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: HistoryPage()
+    Purpose: React Functional Component rendering HistoryPage UI.
+  * Function / Component: applyFilters()
+    Purpose: Helper utility executing applyFilters.
+  * Function / Component: exportCsv()
+    Purpose: Helper utility executing exportCsv.
+  * Function / Component: fmtPl()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtPrice()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtQty()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtTime()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: handleReset()
+    Purpose: User event handler function triggered on handleReset.
+  * Function / Component: pairOrders()
+    Purpose: Helper utility executing pairOrders.
+  * Function / Component: ts()
+    Purpose: Helper utility executing ts.
+
+
+[FRONTEND MODULE] LandingPage.tsx
+File Path: src/pages/LandingPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: LandingPage()
+    Purpose: React Functional Component rendering LandingPage UI.
+
+
+[FRONTEND MODULE] LoginPage.tsx
+File Path: src/pages/LoginPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: LoginPage()
+    Purpose: React Functional Component rendering LoginPage UI.
+  * Function / Component: handleForgot()
+    Purpose: User event handler function triggered on handleForgot.
+  * Function / Component: handleGoogle()
+    Purpose: User event handler function triggered on handleGoogle.
+  * Function / Component: onSubmit()
+    Purpose: User event handler function triggered on onSubmit.
+
+
+[FRONTEND MODULE] PlaceholderPage.tsx
+File Path: src/pages/PlaceholderPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: PlaceholderPage()
+    Purpose: React Functional Component rendering PlaceholderPage UI.
+
+
+[FRONTEND MODULE] PositionsPage.tsx
+File Path: src/pages/PositionsPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: ConfirmModal()
+    Purpose: React Functional Component rendering ConfirmModal UI.
+  * Function / Component: PositionsPage()
+    Purpose: React Functional Component rendering PositionsPage UI.
+  * Function / Component: closePosition()
+    Purpose: Helper utility executing closePosition.
+  * Function / Component: fmtPnl()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtPrice()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtQty()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: fmtTime()
+    Purpose: Formats raw numerical values (currency, PnL, leverage) for display.
+  * Function / Component: handleCancelOrder()
+    Purpose: User event handler function triggered on handleCancelOrder.
+  * Function / Component: pad()
+    Purpose: Helper utility executing pad.
+  * Function / Component: pairOrders()
+    Purpose: Helper utility executing pairOrders.
+  * Function / Component: tsMs()
+    Purpose: Helper utility executing tsMs.
+
+
+[FRONTEND MODULE] RegisterPage.tsx
+File Path: src/pages/RegisterPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: RegisterPage()
+    Purpose: React Functional Component rendering RegisterPage UI.
+  * Function / Component: onSubmit()
+    Purpose: User event handler function triggered on onSubmit.
+
+
+[FRONTEND MODULE] SettingsPage.tsx
+File Path: src/pages/SettingsPage.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: SettingsPage()
+    Purpose: React Functional Component rendering SettingsPage UI.
+  * Function / Component: ToggleRow()
+    Purpose: React Functional Component rendering ToggleRow UI.
+  * Function / Component: applyTheme()
+    Purpose: Helper utility executing applyTheme.
+  * Function / Component: handleChangePassword()
+    Purpose: User event handler function triggered on handleChangePassword.
+  * Function / Component: handleLangChange()
+    Purpose: User event handler function triggered on handleLangChange.
+  * Function / Component: handleThemeChange()
+    Purpose: User event handler function triggered on handleThemeChange.
+  * Function / Component: handleToggle()
+    Purpose: User event handler function triggered on handleToggle.
+

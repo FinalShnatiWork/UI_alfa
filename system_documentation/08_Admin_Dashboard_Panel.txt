@@ -1,0 +1,26 @@
+================================================================================
+  DOCUMENTATION: 08 Admin Dashboard Panel (HTML/JS Engine)
+================================================================================
+
+[ADMIN DASHBOARD] AdminDashboard_Local.html
+File Path: AdminDashboard_Local.html
+Overview: Comprehensive Administrator Control Panel for real-time monitoring of broker revenues, B-Book client losses, transactions, accounts, and risk controls.
+--------------------------------------------------------------------------------
+  * Function: connectToServer()
+    Purpose: Validates health status and connects to local backend REST API.
+  * Function: refreshData()
+    Purpose: Polls backend endpoints (/api/admin/accounts, /trades, /transactions) to refresh UI tables.
+  * Function: renderOverviewStats()
+    Purpose: Calculates Total Broker Profit, B-Book Client Losses, Commissions Collected, and Equity.
+  * Function: renderAccountsTable()
+    Purpose: Renders table of all trading accounts showing balance, leverage, debt, and total commission.
+  * Function: renderTransactionsTable()
+    Purpose: Displays complete ledger of Deposits, Withdrawals, and COMMISSION charges with color coding.
+  * Function: renderTradesTable()
+    Purpose: Renders table of all placed trades with side, volume, fill price, and realized PnL.
+  * Function: renderCreditLineStats()
+    Purpose: Renders credit line debt statistics and liquidation risk indicators.
+  * Function: runInterestNow()
+    Purpose: Sends admin command to execute daily interest calculation on all accounts in debt.
+  * Function: runLiquidationCheckNow()
+    Purpose: Sends admin command to perform immediate margin call liquidation checks.

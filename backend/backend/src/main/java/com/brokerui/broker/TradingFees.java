@@ -40,29 +40,13 @@ public final class TradingFees {
     BigDecimal contractSize = BrokerApiController.getContractSize(symbolCode);
     BigDecimal notional = fillPrice.multiply(quantity).multiply(contractSize);
 
-    // Asset tier multiplier
-    BigDecimal assetMultiplier = BigDecimal.ONE;
-    if (symbolCode != null) {
-      String sym = symbolCode.toUpperCase();
-      if (sym.contains("BTC") || sym.contains("ETH") || sym.contains("SOL")) {
-        assetMultiplier = new BigDecimal("1.2"); // Crypto tier
-      } else if (sym.contains("XAU") || sym.contains("XAG")) {
-        assetMultiplier = new BigDecimal("1.1"); // Metals tier
-      }
-    }
+    // Fixed commission rate of 0.0025% (2.5 bps) of notional value
+    BigDecimal rate = new BigDecimal("0.000025");
+    BigDecimal totalFee = notional.multiply(rate).setScale(2, java.math.RoundingMode.HALF_UP);
 
-    // Base fee ($0.00 per lot to avoid eating all profit)
-    BigDecimal baseFee = BigDecimal.ZERO;
-    // 0.0002% (0.02 bps) notional rate, very low commission
-    BigDecimal variableFee = notional.multiply(new BigDecimal("0.000002")).multiply(assetMultiplier);
-    BigDecimal totalFee = baseFee.add(variableFee).setScale(2, java.math.RoundingMode.HALF_UP);
-
-    // Apply volume-proportional min cap ($0.00 minimum) and max cap ($1.00 per lot)
-    BigDecimal minFee = BigDecimal.ZERO;
-    BigDecimal maxFee = quantity.multiply(new BigDecimal("1.00")).setScale(2, java.math.RoundingMode.HALF_UP);
-    if (maxFee.compareTo(new BigDecimal("15.00")) > 0) {
-      maxFee = new BigDecimal("15.00");
-    }
+    // Minimum $0.10, Maximum $50.00 per trade to stay logical and avoid eating all profit or losing profitability
+    BigDecimal minFee = new BigDecimal("0.10");
+    BigDecimal maxFee = new BigDecimal("50.00");
 
     if (totalFee.compareTo(minFee) < 0) {
       return minFee;
@@ -102,6 +86,23 @@ public final class TradingFees {
     order.setCommission(amount);
     BigDecimal total = ta.getCommissionPaidTotal() == null ? BigDecimal.ZERO : ta.getCommissionPaidTotal();
     ta.setCommissionPaidTotal(total.add(amount));
+  }
+
+  /**
+   * Applies a subtle spread to the raw market price.
+   * This ensures the broker inherently profits from the Bid/Ask difference.
+   * @param rawPrice The raw mid-market price
+   * @param isBuy True if the client is buying (paying the higher Ask price), False if selling (receiving the lower Bid price)
+   */
+  public static BigDecimal applySpread(BigDecimal rawPrice, boolean isBuy) {
+      if (rawPrice == null || rawPrice.compareTo(BigDecimal.ZERO) <= 0) return rawPrice;
+      // 0.015% markup per side (1.5 basis points) - standard broker spread
+      BigDecimal spreadRate = new BigDecimal("0.00015"); 
+      if (isBuy) {
+          return rawPrice.multiply(BigDecimal.ONE.add(spreadRate)).setScale(5, java.math.RoundingMode.HALF_UP);
+      } else {
+          return rawPrice.multiply(BigDecimal.ONE.subtract(spreadRate)).setScale(5, java.math.RoundingMode.HALF_UP);
+      }
   }
 }
 

@@ -27,6 +27,7 @@ public class OrderExecutionService {
   private final com.brokerui.market.MarketPriceService priceService;
   private final NNPredictorClient nnPredictorClient;
   private final MarginLoanService marginLoanService;
+  private final AccountTransactionRepository txRepo;
 
   @Autowired @Lazy
   private OrderExecutionService self;
@@ -55,8 +56,10 @@ public class OrderExecutionService {
       MT5IntegrationService mt5Service,
       com.brokerui.market.MarketPriceService priceService,
       NNPredictorClient nnPredictorClient,
-      MarginLoanService marginLoanService) {
+      MarginLoanService marginLoanService,
+      AccountTransactionRepository txRepo) {
     this.accountRepo = accountRepo;
+    this.txRepo = txRepo;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
     this.fillRepo = fillRepo;
@@ -167,9 +170,12 @@ public class OrderExecutionService {
    * @param order the matched order entity
    * @param price the actual execution price quote
    */
-  private void executeFilled(BrokerOrder order, BigDecimal price) {
+  private void executeFilled(BrokerOrder order, BigDecimal rawPrice) {
     TradingAccount ta = order.getTradingAccount();
     ta = accountRepo.findByIdForUpdate(ta.getId()).orElseThrow();
+    
+    boolean isBuy = "BUY".equalsIgnoreCase(order.getSide());
+    BigDecimal price = TradingFees.applySpread(rawPrice, isBuy);
 
     BigDecimal qty = order.getQuantity();
     BigDecimal contractSize = BrokerApiController.getContractSize(order.getSymbolCode());
@@ -179,7 +185,17 @@ public class OrderExecutionService {
     BigDecimal orderRealizedPnl = BigDecimal.ZERO;
 
     // Commission is only charged once the order actually fills (not on pending reservation).
-    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+    BigDecimal commission = TradingFees.calculateCommission(order.getSymbolCode(), qty, price);
+    TradingFees.charge(ta, order, commission);
+    
+    AccountTransaction feeTx = new AccountTransaction();
+    feeTx.setTradingAccount(ta);
+    feeTx.setTxType("COMMISSION");
+    feeTx.setAmount(commission);
+    feeTx.setCurrency(ta.getCurrency());
+    feeTx.setStatus("APPROVED");
+    feeTx.setProcessedAt(java.time.Instant.now());
+    txRepo.save(feeTx);
 
     if ("BUY".equalsIgnoreCase(order.getSide())) {
       // Regular LONG BUY - Refund reserved funds, then deduct actual cost + commission
@@ -428,6 +444,7 @@ public class OrderExecutionService {
     BigDecimal qty = pos.getQuantity();
     BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
     boolean isShort = "SHORT".equals(pos.getSide());
+    closePrice = TradingFees.applySpread(closePrice, isShort); // Close SHORT = BUY (Ask), Close LONG = SELL (Bid)
 
     BigDecimal contractSize = BrokerApiController.getContractSize(pos.getSymbolCode());
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
@@ -440,6 +457,19 @@ public class OrderExecutionService {
       pnl = closePrice.subtract(avg).multiply(qty).multiply(contractSize);
     }
 
+    BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
+    BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, closePrice);
+    BigDecimal totalFees = openCommission.add(closeCommission);
+
+    if (pnl.compareTo(BigDecimal.ZERO) > 0) {
+      BigDecimal maxFee = pnl.multiply(new BigDecimal("0.20")).setScale(2, RoundingMode.HALF_UP);
+      if (maxFee.compareTo(new BigDecimal("0.05")) >= 0 && totalFees.compareTo(maxFee) > 0) {
+        totalFees = maxFee;
+        closeCommission = totalFees.divide(new BigDecimal("2"), 2, RoundingMode.HALF_UP);
+      }
+    }
+    BigDecimal netPnl = pnl.subtract(totalFees);
+
     // Save history order
     BrokerOrder order = new BrokerOrder();
     order.setTradingAccount(ta);
@@ -450,10 +480,19 @@ public class OrderExecutionService {
     order.setQuantity(qty);
     order.setFilledAt(Instant.now());
     order.setEntryPrice(closePrice);
-    order.setRealizedPnl(pnl);
+    order.setRealizedPnl(netPnl);
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
-    TradingFees.charge(ta, order, TradingFees.COMMISSION_PER_TRADE);
+    TradingFees.charge(ta, order, closeCommission);
+
+    AccountTransaction closeFeeTx = new AccountTransaction();
+    closeFeeTx.setTradingAccount(ta);
+    closeFeeTx.setTxType("COMMISSION");
+    closeFeeTx.setAmount(closeCommission);
+    closeFeeTx.setCurrency(ta.getCurrency());
+    closeFeeTx.setStatus("APPROVED");
+    closeFeeTx.setProcessedAt(Instant.now());
+    txRepo.save(closeFeeTx);
 
     marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(pnl).subtract(order.getCommission()));
     positionRepo.delete(pos);

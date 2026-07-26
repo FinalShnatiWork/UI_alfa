@@ -1,0 +1,170 @@
+================================================================================
+  DOCUMENTATION: 07 Frontend Hooks And Utilities
+================================================================================
+
+[FRONTEND MODULE] App.tsx
+File Path: src/App.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: App()
+    Purpose: React Functional Component rendering App UI.
+
+
+[FRONTEND MODULE] useApi.ts
+File Path: src/hooks/useApi.ts
+--------------------------------------------------------------------------------
+  * Function / Component: fetchAll()
+    Purpose: Asynchronously fetches data or API payload for fetchAll.
+  * Function / Component: useAuthMe()
+    Purpose: Custom React hook managing state and lifecycle for useAuthMe.
+  * Function / Component: useBrokerOverview()
+    Purpose: Custom React hook managing state and lifecycle for useBrokerOverview.
+  * Function / Component: useCancelOrder()
+    Purpose: Custom React hook managing state and lifecycle for useCancelOrder.
+  * Function / Component: useInvalidateAfterTrade()
+    Purpose: Custom React hook managing state and lifecycle for useInvalidateAfterTrade.
+  * Function / Component: useLivePrice()
+    Purpose: Custom React hook managing state and lifecycle for useLivePrice.
+  * Function / Component: useLivePrices()
+    Purpose: Custom React hook managing state and lifecycle for useLivePrices.
+  * Function / Component: useNotifications()
+    Purpose: Custom React hook managing state and lifecycle for useNotifications.
+  * Function / Component: usePendingOrders()
+    Purpose: Custom React hook managing state and lifecycle for usePendingOrders.
+  * Function / Component: usePositions()
+    Purpose: Custom React hook managing state and lifecycle for usePositions.
+  * Function / Component: usePreferences()
+    Purpose: Custom React hook managing state and lifecycle for usePreferences.
+  * Function / Component: useSavePreferences()
+    Purpose: Custom React hook managing state and lifecycle for useSavePreferences.
+  * Function / Component: useTradeHistory()
+    Purpose: Custom React hook managing state and lifecycle for useTradeHistory.
+  * Function / Component: useTransactionMutation()
+    Purpose: Custom React hook managing state and lifecycle for useTransactionMutation.
+  * Function / Component: useTransactions()
+    Purpose: Custom React hook managing state and lifecycle for useTransactions.
+
+
+[FRONTEND MODULE] useAuth.tsx
+File Path: src/hooks/useAuth.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: AuthProvider()
+    Purpose: React Functional Component rendering AuthProvider UI.
+  * Function / Component: handler()
+    Purpose: User event handler function triggered on handler.
+  * Function / Component: useAuth()
+    Purpose: Custom React hook managing state and lifecycle for useAuth.
+
+
+[FRONTEND MODULE] useI18n.tsx
+File Path: src/hooks/useI18n.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: I18nProvider()
+    Purpose: React Functional Component rendering I18nProvider UI.
+  * Function / Component: useI18n()
+    Purpose: Custom React hook managing state and lifecycle for useI18n.
+
+
+[FRONTEND MODULE] useLogout.ts
+File Path: src/hooks/useLogout.ts
+--------------------------------------------------------------------------------
+  * Function / Component: and()
+    Purpose: Helper utility executing and.
+  * Function / Component: useLogout()
+    Purpose: Custom React hook managing state and lifecycle for useLogout.
+
+
+[FRONTEND MODULE] useNotificationsWs.ts
+File Path: src/hooks/useNotificationsWs.ts
+--------------------------------------------------------------------------------
+  * Function / Component: useNotificationsWs()
+    Purpose: Custom React hook managing state and lifecycle for useNotificationsWs.
+
+
+[FRONTEND MODULE] useToast.tsx
+File Path: src/hooks/useToast.tsx
+--------------------------------------------------------------------------------
+  * Function / Component: ToastProvider()
+    Purpose: React Functional Component rendering ToastProvider UI.
+  * Function / Component: trigger()
+    Purpose: Helper utility executing trigger.
+  * Function / Component: useToast()
+    Purpose: Custom React hook managing state and lifecycle for useToast.
+
+
+[FRONTEND MODULE] api.ts
+File Path: src/lib/api.ts
+--------------------------------------------------------------------------------
+  * Function / Component: apiGet()
+    Purpose: Helper utility executing apiGet.
+  * Function / Component: apiPostFormUrlEncoded()
+    Purpose: Helper utility executing apiPostFormUrlEncoded.
+  * Function / Component: apiPostJson()
+    Purpose: Helper utility executing apiPostJson.
+  * Function / Component: apiPostLogout()
+    Purpose: Helper utility executing apiPostLogout.
+  * Function / Component: ensureCsrfCookie()
+    Purpose: Helper utility executing ensureCsrfCookie.
+  * Function / Component: getContractSize()
+    Purpose: Asynchronously fetches data or API payload for getContractSize.
+  * Function / Component: getLivePrice()
+    Purpose: Asynchronously fetches data or API payload for getLivePrice.
+  * Function / Component: getStorage()
+    Purpose: Asynchronously fetches data or API payload for getStorage.
+  * Function / Component: mockGet()
+    Purpose: Helper utility executing mockGet.
+  * Function / Component: mockPost()
+    Purpose: Helper utility executing mockPost.
+  * Function / Component: parseOverviewValue()
+    Purpose: Helper utility executing parseOverviewValue.
+  * Function / Component: postWithCsrfRetry()
+    Purpose: Helper utility executing postWithCsrfRetry.
+  * Function / Component: processMockPendingOrders()
+    Purpose: Helper utility executing processMockPendingOrders.
+  * Function / Component: processMockSlTp()
+    Purpose: Helper utility executing processMockSlTp.
+  * Function / Component: setStorage()
+    Purpose: Helper utility executing setStorage.
+  * Function / Component: xsrfHeader()
+    Purpose: Helper utility executing xsrfHeader.
+  * Function / Component: xsrfTokenFromCookie()
+    Purpose: Helper utility executing xsrfTokenFromCookie.
+
+
+[FRONTEND MODULE] i18n.ts
+File Path: src/lib/i18n.ts
+--------------------------------------------------------------------------------
+  * Function / Component: getLang()
+    Purpose: Asynchronously fetches data or API payload for getLang.
+  * Function / Component: isAllowed()
+    Purpose: Helper utility executing isAllowed.
+  * Function / Component: persistLang()
+    Purpose: Helper utility executing persistLang.
+  * Function / Component: translate()
+    Purpose: Helper utility executing translate.
+  * Function / Component: wrapHeSubstitution()
+    Purpose: Helper utility executing wrapHeSubstitution.
+
+
+[FRONTEND MODULE] userProfile.ts
+File Path: src/lib/userProfile.ts
+--------------------------------------------------------------------------------
+  * Function / Component: getUserProfile()
+    Purpose: Asynchronously fetches data or API payload for getUserProfile.
+  * Function / Component: saveUserProfile()
+    Purpose: Helper utility executing saveUserProfile.
+
+
+[FRONTEND MODULE] main.tsx
+File Path: src/main.tsx
+--------------------------------------------------------------------------------
+  * Exports Type Definitions / Interfaces / Configuration Constants.
+
+[FRONTEND MODULE] api.ts
+File Path: src/types/api.ts
+--------------------------------------------------------------------------------
+  * Exports Type Definitions / Interfaces / Configuration Constants.
+
+[FRONTEND MODULE] vite-env.d.ts
+File Path: src/vite-env.d.ts
+--------------------------------------------------------------------------------
+  * Exports Type Definitions / Interfaces / Configuration Constants.

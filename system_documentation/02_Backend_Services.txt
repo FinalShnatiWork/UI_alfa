@@ -1,0 +1,143 @@
+================================================================================
+  DOCUMENTATION: 02 Backend Services
+================================================================================
+
+[CLASS] com.brokerui.broker.OrderExecutionService
+File Path: src/main/java/com/brokerui/broker/OrderExecutionService.java
+Overview: Core background execution service running scheduled ticks (every 2s) to execute pending limit/stop orders, trigger SL/TP auto-closes, and settle trade fills.
+--------------------------------------------------------------------------------
+  * Function: tick() -> void
+    Purpose: Executes operational logic for tick.
+  * Function: tryExecute(Long orderId) -> void
+    Purpose: Executes operational logic for tryExecute.
+  * Function: shouldFillLimit(BrokerOrder o, String side, BigDecimal last) -> boolean
+    Purpose: Executes operational logic for shouldFillLimit.
+  * Function: shouldFillStop(BrokerOrder o, String side, BigDecimal last) -> boolean
+    Purpose: Executes operational logic for shouldFillStop.
+  * Function: executeFilled(BrokerOrder order, BigDecimal rawPrice) -> void
+    Purpose: Executes operational logic for executeFilled.
+  * Function: recalcEquity(TradingAccount ta) -> BigDecimal
+    Purpose: Executes operational logic for recalcEquity.
+  * Function: openNewPosition(TradingAccount ta, String symbolCode, String side, BigDecimal qty, BigDecimal fillPrice, BigDecimal tp, BigDecimal sl) -> Position
+    Purpose: Executes operational logic for openNewPosition.
+  * Function: checkPositionsSlTp() -> void
+    Purpose: Executes operational logic for checkPositionsSlTp.
+  * Function: closePositionDueToSlTp(Long posId, BigDecimal closePrice, String reason) -> void
+    Purpose: Settles closed trade PnL, applies spread + capped commission, returns margin, and deletes position.
+
+
+[CLASS] com.brokerui.broker.MarginLoanService
+File Path: src/main/java/com/brokerui/broker/MarginLoanService.java
+Overview: Credit line and leverage management service. Handles shortfall auto-loans, debt repayments, daily interest accruals, and liquidation checks.
+--------------------------------------------------------------------------------
+  * Function: tryCoverShortfall(TradingAccount ta, BigDecimal required, AppUser user, HttpServletRequest request) -> boolean
+    Purpose: Automatically extends credit line loan when account balance is insufficient for trade margin.
+  * Function: repaySettlementOrBorrow(TradingAccount ta, BigDecimal amount) -> void
+    Purpose: Automatically extends credit line loan when account balance is insufficient for trade margin.
+  * Function: writeLedger(TradingAccount ta, String type, BigDecimal amount, String note) -> void
+    Purpose: Executes operational logic for writeLedger.
+  * Function: computeMarginLevel(TradingAccount ta) -> BigDecimal
+    Purpose: Executes operational logic for computeMarginLevel.
+  * Function: liveEquity(TradingAccount ta) -> BigDecimal
+    Purpose: Executes operational logic for liveEquity.
+  * Function: accrueDueInterestTick() -> void
+    Purpose: Calculates and charges daily interest on all indebted accounts (borrowedBalance > 0).
+  * Function: accrueDueInterest() -> void
+    Purpose: Calculates and charges daily interest on all indebted accounts (borrowedBalance > 0).
+  * Function: accrueDailyInterest() -> void
+    Purpose: Calculates and charges daily interest on all indebted accounts (borrowedBalance > 0).
+  * Function: chargeInterest(Long accountId) -> void
+    Purpose: Calculates and charges daily interest on all indebted accounts (borrowedBalance > 0).
+  * Function: checkLiquidationsTick() -> void
+    Purpose: Monitors indebted accounts and executes liquidation if margin level drops below safety limit.
+  * Function: checkLiquidations() -> void
+    Purpose: Monitors indebted accounts and executes liquidation if margin level drops below safety limit.
+  * Function: liquidateAccount(Long accountId) -> void
+    Purpose: Executes operational logic for liquidateAccount.
+  * Function: unrealizedPnlOf(Position p) -> BigDecimal
+    Purpose: Executes operational logic for unrealizedPnlOf.
+
+
+[CLASS] com.brokerui.broker.AuditLogService
+File Path: src/main/java/com/brokerui/broker/AuditLogService.java
+Overview: Compliance audit logging service capturing user actions, administrative interventions, and IP addresses into database logs.
+--------------------------------------------------------------------------------
+  * Function: AuditLogService(AuditLogRepository auditLogRepo) -> public
+    Purpose: Constructor initializing AuditLogService with required dependencies.
+  * Function: log(AppUser user, String action, String detail, HttpServletRequest req) -> void
+    Purpose: Executes operational logic for log.
+  * Function: extractIp(HttpServletRequest req) -> String
+    Purpose: Executes operational logic for extractIp.
+  * Function: truncate(String s, int max) -> String
+    Purpose: Executes operational logic for truncate.
+
+
+[CLASS] com.brokerui.broker.MT5IntegrationService
+File Path: src/main/java/com/brokerui/broker/MT5IntegrationService.java
+Overview: MetaTrader 5 terminal integration bridge. Writes orders to local bridge files and checks terminal connectivity.
+--------------------------------------------------------------------------------
+  * Function: isConfigured() -> boolean
+    Purpose: Executes operational logic for isConfigured.
+  * Function: checkHealth() -> boolean
+    Purpose: Executes operational logic for checkHealth.
+  * Function: sendTrade(String symbol, String action, double price, double tp, double sl, double lot) -> String
+    Purpose: Executes operational logic for sendTrade.
+  * Function: getPrice(String symbol) -> double
+    Purpose: Executes operational logic for getPrice.
+  * Function: getRecentCandles(String symbol, int count, String timeframe) -> Candle[]
+    Purpose: Executes operational logic for getRecentCandles.
+  * Function: getOpenPositions() -> JSONArray
+    Purpose: Executes operational logic for getOpenPositions.
+  * Function: getBasePath() -> String
+    Purpose: Executes operational logic for getBasePath.
+
+
+[CLASS] com.brokerui.broker.MT5PositionSyncService
+File Path: src/main/java/com/brokerui/broker/MT5PositionSyncService.java
+Overview: Background service synchronizing position states with MetaTrader 5 terminal.
+--------------------------------------------------------------------------------
+  * Function: MT5PositionSyncService(MT5IntegrationService mt5Service, PositionRepository positionRepo, TradingAccountRepository accountRepo) -> public
+    Purpose: Constructor initializing MT5PositionSyncService with required dependencies.
+  * Function: sync() -> void
+    Purpose: Executes operational logic for sync.
+
+
+[CLASS] com.brokerui.broker.MT5JavaTradeWriter
+File Path: src/main/java/com/brokerui/broker/MT5JavaTradeWriter.java
+Overview: File I/O utility formatting and writing trade payloads for MT5 terminal bridge.
+--------------------------------------------------------------------------------
+  * Function: sendTradeToMT5(String symbol, String action, double entry, double tp, double sl, double lot) -> String
+    Purpose: Executes operational logic for sendTradeToMT5.
+
+
+[CLASS] com.brokerui.broker.MT5ConnectionManager
+File Path: src/main/java/com/brokerui/broker/MT5ConnectionManager.java
+Overview: Connection manager maintaining MT5 bridge file path and heartbeat.
+--------------------------------------------------------------------------------
+  * Function: isConnected() -> boolean
+    Purpose: Executes operational logic for isConnected.
+  * Function: attemptConnect() -> boolean
+    Purpose: Executes operational logic for attemptConnect.
+  * Function: setConnected(boolean connected) -> void
+    Purpose: Executes operational logic for setConnected.
+  * Function: getMt5Service() -> MT5IntegrationService
+    Purpose: Executes operational logic for getMt5Service.
+
+
+[CLASS] com.brokerui.broker.NNPredictorClient
+File Path: src/main/java/com/brokerui/broker/NNPredictorClient.java
+Overview: Client connector to internal Neural Network AI prediction server for evaluating trade win/loss probabilities.
+--------------------------------------------------------------------------------
+  * Function: getPrediction(double[] features) -> Object>
+    Purpose: Executes operational logic for getPrediction.
+
+
+[CLASS] com.brokerui.broker.AlpacaClient
+File Path: src/main/java/com/brokerui/broker/AlpacaClient.java
+Overview: External broker client bridge adapter.
+--------------------------------------------------------------------------------
+  * Function: getRecentCandles(String symbol, int count, String timeframe) -> Candle[]
+    Purpose: Executes operational logic for getRecentCandles.
+  * Function: getExchangeRate(String symbol) -> double
+    Purpose: Executes operational logic for getExchangeRate.
+

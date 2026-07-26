@@ -23,6 +23,15 @@ interface PairedTrade {
 
 function tsMs(iso?: string) { return iso ? new Date(iso).getTime() : 0; }
 
+function fmtPnl(n: unknown): string {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v)) return '—';
+  const abs = Math.abs(v);
+  if (abs === 0) return '0.00';
+  if (abs >= 0.01) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 });
+}
+
 function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
   const sorted = [...orders].sort(
     (a, b) => tsMs(a.filledAt || a.createdAt) - tsMs(b.filledAt || b.createdAt)
@@ -313,7 +322,7 @@ export function PositionsPage() {
                         <td className="dir-ltr" style={{ textAlign: 'right' }}>
                           {pnl != null ? (
                             <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                              {pnl >= 0 ? '+' : '-'}${Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                              {pnl >= 0 ? '+' : ''}{fmtPnl(pnl)}
                             </span>
                           ) : (
                             <span className="text-muted">—</span>
@@ -352,7 +361,7 @@ export function PositionsPage() {
                       {t('table.totalPl') || 'Total P/L'}
                     </td>
                     <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
-                      {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                      {totalPnl >= 0 ? '+' : ''}{fmtPnl(totalPnl)}
                     </td>
                     <td />
                   </tr>
