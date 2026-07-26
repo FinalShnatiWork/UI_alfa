@@ -283,6 +283,9 @@ public class OrderExecutionService {
             midPriceNorm, bookDepthBuy, bookDepthSell, 0.72
         };
 
+        // AI ROUTING DECISION:
+        // - INTERNAL (B-Book / Internal Matching): Retail / Noise trade. The brokerage acts as counterparty, capturing spread & commission.
+        // - EXTERNAL (A-Book / MT5 Routing Bridge): High-probability / Toxic trade. Forwarded to MetaTrader 5 bridge to hedge risk externally.
         java.util.Map<String, Object> pred = nnPredictorClient.getPrediction(features);
         if (pred != null) {
             double matchProb = ((Number) pred.get("matchProb")).doubleValue();
@@ -291,10 +294,15 @@ public class OrderExecutionService {
 
             order.setNnMatchProb(matchProb);
             order.setNnExpectedSavings(BigDecimal.valueOf(expectedSavings));
-            order.setNnRouteRecommendation(routeRecommendation > 0.5 ? "INTERNAL" : "EXTERNAL");
             
             if (routeRecommendation > 0.5) {
+                // INTERNAL (B-Book): Retain trade internally in platform liquidity pool
+                order.setNnRouteRecommendation("INTERNAL");
                 routeExternal = false;
+            } else {
+                // EXTERNAL (A-Book): Hedge trade externally via MetaTrader 5 Bridge
+                order.setNnRouteRecommendation("EXTERNAL");
+                routeExternal = true;
             }
         } else {
             order.setNnRouteRecommendation("EXTERNAL");
@@ -302,7 +310,7 @@ public class OrderExecutionService {
             order.setNnExpectedSavings(BigDecimal.ZERO);
         }
     } catch (Exception e) {
-        System.err.println("Failed to fetch NN recommendation: " + e.getMessage());
+        System.err.println("[AI ROUTING ERROR] Failed to fetch NN recommendation: " + e.getMessage());
         order.setNnRouteRecommendation("EXTERNAL");
         order.setNnMatchProb(0.0);
         order.setNnExpectedSavings(BigDecimal.ZERO);
@@ -318,7 +326,10 @@ public class OrderExecutionService {
     fillRepo.save(fill);
 
     if (routeExternal) {
-        // Forward to MT5
+        // EXTERNAL ROUTING: Forward trade to MetaTrader 5 Bridge
+        System.out.println(String.format(java.util.Locale.US,
+            "[AI ROUTING - EXTERNAL (A-BOOK)] Order #%d for %s %s %.4f @ %.4f routed to MetaTrader 5 Bridge.",
+            order.getId(), order.getSide(), order.getSymbolCode(), qty.doubleValue(), price.doubleValue()));
         try {
             mt5Service.sendTrade(
                 order.getSymbolCode(), 
@@ -329,10 +340,13 @@ public class OrderExecutionService {
                 qty.doubleValue()
             );
         } catch (Exception ex) {
-            System.err.println("Failed to forward trade to MT5: " + ex.getMessage());
+            System.err.println("[MT5 ROUTING ERROR] Failed to forward trade to MT5: " + ex.getMessage());
         }
     } else {
-        System.out.println("AI Advisor matching: Routed order #" + order.getId() + " internally. Skipped external MT5 routing.");
+        // INTERNAL ROUTING: Retain trade internally on platform ledger
+        System.out.println(String.format(java.util.Locale.US,
+            "[AI ROUTING - INTERNAL (B-BOOK)] Order #%d for %s %s %.4f @ %.4f matched internally. Skipped MT5 routing.",
+            order.getId(), order.getSide(), order.getSymbolCode(), qty.doubleValue(), price.doubleValue()));
     }
   }
 
