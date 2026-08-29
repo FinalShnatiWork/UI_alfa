@@ -10,7 +10,14 @@ import org.springframework.data.repository.query.Param;
 
 public interface PositionRepository extends JpaRepository<Position, Long> {
 
+  /** Prefer for internal math where row order does not matter to the user. */
   List<Position> findByTradingAccountIdOrderByUpdatedAtDesc(Long tradingAccountId);
+
+  /**
+   * Stable list order for UI tables: newest open first. Do NOT use {@code updatedAt} —
+   * the SL/TP tick refreshes unrealizedPnl every few seconds and would reshuffle rows.
+   */
+  List<Position> findByTradingAccountIdOrderByOpenedAtDescIdDesc(Long tradingAccountId);
 
   Optional<Position> findByTradingAccountIdAndSymbolCode(Long tradingAccountId, String symbolCode);
 

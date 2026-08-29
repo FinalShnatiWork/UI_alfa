@@ -122,7 +122,7 @@ public class BrokerApiController {
   public ResponseEntity<?> positions(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
-    return ResponseEntity.ok(positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()));
+    return ResponseEntity.ok(positionRepo.findByTradingAccountIdOrderByOpenedAtDescIdDesc(ta.getId()));
   }
 
   @GetMapping("/orders")
