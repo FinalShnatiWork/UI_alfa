@@ -119,9 +119,7 @@ export function DashboardPage() {
   }, 0);
 
   const liveEquity = rawBalance + livePnl;
-  // Prepaid-margin model (same as backend overview): margin is already deducted from
-  // balance on open, so free margin is remaining cash + floating P/L — not equity - marginUsed.
-  const liveFreeMargin = rawBalance + livePnl;
+  const liveFreeMargin = liveEquity - rawMarginUsed;
 
   const balance = overview ? fmtMoney(rawBalance, currency) : '—';
   const equity = overview ? fmtMoney(liveEquity, currency) : '—';

@@ -9,13 +9,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #030509;
-      --card-bg: #0d1117;
+      --bg: #0a0c10;
+      --bg-gradient: radial-gradient(circle at top right, #131a26 0%, #0a0c10 100%);
+      --card-bg: rgba(13, 17, 23, 0.7);
+      --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
       --primary: #00c8ff;
-      --primary-glow: rgba(0, 200, 255, 0.3);
+      --primary-glow: rgba(0, 200, 255, 0.4);
       --text: #f0f6fc;
       --text-muted: #8b949e;
-      --border: rgba(255, 255, 255, 0.08);
+      --border: rgba(255, 255, 255, 0.1);
       --success: #23d160;
       --danger: #f85149;
       --warning: #e3b341;
@@ -26,21 +28,24 @@
     body {
       margin: 0;
       font-family: 'Outfit', sans-serif;
-      background-color: var(--bg);
+      background: var(--bg-gradient);
+      background-attachment: fixed;
       color: var(--text);
       display: flex;
       height: 100vh;
       overflow: hidden;
     }
 
-    /* Sidebar Styling */
     aside {
       width: var(--sidebar-w);
-      background: var(--card-bg);
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(20px);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       padding: 30px 15px;
+      box-shadow: 2px 0 20px rgba(0,0,0,0.3);
+      z-index: 10;
     }
 
     .logo-area {
@@ -83,8 +88,10 @@
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--border);
-      background: rgba(3, 5, 9, 0.5);
-      backdrop-filter: blur(10px);
+      background: rgba(10, 12, 16, 0.6);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      z-index: 5;
     }
 
     .page-title { font-size: 1.5rem; font-weight: 600; }
@@ -110,61 +117,26 @@
 
     .card {
       background: var(--card-bg);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 30px;
       margin-bottom: 30px;
+      box-shadow: var(--card-shadow);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover {
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
     }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .card-title { font-size: 1.25rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 10px; }
 
-    /* Tables — dense, scrollable, no ugly wraps */
-    .table-scroll {
-      width: 100%;
-      overflow-x: auto;
-      overflow-y: visible;
-      -webkit-overflow-scrolling: touch;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: rgba(0,0,0,0.15);
-    }
-    .table-scroll table { margin: 0; border: none; }
-    table { width: 100%; border-collapse: collapse; table-layout: auto; }
-    th {
-      text-align: left;
-      padding: 12px 12px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text-muted);
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      white-space: nowrap;
-      vertical-align: middle;
-      background: rgba(255,255,255,0.02);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-    td {
-      padding: 12px 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.03);
-      font-size: 0.875rem;
-      white-space: nowrap;
-      vertical-align: middle;
-      max-width: 280px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    td.cell-wrap { white-space: normal; max-width: 320px; }
-    td.cell-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-    td.cell-actions { text-align: right; max-width: none; overflow: visible; }
-    .user-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 200px; }
-    .user-cell .uc-name { font-weight: 600; font-size: 0.87rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .user-cell .uc-email { color: var(--text-muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .actions-group { display: inline-flex; flex-wrap: nowrap; gap: 6px; justify-content: flex-end; align-items: center; }
-    .money { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 15px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+    td { padding: 18px 15px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 0.95rem; }
 
-    .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; white-space: nowrap; display: inline-block; }
+    .badge { padding: 5px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
     .badge-success { background: rgba(35, 209, 96, 0.1); color: var(--success); }
     .badge-danger { background: rgba(248, 81, 73, 0.1); color: var(--danger); }
     .badge-info { background: rgba(0, 200, 255, 0.1); color: var(--primary); }
@@ -173,16 +145,16 @@
     .badge-orange { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
 
     /* Overview stat cards */
-    .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 28px; }
-    .stat-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 14px; padding: 18px 16px; box-sizing: border-box; overflow: hidden; min-width: 0; }
-    .stat-card .sc-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .stat-card .sc-value { font-size: 1.35rem; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-    .stat-card .sc-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+    .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 14px; padding: 22px 20px; box-sizing: border-box; overflow: hidden; }
+    .stat-card .sc-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-card .sc-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-card .sc-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
 
     /* Inner tabs (for Trades) */
-    .inner-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; width: fit-content; }
-    .inner-tab { padding: 7px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; cursor: pointer; color: var(--text-muted); transition: all 0.2s; }
-    .inner-tab.active { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); }
+    .inner-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: rgba(0,0,0,0.2); border-radius: 10px; padding: 4px; width: fit-content; border: 1px solid var(--border); }
+    .inner-tab { padding: 7px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all 0.2s; }
+    .inner-tab.active { background: rgba(255,255,255,0.08); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 
     /* Search / filter inputs in tables */
     .table-toolbar { display: flex; gap: 12px; margin-bottom: 18px; align-items: center; }
@@ -197,7 +169,7 @@
     .tx-summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
     .tx-summary-item { flex: 1; min-width: 140px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
     .tx-summary-item .ts-label { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px; }
-    .tx-summary-item .ts-value { font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+    .tx-summary-item .ts-value { font-size: 1.3rem; font-weight: 700; }
 
     /* Audit filters bar */
     .audit-filters {
@@ -241,7 +213,8 @@
     }
     .audit-stat-pill .num { font-weight: 700; font-size: 0.95rem; }
 
-    tbody tr:hover { background: rgba(255,255,255,0.02); }
+    tbody tr { transition: background 0.2s; }
+    tbody tr:hover { background: rgba(255,255,255,0.04); }
 
     /* Buttons */
     .btn {
@@ -256,7 +229,7 @@
       align-items: center;
       gap: 8px;
     }
-    .btn-sm { padding: 5px 10px; font-size: 0.75rem; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
     .btn-primary { background: var(--primary); color: #000; }
     .btn-danger { background: var(--danger); color: #fff; }
     .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
@@ -388,11 +361,11 @@
           <div class="stat-card"><div class="sc-label">Open Positions</div><div class="sc-value" id="ov-positions">–</div><div class="sc-sub">active trades</div></div>
           <div class="stat-card"><div class="sc-label">Deposits Today</div><div class="sc-value" id="ov-deposits" style="color:var(--success)">–</div><div class="sc-sub" id="ov-deposits-sub">transactions</div></div>
           <div class="stat-card"><div class="sc-label">Login Failures</div><div class="sc-value" id="ov-failures" style="color:var(--danger)">–</div><div class="sc-sub">in audit log</div></div>
-          <div class="stat-card"><div class="sc-label">Internal Rate</div><div class="sc-value" id="ov-internal-rate" style="color:#a78bfa">–</div><div class="sc-sub">AI local crossing %</div></div>
-          <div class="stat-card"><div class="sc-label">Commission</div><div class="sc-value" id="ov-total-commission" style="color:var(--primary)">–</div><div class="sc-sub">Charged to client balances</div></div>
-          <div class="stat-card"><div class="sc-label">Fees Saved</div><div class="sc-value" id="ov-total-saved" style="color:var(--success)">–</div><div class="sc-sub">Internal match = pure profit</div></div>
-          <div class="stat-card"><div class="sc-label">External Fees</div><div class="sc-value" id="ov-external-paid" style="color:var(--danger)">–</div><div class="sc-sub">Modeled exchange cost</div></div>
-          <div class="stat-card"><div class="sc-label">Net Profit</div><div class="sc-value" id="ov-net-savings" style="color:var(--success)">–</div><div class="sc-sub">Commission minus exchange cost</div></div>
+          <div class="stat-card"><div class="sc-label">Internal Cross Rate</div><div class="sc-value" id="ov-internal-rate" style="color:#a78bfa">–</div><div class="sc-sub">AI Local Crossing %</div></div>
+          <div class="stat-card"><div class="sc-label">Commission Collected</div><div class="sc-value" id="ov-total-commission" style="color:var(--primary)">–</div><div class="sc-sub">Real, charged to client balances</div></div>
+          <div class="stat-card"><div class="sc-label">Fees Saved (Internal)</div><div class="sc-value" id="ov-total-saved" style="color:var(--success)">–</div><div class="sc-sub">Commission on AI-matched trades</div></div>
+          <div class="stat-card"><div class="sc-label">B-Book Client Losses</div><div class="sc-value" id="ov-bbook-profit" style="color:var(--success)">–</div><div class="sc-sub">Client realized losses + Spread</div></div>
+          <div class="stat-card"><div class="sc-label">Total Broker Profit</div><div class="sc-value" id="ov-total-profit" style="color:var(--success)">–</div><div class="sc-sub">Realized PNL (Commissions + B-Book)</div></div>
         </div>
         
         <div class="card" style="border-color: rgba(0,200,255,0.3);">
@@ -432,7 +405,6 @@
           <div class="table-toolbar">
             <input type="text" id="users-search" placeholder="Search by name or email…" oninput="renderUsersTable()">
           </div>
-          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -448,7 +420,6 @@
             </thead>
             <tbody id="table-users-body"></tbody>
           </table>
-          </div>
         </div>
       </div>
 
@@ -468,7 +439,6 @@
               <option value="EXTERNAL">External (MT5)</option>
             </select>
           </div>
-          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -476,17 +446,16 @@
                 <th>User</th>
                 <th>Symbol</th>
                 <th>Side</th>
-                <th>Vol</th>
+                <th>Volume</th>
                 <th>Type</th>
-                <th>Route</th>
-                <th>Fee</th>
+                <th>Routing</th>
+                <th>Commission</th>
                 <th>Status</th>
                 <th>Date</th>
               </tr>
             </thead>
             <tbody id="table-trades-body"></tbody>
           </table>
-          </div>
         </div>
       </div>
 
@@ -494,26 +463,24 @@
       <div id="tab-finance" class="tab-content" style="display:none;">
         <div class="card">
           <div class="card-header"><h3 class="card-title">Accounts Balance</h3></div>
-          <div class="table-scroll">
           <table>
             <thead>
               <tr>
                 <th style="width:44px">#</th>
                 <th>User</th>
-                <th>Type</th>
+                <th>Type / Leverage</th>
                 <th>Balance</th>
                 <th>Equity</th>
-                <th>Free</th>
+                <th>Free Margin</th>
                 <th>Borrowed</th>
-                <th>M.Level</th>
-                <th>Fees</th>
+                <th>Margin Level</th>
+                <th>Commission Paid</th>
                 <th>Status</th>
                 <th style="text-align:right">Action</th>
               </tr>
             </thead>
             <tbody id="table-accounts-body"></tbody>
           </table>
-          </div>
         </div>
       </div>
 
@@ -522,7 +489,6 @@
         <div class="card">
           <div class="card-header"><h3 class="card-title">Deposits &amp; Withdrawals</h3></div>
           <div class="tx-summary" id="tx-summary-bar"></div>
-          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -530,14 +496,13 @@
                 <th>User</th>
                 <th>Type</th>
                 <th>Amount</th>
-                <th>Method</th>
+                <th>Currency / Method</th>
                 <th>Status</th>
                 <th>Date</th>
               </tr>
             </thead>
             <tbody id="table-transactions-body"></tbody>
           </table>
-          </div>
         </div>
       </div>
 
@@ -585,7 +550,6 @@
               <option value="LIQUIDATION">Liquidation</option>
             </select>
           </div>
-          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -593,15 +557,14 @@
                 <th>User</th>
                 <th>Event</th>
                 <th>Amount</th>
-                <th>Debt</th>
-                <th>Balance</th>
+                <th>Debt After</th>
+                <th>Balance After</th>
                 <th>Note</th>
                 <th>Time</th>
               </tr>
             </thead>
             <tbody id="table-creditline-body"></tbody>
           </table>
-          </div>
         </div>
       </div>
 
@@ -634,21 +597,19 @@
             <span id="audit-count" style="color:var(--text-muted);font-size:0.83rem;margin-left:auto"></span>
           </div>
 
-          <div class="table-scroll">
           <table>
             <thead>
               <tr>
                 <th style="width:48px">#</th>
                 <th>User</th>
-                <th>Action</th>
+                <th style="width:160px">Action</th>
                 <th>Details</th>
-                <th>IP</th>
-                <th>Time</th>
+                <th style="width:130px">IP Address</th>
+                <th style="width:150px">Time</th>
               </tr>
             </thead>
             <tbody id="table-audit-body"></tbody>
           </table>
-          </div>
         </div>
       </div>
 
@@ -670,26 +631,10 @@
     let _usersRaw = [];
     let _tradesRaw = [];
     let _accountsRaw = [];
+    let _accountsMap = {};   // accountId -> userId
     let _transactionsRaw = [];
     let _marginLoansRaw = [];
     let _tradesFilter = 'all';
-
-    function esc(s) {
-      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-    function fmtMoney(n, digits = 2) {
-      const v = Number(n);
-      if (!Number.isFinite(v)) return '–';
-      return '$' + v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    }
-    function userCell(user, fallbackId) {
-      if (!user) return `<span style="color:var(--text-muted)">#${esc(fallbackId ?? '–')}</span>`;
-      return `<div class="user-cell" title="${esc(user.email || '')}">
-        <span class="uc-name">${esc(user.name || '—')}</span>
-        <span class="uc-email">${esc(user.email || '')}</span>
-      </div>`;
-    }
-    let _accountsMap = {};   // accountId -> userId
 
     function getUrl(endpoint) {
       const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
@@ -881,15 +826,32 @@
 
       const totalCommission = allOrders.reduce((s, t) => s + Number(t.commission || 0), 0);
       const feesSaved = internalOrders.reduce((s, t) => s + Number(t.commission || 0), 0);
-      const externalFeesPaid = externalCount * 1.50;
-      const netSavings = totalCommission - externalFeesPaid;
+      
+      // B-Book Profit is -sum(realizedPnl). If client realizedPnl is negative (loss), B-Book profit is positive.
+      // Note: realizedPnl includes commissions! So -sum(realizedPnl) is the exact net profit from closed trades.
+      const closedOrders = allOrders.filter(t => t.realizedPnl != null && Number(t.realizedPnl) !== 0);
+      const bBookProfit = -1 * closedOrders.reduce((s, t) => s + Number(t.realizedPnl || 0), 0);
+      
+      // Total Broker Profit = Net Profit from closed trades (-sum(realizedPnl)) + commissions collected from OPEN trades.
+      // Since totalCommission includes ALL commissions, we need to subtract the commissions of CLOSED trades 
+      // (which are already baked into realizedPnl) to avoid double counting if we want true total profit.
+      // But actually, -sum(realizedPnl) = -sum(grossPnl) + sum(commissions_of_closed_trades).
+      // So -sum(realizedPnl) is already the total net profit from all closed trades!
+      // Add commissions of OPEN trades to get true total realized + unrealized commission profit.
+      const openTradesComm = allOrders.filter(t => t.realizedPnl == null || Number(t.realizedPnl) === 0).reduce((s, t) => s + Number(t.commission || 0), 0);
+      const totalBrokerProfit = bBookProfit + openTradesComm;
 
       document.getElementById('ov-internal-rate').innerText = internalRate;
       document.getElementById('ov-total-commission').innerText = '$' + totalCommission.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
       document.getElementById('ov-total-saved').innerText = '$' + feesSaved.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      document.getElementById('ov-external-paid').innerText = '$' + externalFeesPaid.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      document.getElementById('ov-net-savings').innerText = '$' + netSavings.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      document.getElementById('ov-net-savings').style.color = netSavings >= 0 ? 'var(--success)' : 'var(--danger)';
+      
+      const bBookEl = document.getElementById('ov-bbook-profit');
+      bBookEl.innerText = (bBookProfit >= 0 ? '+$' : '-$') + Math.abs(bBookProfit).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      bBookEl.style.color = bBookProfit >= 0 ? 'var(--success)' : 'var(--danger)';
+      
+      const totalEl = document.getElementById('ov-total-profit');
+      totalEl.innerText = (totalBrokerProfit >= 0 ? '+$' : '-$') + Math.abs(totalBrokerProfit).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      totalEl.style.color = totalBrokerProfit >= 0 ? 'var(--success)' : 'var(--danger)';
     }
 
     // ─── Users Table ─────────────────────────────────────────────────────────
@@ -904,24 +866,22 @@
       _accountsRaw.forEach(a => { balMap[a.userId] = (balMap[a.userId] || 0) + Number(a.balance || 0); });
       document.getElementById('table-users-body').innerHTML = filtered.map((u, idx) => {
         const joined = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '–';
-        const bal = balMap[u.id] != null ? fmtMoney(balMap[u.id]) : '–';
+        const bal = balMap[u.id] != null ? '$' + balMap[u.id].toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '–';
         const roleBadge = u.role === 'ADMIN' ? 'badge-warning' : 'badge-info';
         return `<tr>
           <td style="color:var(--text-muted)">${idx + 1}</td>
-          <td style="font-weight:600" title="${esc(u.displayName)}">${esc(u.displayName)}</td>
-          <td style="color:var(--text-muted);font-size:0.82rem" title="${esc(u.email)}">${esc(u.email)}</td>
-          <td><span class="badge ${roleBadge}">${esc(u.role || 'USER')}</span></td>
-          <td class="cell-num money" style="font-weight:600;color:var(--primary)">${bal}</td>
+          <td style="font-weight:600">${u.displayName}</td>
+          <td style="color:var(--text-muted);font-size:0.87rem">${u.email}</td>
+          <td><span class="badge ${roleBadge}">${u.role || 'USER'}</span></td>
+          <td style="font-weight:600;color:var(--primary)">${bal}</td>
           <td style="color:var(--text-muted);font-size:0.82rem">${joined}</td>
           <td><span class="badge ${u.banned ? 'badge-danger' : 'badge-success'}">${u.banned ? 'Banned' : 'Active'}</span></td>
-          <td class="cell-actions">
-            <div class="actions-group">
-              <button class="btn btn-sm btn-outline" onclick="openEditUser(${u.id}, '${String(u.displayName||'').replace(/'/g,"\\'")}', '${String(u.email||'').replace(/'/g,"\\'")}')">Edit</button>
-              ${u.banned
-                ? `<button class="btn btn-sm btn-outline" style="color:var(--success)" onclick="unbanUser(${u.id})">Unban</button>`
-                : `<button class="btn btn-sm btn-outline" style="color:var(--warning)" onclick="banUser(${u.id})">Ban</button>`}
-              <button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteUser(${u.id})">Delete</button>
-            </div>
+          <td style="text-align:right">
+            <button class="btn btn-sm btn-outline" onclick="openEditUser(${u.id}, '${u.displayName.replace(/'/g,"\\'")}', '${u.email}')">Edit</button>
+            ${u.banned
+              ? `<button class="btn btn-sm btn-outline" style="color:var(--success)" onclick="unbanUser(${u.id})">Unban</button>`
+              : `<button class="btn btn-sm btn-outline" style="color:var(--warning)" onclick="banUser(${u.id})">Ban</button>`}
+            <button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteUser(${u.id})">Delete</button>
           </td>
         </tr>`;
       }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">No users found</td></tr>';
@@ -949,32 +909,32 @@
       document.getElementById('trades-count').innerText = `${sorted.length} records`;
       document.getElementById('table-trades-body').innerHTML = sorted.length ? sorted.map((t, idx) => {
         const user = _usersMap[t.accountId];
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div><div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">#${t.accountId || '–'}</span>`;
         const sideColor = t.side === 'BUY' || t.side === 'OPEN' ? 'var(--success)' : 'var(--danger)';
         const date = t.date ? formatAuditTime(t.date) : '–';
         const fullDate = t.date ? String(t.date).replace('T',' ').replace(/\.\d+Z?$/,'') : '';
         const typeBadge = t.type === 'POSITION' ? 'badge-orange' : 'badge-info';
-        const routeLabel = t.executionRouting === 'INTERNAL' ? 'INT' : (t.executionRouting === 'LEGACY' ? 'LEG' : 'EXT');
-        const routeBadge = t.executionRouting === 'INTERNAL'
-          ? `<span class="badge badge-purple" title="Internal">${routeLabel}</span>`
-          : t.executionRouting === 'LEGACY'
-            ? `<span class="badge badge-warning" title="Legacy">${routeLabel}</span>`
-            : `<span class="badge badge-info" title="External">${routeLabel}</span>`;
+        const routeBadge = t.executionRouting === 'INTERNAL' 
+          ? `<span class="badge badge-purple">Internal</span>` 
+          : `<span class="badge badge-info">External</span>`;
         const commission = Number(t.commission || 0);
         const commissionCell = commission > 0
-          ? `<span class="money" style="color:var(--danger)">−${fmtMoney(commission)}</span>`
+          ? `<span style="color:var(--danger)">−$${commission.toFixed(2)}</span>`
           : `<span style="color:var(--text-muted)">–</span>`;
 
         return `<tr>
           <td style="color:var(--text-muted)">${idx + 1}</td>
-          <td>${userCell(user, t.accountId)}</td>
-          <td style="font-weight:600">${esc(t.symbol)}</td>
-          <td><b style="color:${sideColor}">${esc(t.side)}</b></td>
-          <td class="cell-num">${Number(t.quantity).toFixed(2)}</td>
-          <td><span class="badge ${typeBadge}">${esc(t.type)}</span></td>
+          <td>${userCell}</td>
+          <td style="font-weight:600">${t.symbol}</td>
+          <td><b style="color:${sideColor}">${t.side}</b></td>
+          <td>${Number(t.quantity).toFixed(2)}</td>
+          <td><span class="badge ${typeBadge}">${t.type}</span></td>
           <td>${routeBadge}</td>
-          <td class="cell-num">${commissionCell}</td>
-          <td><span class="badge ${t.status==='ACTIVE'||t.status==='FILLED'?'badge-success':'badge-info'}">${esc(t.status)}</span></td>
-          <td style="font-size:0.8rem" title="${esc(fullDate)}">${esc(date)}</td>
+          <td>${commissionCell}</td>
+          <td><span class="badge ${t.status==='ACTIVE'||t.status==='FILLED'?'badge-success':'badge-info'}">${t.status}</span></td>
+          <td style="font-size:0.82rem" title="${fullDate}">${date}</td>
         </tr>`;
       }).join('') : '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:24px">No records</td></tr>';
     }
@@ -983,10 +943,13 @@
     function renderAccountsTable() {
       document.getElementById('table-accounts-body').innerHTML = _accountsRaw.length ? _accountsRaw.map((a, idx) => {
         const user = _usersMap[a.userId];
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div><div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">#${a.userId}</span>`;
         const statusBadge = a.status === 'ACTIVE' ? 'badge-success' : 'badge-warning';
         const borrowed = Number(a.borrowedBalance || 0);
         const borrowedCell = borrowed > 0
-          ? `<span class="money" style="font-weight:700;color:var(--warning)">${fmtMoney(borrowed)}</span>`
+          ? `<span style="font-weight:700;color:var(--warning)">$${borrowed.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`
           : `<span style="color:var(--text-muted)">–</span>`;
         let marginLevelCell = `<span style="color:var(--text-muted)">–</span>`;
         if (a.marginLevelPct != null) {
@@ -997,19 +960,17 @@
         const commissionPaid = Number(a.commissionPaidTotal || 0);
         return `<tr>
           <td style="color:var(--text-muted)">${idx + 1}</td>
-          <td>${userCell(user, a.userId)}</td>
-          <td><span style="font-size:0.82rem">${esc(a.accountType || '–')}</span> <span style="color:var(--text-muted);font-size:0.75rem">×${esc(a.leverage)}</span></td>
-          <td class="cell-num money" style="font-weight:700;color:var(--primary)">${fmtMoney(a.balance)}</td>
-          <td class="cell-num money" style="color:var(--text-muted)">${fmtMoney(a.equity||0)}</td>
-          <td class="cell-num money" style="color:var(--text-muted)">${fmtMoney(a.freeMargin||0)}</td>
-          <td class="cell-num">${borrowedCell}</td>
-          <td class="cell-num">${marginLevelCell}</td>
-          <td class="cell-num money" style="color:var(--text-muted)">${fmtMoney(commissionPaid)}</td>
-          <td><span class="badge ${statusBadge}">${esc(a.status || '–')}</span></td>
-          <td class="cell-actions">
-            <div class="actions-group">
-              <button class="btn btn-sm btn-outline" onclick="openEditBalance(${a.id}, ${a.balance})">Adjust</button>
-            </div>
+          <td>${userCell}</td>
+          <td><span style="font-size:0.82rem">${a.accountType || '–'}</span><br><span style="color:var(--text-muted);font-size:0.78rem">x${a.leverage}</span></td>
+          <td style="font-weight:700;color:var(--primary)">$${Number(a.balance).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="color:var(--text-muted)">$${Number(a.equity||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="color:var(--text-muted)">$${Number(a.freeMargin||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td>${borrowedCell}</td>
+          <td>${marginLevelCell}</td>
+          <td style="color:var(--text-muted)">$${commissionPaid.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td><span class="badge ${statusBadge}">${a.status || '–'}</span></td>
+          <td style="text-align:right">
+            <button class="btn btn-sm btn-outline" onclick="openEditBalance(${a.id}, ${a.balance})">Adjust Balance</button>
           </td>
         </tr>`;
       }).join('') : '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">No accounts</td></tr>';
@@ -1019,19 +980,24 @@
     function renderTransactionsTable() {
       const totalDep = _transactionsRaw.filter(t=>t.txType==='DEPOSIT').reduce((s,t)=>s+Number(t.amount||0),0);
       const totalWith = _transactionsRaw.filter(t=>t.txType==='WITHDRAWAL').reduce((s,t)=>s+Number(t.amount||0),0);
+      const totalComm = _transactionsRaw.filter(t=>t.txType==='COMMISSION').reduce((s,t)=>s+Number(t.amount||0),0);
       const netFlow = totalDep - totalWith;
       document.getElementById('tx-summary-bar').innerHTML = `
         <div class="tx-summary-item">
           <div class="ts-label">Total Deposits</div>
-          <div class="ts-value" style="color:var(--success)">${fmtMoney(totalDep)}</div>
+          <div class="ts-value" style="color:var(--success)">$${totalDep.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
         </div>
         <div class="tx-summary-item">
           <div class="ts-label">Total Withdrawals</div>
-          <div class="ts-value" style="color:var(--danger)">${fmtMoney(totalWith)}</div>
+          <div class="ts-value" style="color:var(--danger)">$${totalWith.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        <div class="tx-summary-item">
+          <div class="ts-label">Total Commissions Collected</div>
+          <div class="ts-value" style="color:var(--primary)">$${totalComm.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
         </div>
         <div class="tx-summary-item">
           <div class="ts-label">Net Flow</div>
-          <div class="ts-value" style="color:${netFlow>=0?'var(--success)':'var(--danger)'}">${fmtMoney(netFlow)}</div>
+          <div class="ts-value" style="color:${netFlow>=0?'var(--success)':'var(--danger)'}">$${netFlow.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
         </div>
         <div class="tx-summary-item">
           <div class="ts-label">Total Transactions</div>
@@ -1042,17 +1008,23 @@
       document.getElementById('table-transactions-body').innerHTML = sorted.length ? sorted.map((tx, idx) => {
         const userId = _accountsMap[tx.accountId];
         const user = userId ? _usersMap[userId] : null;
-        const typeColor = tx.txType === 'DEPOSIT' ? 'var(--success)' : 'var(--danger)';
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div><div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">#${tx.accountId}</span>`;
+        let typeColor = 'var(--text)';
+        if (tx.txType === 'DEPOSIT') typeColor = 'var(--success)';
+        if (tx.txType === 'WITHDRAWAL') typeColor = 'var(--danger)';
+        if (tx.txType === 'COMMISSION') typeColor = 'var(--primary)';
+        if (tx.txType === 'TRADE_CLOSE') typeColor = '#a78bfa';
         const date = tx.createdAt ? String(tx.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '–';
-        const method = `${tx.currency || 'USD'}${tx.method ? ' · ' + tx.method : ''}`;
         return `<tr>
           <td style="color:var(--text-muted)">${sorted.length - idx}</td>
-          <td>${userCell(user, tx.accountId)}</td>
-          <td><b style="color:${typeColor}">${esc(tx.txType)}</b></td>
-          <td class="cell-num money" style="font-weight:700">${fmtMoney(tx.amount)}</td>
-          <td style="font-size:0.8rem;color:var(--text-muted)" title="${esc(method)}">${esc(method)}</td>
-          <td><span class="badge ${tx.status==='APPROVED'?'badge-success':'badge-info'}">${esc(tx.status)}</span></td>
-          <td style="color:var(--text-muted);font-size:0.8rem" title="${esc(date)}">${esc(date)}</td>
+          <td>${userCell}</td>
+          <td><b style="color:${typeColor}">${tx.txType}</b></td>
+          <td style="font-weight:700">$${Number(tx.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="font-size:0.82rem">${tx.currency || '–'}${tx.method ? ' · ' + tx.method : ''}</td>
+          <td><span class="badge ${tx.status==='APPROVED'?'badge-success':'badge-info'}">${tx.status}</span></td>
+          <td style="color:var(--text-muted);font-size:0.82rem">${date}</td>
         </tr>`;
       }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No transactions yet</td></tr>';
     }
@@ -1081,8 +1053,8 @@
     const CREDITLINE_BADGE = {
       BORROW:      { cls: 'badge-warning', label: '↓ Borrow' },
       REPAY:       { cls: 'badge-success', label: '↑ Repay' },
-      INTEREST:    { cls: 'badge-info',    label: '% Int' },
-      LIQUIDATION: { cls: 'badge-danger',  label: '⚠ Liq' },
+      INTEREST:    { cls: 'badge-info',    label: '% Interest' },
+      LIQUIDATION: { cls: 'badge-danger',  label: '⚠ Liquidation' },
     };
 
     function renderCreditLineTable() {
@@ -1093,18 +1065,24 @@
       document.getElementById('table-creditline-body').innerHTML = filtered.length ? filtered.map((e, idx) => {
         const badge = CREDITLINE_BADGE[e.entryType] || { cls: 'badge-info', label: e.entryType };
         const user = _usersMap[e.userId];
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div><div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">${e.userId ? '#'+e.userId : '–'}</span>`;
         const amountColor = e.entryType === 'REPAY' ? 'var(--success)' : e.entryType === 'BORROW' ? 'var(--warning)' : 'var(--text)';
         const timeStr = formatAuditTime(e.createdAt);
         const fullDate = e.createdAt ? String(e.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '';
         return `<tr>
           <td style="color:var(--text-muted);font-size:0.8rem">${filtered.length - idx}</td>
-          <td>${userCell(user, e.userId)}</td>
-          <td><span class="badge ${badge.cls}">${esc(badge.label)}</span></td>
-          <td class="cell-num money" style="font-weight:700;color:${amountColor}">${fmtMoney(e.amount)}</td>
-          <td class="cell-num money" style="color:var(--text-muted)">${fmtMoney(e.borrowedAfter)}</td>
-          <td class="cell-num money" style="color:var(--text-muted)">${fmtMoney(e.balanceAfter)}</td>
-          <td style="font-size:0.8rem;color:var(--text-muted);max-width:220px" title="${esc(e.note||'')}">${esc(e.note || '–')}</td>
-          <td style="font-size:0.8rem" title="${esc(fullDate)}">${esc(timeStr)}</td>
+          <td>${userCell}</td>
+          <td><span class="badge ${badge.cls}">${badge.label}</span></td>
+          <td style="font-weight:700;color:${amountColor}">$${Number(e.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="color:var(--text-muted)">$${Number(e.borrowedAfter).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="color:var(--text-muted)">$${Number(e.balanceAfter).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="font-size:0.82rem;color:var(--text-muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.note||''}">${e.note || '–'}</td>
+          <td style="font-size:0.82rem" title="${fullDate}">
+            <span style="color:var(--text)">${timeStr}</span>
+            <div style="color:var(--text-muted);font-size:0.76rem">${fullDate.slice(0,10)}</div>
+          </td>
         </tr>`;
       }).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:32px">No margin loan events yet</td></tr>`;
     }
@@ -1112,14 +1090,14 @@
     // ─── Audit Log Rendering ─────────────────────────────────────────────────
     const AUDIT_BADGE = {
       LOGIN_SUCCESS:   { cls: 'badge-success', label: '✓ Login' },
-      LOGIN_FAILURE:   { cls: 'badge-danger',  label: '✗ Fail' },
+      LOGIN_FAILURE:   { cls: 'badge-danger',  label: '✗ Login Failed' },
       ORDER_PLACED:    { cls: 'badge-info',    label: '⬆ Order' },
-      ORDER_PENDING:   { cls: 'badge-purple',  label: '⏳ Pend' },
-      POSITION_CLOSED: { cls: 'badge-orange',  label: '✕ Close' },
-      DEPOSIT:         { cls: 'badge-success', label: '↓ Dep' },
-      WITHDRAWAL:      { cls: 'badge-danger',  label: '↑ Wdr' },
-      MARGIN_BORROW:   { cls: 'badge-warning', label: '💳 Borrow' },
-      LIQUIDATION:     { cls: 'badge-danger',  label: '⚠ Liq' },
+      ORDER_PENDING:   { cls: 'badge-purple',  label: '⏳ Pending' },
+      POSITION_CLOSED: { cls: 'badge-orange',  label: '✕ Closed' },
+      DEPOSIT:         { cls: 'badge-success', label: '↓ Deposit' },
+      WITHDRAWAL:      { cls: 'badge-danger',  label: '↑ Withdrawal' },
+      MARGIN_BORROW:   { cls: 'badge-warning', label: '💳 Margin Borrow' },
+      LIQUIDATION:     { cls: 'badge-danger',  label: '⚠ Liquidation' },
     };
 
     function formatAuditTime(raw) {
@@ -1176,16 +1154,23 @@
       document.getElementById('table-audit-body').innerHTML = filtered.length ? filtered.map((a, idx) => {
         const badge = AUDIT_BADGE[a.action] || { cls: 'badge-info', label: a.action };
         const user = _usersMap[a.userId];
+        const userCell = user
+          ? `<div style="font-weight:600;font-size:0.87rem">${user.name}</div>
+             <div style="color:var(--text-muted);font-size:0.78rem">${user.email}</div>`
+          : `<span style="color:var(--text-muted)">${a.userId ? '#'+a.userId : '–'}</span>`;
         const detail = a.detail || '–';
         const timeStr = formatAuditTime(a.createdAt);
         const fullDate = a.createdAt ? String(a.createdAt).replace('T',' ').replace(/\.\d+Z?$/,'') : '';
         return `<tr>
           <td style="color:var(--text-muted);font-size:0.8rem">${filtered.length - idx}</td>
-          <td>${userCell(user, a.userId)}</td>
-          <td><span class="badge ${badge.cls}" title="${esc(a.action)}">${esc(badge.label)}</span></td>
-          <td style="font-size:0.8rem;color:var(--text-muted);max-width:260px" title="${esc(detail)}">${esc(detail)}</td>
-          <td style="font-size:0.78rem;color:var(--text-muted);font-family:monospace">${esc(a.ip || '–')}</td>
-          <td style="font-size:0.8rem" title="${esc(fullDate)}">${esc(timeStr)}</td>
+          <td>${userCell}</td>
+          <td><span class="badge ${badge.cls}">${badge.label}</span></td>
+          <td style="font-size:0.83rem;color:var(--text-muted);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${detail}">${detail}</td>
+          <td style="font-size:0.82rem;color:var(--text-muted);font-family:monospace">${a.ip || '–'}</td>
+          <td style="font-size:0.82rem" title="${fullDate}">
+            <span style="color:var(--text)">${timeStr}</span>
+            <div style="color:var(--text-muted);font-size:0.76rem">${fullDate.slice(0,10)}</div>
+          </td>
         </tr>`;
       }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px">No events match the selected filters</td></tr>`;
     }

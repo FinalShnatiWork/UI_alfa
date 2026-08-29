@@ -1,0 +1,97 @@
+================================================================================
+  DOCUMENTATION: 03 Backend Market Providers
+================================================================================
+
+[CLASS] com.brokerui.market.MarketPriceService
+File Path: src/main/java/com/brokerui/market/MarketPriceService.java
+Overview: Market data aggregator connecting to Binance, Finnhub, and Yahoo Finance to stream live prices and historical candles.
+--------------------------------------------------------------------------------
+  * Function: MarketPriceService(MT5IntegrationService mt5, YahooFinanceService yahoo, BinanceService binance) -> public
+    Purpose: Constructor initializing MarketPriceService with required dependencies.
+  * Function: getLivePrice(String symbol) -> double
+    Purpose: Executes operational logic for getLivePrice.
+  * Function: isCrypto(String symbol) -> boolean
+    Purpose: Executes operational logic for isCrypto.
+  * Function: syntheticDemoPrice(String symbol) -> BigDecimal
+    Purpose: Executes operational logic for syntheticDemoPrice.
+
+
+[CLASS] com.brokerui.market.BinancePriceService
+File Path: src/main/java/com/brokerui/market/BinancePriceService.java
+Overview: Market data provider connecting to Binance public WebSocket/REST for real-time cryptocurrency tickers.
+--------------------------------------------------------------------------------
+  * Function: BinancePriceService(ObjectMapper objectMapper) -> public
+    Purpose: Constructor initializing BinancePriceService with required dependencies.
+  * Function: getLastPrice(String symbolCode) -> BigDecimal
+    Purpose: Executes operational logic for getLastPrice.
+  * Function: mapToBinanceSymbol(String symbol) -> String
+    Purpose: Executes operational logic for mapToBinanceSymbol.
+
+
+[CLASS] com.brokerui.market.BinanceService
+File Path: src/main/java/com/brokerui/market/BinanceService.java
+Overview: Low-level HTTP client for querying Binance market depth and price tickers.
+--------------------------------------------------------------------------------
+  * Function: BinanceService(ObjectMapper om) -> public
+    Purpose: Constructor initializing BinanceService with required dependencies.
+  * Function: isConfigured() -> boolean
+    Purpose: Executes operational logic for isConfigured.
+  * Function: getLivePrice(String uiSymbol) -> double
+    Purpose: Executes operational logic for getLivePrice.
+  * Function: getCandles(String uiSymbol, String intervalKey) -> List<CandleBar>
+    Purpose: Executes operational logic for getCandles.
+  * Function: mapSymbol(String s) -> String
+    Purpose: Executes operational logic for mapSymbol.
+  * Function: mapInterval(String k) -> String
+    Purpose: Executes operational logic for mapInterval.
+
+
+[CLASS] com.brokerui.market.FinnhubMarketService
+File Path: src/main/java/com/brokerui/market/FinnhubMarketService.java
+Overview: Market data provider fetching real-time equity quotes from Finnhub REST API.
+--------------------------------------------------------------------------------
+  * Function: isConfigured() -> boolean
+    Purpose: Executes operational logic for isConfigured.
+  * Function: oandaQuote(String uiSymbol) -> double
+    Purpose: Executes operational logic for oandaQuote.
+  * Function: mapForexSymbol(String uiSymbol) -> String
+    Purpose: Executes operational logic for mapForexSymbol.
+  * Function: mapMetalsSymbol(String uiSymbol) -> String
+    Purpose: Executes operational logic for mapMetalsSymbol.
+  * Function: mapResolution(String intervalKey) -> String
+    Purpose: Executes operational logic for mapResolution.
+  * Function: lookbackSeconds(String resolution) -> long
+    Purpose: Executes operational logic for lookbackSeconds.
+
+
+[CLASS] com.brokerui.market.YahooFinanceService
+File Path: src/main/java/com/brokerui/market/YahooFinanceService.java
+Overview: Market data provider fetching historical stock and forex price candles from Yahoo Finance API.
+--------------------------------------------------------------------------------
+  * Function: YahooFinanceService(ObjectMapper om) -> public
+    Purpose: Constructor initializing YahooFinanceService with required dependencies.
+  * Function: buildHttpClient() -> HttpClient
+    Purpose: Executes operational logic for buildHttpClient.
+  * Function: X509TrustManager() -> new
+    Purpose: Executes operational logic for X509TrustManager.
+  * Function: getAcceptedIssuers() -> X509Certificate[]
+    Purpose: Executes operational logic for getAcceptedIssuers.
+  * Function: checkClientTrusted(X509Certificate[] c, String a) -> void
+    Purpose: Executes operational logic for checkClientTrusted.
+  * Function: checkServerTrusted(X509Certificate[] c, String a) -> void
+    Purpose: Executes operational logic for checkServerTrusted.
+  * Function: isConfigured() -> boolean
+    Purpose: Executes operational logic for isConfigured.
+  * Function: getLivePrice(String uiSymbol) -> double
+    Purpose: Executes operational logic for getLivePrice.
+  * Function: getCandles(String uiSymbol, String intervalKey) -> List<CandleBar>
+    Purpose: Executes operational logic for getCandles.
+  * Function: parseYahooChart(String json) -> List<CandleBar>
+    Purpose: Executes operational logic for parseYahooChart.
+  * Function: mapSymbol(String s) -> String
+    Purpose: Executes operational logic for mapSymbol.
+  * Function: mapInterval(String k) -> String
+    Purpose: Executes operational logic for mapInterval.
+  * Function: mapRange(String k) -> String
+    Purpose: Executes operational logic for mapRange.
+

@@ -1,0 +1,83 @@
+================================================================================
+  DOCUMENTATION: 04 Backend Fees And Utilities
+================================================================================
+
+[CLASS] com.brokerui.broker.TradingFees
+File Path: src/main/java/com/brokerui/broker/TradingFees.java
+Overview: Central fee calculation utility. Computes dynamic commissions (0.0025% with caps), applies broker bid/ask spreads (0.015%), and updates lifetime fee totals.
+--------------------------------------------------------------------------------
+  * Function: TradingFees() -> private
+    Purpose: Constructor initializing TradingFees with required dependencies.
+  * Function: calculateCommission(String symbolCode, BigDecimal quantity, BigDecimal fillPrice) -> BigDecimal
+    Purpose: Calculates dynamic 0.0025% trade commission with tier minimums and caps.
+  * Function: calculateCommission(String symbolCode, BigDecimal quantity, BigDecimal fillPrice, BigDecimal grossPnl) -> BigDecimal
+    Purpose: Calculates dynamic 0.0025% trade commission with tier minimums and caps.
+  * Function: charge(TradingAccount ta, BrokerOrder order, BigDecimal amount) -> void
+    Purpose: Executes operational logic for charge.
+  * Function: applySpread(BigDecimal rawPrice, boolean isBuy) -> BigDecimal
+    Purpose: Applies broker bid/ask spread markup (0.015%) to raw execution price.
+
+
+[CLASS] com.brokerui.config.SecurityConfig
+File Path: src/main/java/com/brokerui/config/SecurityConfig.java
+Overview: Spring Security configuration defining CORS policies, password encoders (BCrypt), and public vs protected endpoint filters.
+--------------------------------------------------------------------------------
+  * Function: passwordEncoder() -> PasswordEncoder
+    Purpose: Executes operational logic for passwordEncoder.
+  * Function: corsConfigurationSource() -> CorsConfigurationSource
+    Purpose: Executes operational logic for corsConfigurationSource.
+
+
+[CLASS] com.brokerui.config.SpaRoutingConfig
+File Path: src/main/java/com/brokerui/config/SpaRoutingConfig.java
+Overview: Spring MVC web configuration ensuring Single Page Application (SPA) HTML5 routing routes unknown URLs back to index.html.
+--------------------------------------------------------------------------------
+  * Function: addResourceHandlers(ResourceHandlerRegistry registry) -> void
+    Purpose: Executes operational logic for addResourceHandlers.
+  * Function: getResource(String resourcePath, Resource location) -> Resource
+    Purpose: Executes operational logic for getResource.
+
+
+[CLASS] com.brokerui.config.LocalhostOnlyFilter
+File Path: src/main/java/com/brokerui/config/LocalhostOnlyFilter.java
+Overview: Security filter restricting access to sensitive administrative endpoints exclusively to localhost connections.
+--------------------------------------------------------------------------------
+
+
+[CLASS] com.brokerui.auth.AuthBootstrap
+File Path: src/main/java/com/brokerui/auth/AuthBootstrap.java
+Overview: Application runner that initializes default asset symbols, admin accounts, demo accounts, and initial seed balances on backend startup.
+--------------------------------------------------------------------------------
+  * Function: run(ApplicationArguments args) -> void
+    Purpose: Executes operational logic for run.
+  * Function: bootstrapHedgeTrader() -> void
+    Purpose: Executes operational logic for bootstrapHedgeTrader.
+  * Function: bootstrapVipTrader() -> void
+    Purpose: Executes operational logic for bootstrapVipTrader.
+  * Function: bootstrapStandardBorrower() -> void
+    Purpose: Automatically extends credit line loan when account balance is insufficient for trade margin.
+  * Function: bootstrapHighRiskTrader() -> void
+    Purpose: Executes operational logic for bootstrapHighRiskTrader.
+  * Function: createPosition(TradingAccount ta, String symbol, String side, BigDecimal qty, BigDecimal price) -> void
+    Purpose: Executes operational logic for createPosition.
+  * Function: ensureBootstrapAdmin() -> void
+    Purpose: Executes operational logic for ensureBootstrapAdmin.
+
+
+[CLASS] com.brokerui.auth.AppUserDetailsService
+File Path: src/main/java/com/brokerui/auth/AppUserDetailsService.java
+Overview: Spring Security UserDetailsService loading AppUser credentials for authentication.
+--------------------------------------------------------------------------------
+  * Function: AppUserDetailsService(AppUserRepository repo) -> public
+    Purpose: Constructor initializing AppUserDetailsService with required dependencies.
+  * Function: loadUserByUsername(String email) -> UserDetails
+    Purpose: Executes operational logic for loadUserByUsername.
+
+
+[CLASS] com.brokerui.BackendApplication
+File Path: src/main/java/com/brokerui/BackendApplication.java
+Overview: Main entry point launcher for the Spring Boot backend application.
+--------------------------------------------------------------------------------
+  * Function: main(String[] args) -> void
+    Purpose: Executes operational logic for main.
+

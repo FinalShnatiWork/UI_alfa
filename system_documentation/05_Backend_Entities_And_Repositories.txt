@@ -1,0 +1,336 @@
+================================================================================
+  DOCUMENTATION: 05 Backend Entities And Repositories
+================================================================================
+
+[RECORD] com.brokerui.auth.RegisterRequest
+File Path: src/main/java/com/brokerui/auth/RegisterRequest.java
+Overview: Database Domain Entity / Spring Data Repository for RegisterRequest.
+--------------------------------------------------------------------------------
+
+
+[CLASS] com.brokerui.broker.AccountTransaction
+File Path: src/main/java/com/brokerui/broker/AccountTransaction.java
+Overview: Database Domain Entity / Spring Data Repository for AccountTransaction.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (18 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.AccountTransactionRepository
+File Path: src/main/java/com/brokerui/broker/AccountTransactionRepository.java
+Overview: Database Domain Entity / Spring Data Repository for AccountTransactionRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByTradingAccountIdOrderByCreatedAtDesc(Long tradingAccountId) -> List<AccountTransaction>
+    Purpose: Spring Data JPA query executing: findByTradingAccountIdOrderByCreatedAtDesc.
+
+
+[CLASS] com.brokerui.broker.AuditLog
+File Path: src/main/java/com/brokerui/broker/AuditLog.java
+Overview: Database Domain Entity / Spring Data Repository for AuditLog.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (12 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.AuditLogRepository
+File Path: src/main/java/com/brokerui/broker/AuditLogRepository.java
+Overview: Database Domain Entity / Spring Data Repository for AuditLogRepository.
+--------------------------------------------------------------------------------
+
+
+[CLASS] com.brokerui.broker.BotState
+File Path: src/main/java/com/brokerui/broker/BotState.java
+Overview: Database Domain Entity / Spring Data Repository for BotState.
+--------------------------------------------------------------------------------
+  * Query / Function: isBusy() -> boolean
+    Purpose: Executes operational logic for isBusy.
+  * Query / Function: cleanOldDirections() -> void
+    Purpose: Executes operational logic for cleanOldDirections.
+  * Query / Function: updateLastDirection(String symbol, String direction) -> void
+    Purpose: Executes operational logic for updateLastDirection.
+  * Query / Function: isDuplicate(String symbol, String timeframe, long candleTime) -> boolean
+    Purpose: Executes operational logic for isDuplicate.
+  * Query / Function: updateLastSignal(String symbol, String timeframe, long candleTime) -> void
+    Purpose: Executes operational logic for updateLastSignal.
+  * Query / Function: botstateReset() -> void
+    Purpose: Executes operational logic for botstateReset.
+  * Query / Function: updateSignal(String symbol, String timeframe, String direction, String timeframeAgain) -> void
+    Purpose: Executes operational logic for updateSignal.
+  * Query / Function: updateLastSignalDirection(String symbol, String timeframe, String direction) -> void
+    Purpose: Executes operational logic for updateLastSignalDirection.
+  * Query / Function: getLastDirectionOtherTimeframes(String symbol, String currentTf) -> String
+    Purpose: Executes operational logic for getLastDirectionOtherTimeframes.
+
+
+[CLASS] com.brokerui.broker.BrokerOrder
+File Path: src/main/java/com/brokerui/broker/BrokerOrder.java
+Overview: Database Domain Entity / Spring Data Repository for BrokerOrder.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (43 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.BrokerOrderRepository
+File Path: src/main/java/com/brokerui/broker/BrokerOrderRepository.java
+Overview: Database Domain Entity / Spring Data Repository for BrokerOrderRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByTradingAccountIdOrderByCreatedAtDesc(Long tradingAccountId) -> List<BrokerOrder>
+    Purpose: Spring Data JPA query executing: findByTradingAccountIdOrderByCreatedAtDesc.
+  * Query / Function: findByTradingAccountIdAndStatusOrderByFilledAtDesc(Long tradingAccountId, String status) -> List<BrokerOrder>
+    Purpose: Spring Data JPA query executing: findByTradingAccountIdAndStatusOrderByFilledAtDesc.
+  * Query / Function: findByTradingAccountIdAndStatusOrderByCreatedAtDesc(Long tradingAccountId, String status) -> List<BrokerOrder>
+    Purpose: Spring Data JPA query executing: findByTradingAccountIdAndStatusOrderByCreatedAtDesc.
+  * Query / Function: findTop50ByStatusOrderByCreatedAtAsc(String status) -> List<BrokerOrder>
+    Purpose: Spring Data JPA query executing: findTop50ByStatusOrderByCreatedAtAsc.
+  * Query / Function: countBySymbolCodeAndSideAndStatus(String symbolCode, String side, String status) -> long
+    Purpose: Spring Data JPA query executing: countBySymbolCodeAndSideAndStatus.
+
+
+[RECORD] com.brokerui.broker.BrokerOverviewDto
+File Path: src/main/java/com/brokerui/broker/BrokerOverviewDto.java
+Overview: Database Domain Entity / Spring Data Repository for BrokerOverviewDto.
+--------------------------------------------------------------------------------
+
+
+[CLASS] com.brokerui.broker.Candle
+File Path: src/main/java/com/brokerui/broker/Candle.java
+Overview: Database Domain Entity / Spring Data Repository for Candle.
+--------------------------------------------------------------------------------
+  * Query / Function: Candle(double open, double high, double low, double close, long timestamp) -> public
+    Purpose: Constructor initializing Candle with required dependencies.
+  * Query / Function: toString() -> String
+    Purpose: Executes operational logic for toString.
+
+
+[RECORD] com.brokerui.broker.ClosedTradeDto
+File Path: src/main/java/com/brokerui/broker/ClosedTradeDto.java
+Overview: Database Domain Entity / Spring Data Repository for ClosedTradeDto.
+--------------------------------------------------------------------------------
+
+
+[CLASS] com.brokerui.broker.KycCase
+File Path: src/main/java/com/brokerui/broker/KycCase.java
+Overview: Database Domain Entity / Spring Data Repository for KycCase.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (11 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.KycCaseRepository
+File Path: src/main/java/com/brokerui/broker/KycCaseRepository.java
+Overview: Database Domain Entity / Spring Data Repository for KycCaseRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByUserId(Long userId) -> Optional<KycCase>
+    Purpose: Spring Data JPA query executing: findByUserId.
+
+
+[CLASS] com.brokerui.broker.MarginLoanLedger
+File Path: src/main/java/com/brokerui/broker/MarginLoanLedger.java
+Overview: Database Domain Entity / Spring Data Repository for MarginLoanLedger.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (14 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.MarginLoanLedgerRepository
+File Path: src/main/java/com/brokerui/broker/MarginLoanLedgerRepository.java
+Overview: Database Domain Entity / Spring Data Repository for MarginLoanLedgerRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByTradingAccountIdOrderByCreatedAtDesc(Long tradingAccountId) -> List<MarginLoanLedger>
+    Purpose: Spring Data JPA query executing: findByTradingAccountIdOrderByCreatedAtDesc.
+  * Query / Function: findAllByOrderByCreatedAtDesc() -> List<MarginLoanLedger>
+    Purpose: Spring Data JPA query executing: findAllByOrderByCreatedAtDesc.
+
+
+[CLASS] com.brokerui.broker.Notification
+File Path: src/main/java/com/brokerui/broker/Notification.java
+Overview: Database Domain Entity / Spring Data Repository for Notification.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (12 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.NotificationRepository
+File Path: src/main/java/com/brokerui/broker/NotificationRepository.java
+Overview: Database Domain Entity / Spring Data Repository for NotificationRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findTop20ByUserIdOrderByCreatedAtDesc(Long userId) -> List<Notification>
+    Purpose: Spring Data JPA query executing: findTop20ByUserIdOrderByCreatedAtDesc.
+
+
+[CLASS] com.brokerui.broker.Position
+File Path: src/main/java/com/brokerui/broker/Position.java
+Overview: Database Domain Entity / Spring Data Repository for Position.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (22 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.PositionRepository
+File Path: src/main/java/com/brokerui/broker/PositionRepository.java
+Overview: Database Domain Entity / Spring Data Repository for PositionRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByTradingAccountIdOrderByUpdatedAtDesc(Long tradingAccountId) -> List<Position>
+    Purpose: Spring Data JPA query executing: findByTradingAccountIdOrderByUpdatedAtDesc.
+  * Query / Function: findByTradingAccountIdAndSymbolCode(Long tradingAccountId, String symbolCode) -> Optional<Position>
+    Purpose: Spring Data JPA query executing: findByTradingAccountIdAndSymbolCode.
+
+
+[CLASS] com.brokerui.broker.Symbol
+File Path: src/main/java/com/brokerui/broker/Symbol.java
+Overview: Database Domain Entity / Spring Data Repository for Symbol.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (14 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.SymbolRepository
+File Path: src/main/java/com/brokerui/broker/SymbolRepository.java
+Overview: Database Domain Entity / Spring Data Repository for SymbolRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByEnabledTrueOrderByKindAscCodeAsc() -> List<Symbol>
+    Purpose: Spring Data JPA query executing: findByEnabledTrueOrderByKindAscCodeAsc.
+  * Query / Function: findByCode(String code) -> Optional<Symbol>
+    Purpose: Spring Data JPA query executing: findByCode.
+
+
+[CLASS] com.brokerui.broker.TradeFill
+File Path: src/main/java/com/brokerui/broker/TradeFill.java
+Overview: Database Domain Entity / Spring Data Repository for TradeFill.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (12 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.TradeFillRepository
+File Path: src/main/java/com/brokerui/broker/TradeFillRepository.java
+Overview: Database Domain Entity / Spring Data Repository for TradeFillRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByOrderId(Long orderId) -> List<TradeFill>
+    Purpose: Spring Data JPA query executing: findByOrderId.
+  * Query / Function: findByOrderIdOrderByExecutedAtDesc(Long orderId) -> List<TradeFill>
+    Purpose: Spring Data JPA query executing: findByOrderIdOrderByExecutedAtDesc.
+
+
+[CLASS] com.brokerui.broker.TradingAccount
+File Path: src/main/java/com/brokerui/broker/TradingAccount.java
+Overview: Database Domain Entity / Spring Data Repository for TradingAccount.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (34 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.TradingAccountRepository
+File Path: src/main/java/com/brokerui/broker/TradingAccountRepository.java
+Overview: Database Domain Entity / Spring Data Repository for TradingAccountRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByUserIdOrderByIdAsc(Long userId) -> List<TradingAccount>
+    Purpose: Spring Data JPA query executing: findByUserIdOrderByIdAsc.
+  * Query / Function: findFirstByUserIdOrderByIdAsc(Long userId) -> Optional<TradingAccount>
+    Purpose: Spring Data JPA query executing: findFirstByUserIdOrderByIdAsc.
+  * Query / Function: findByBorrowedBalanceGreaterThan(BigDecimal threshold) -> List<TradingAccount>
+    Purpose: Spring Data JPA query executing: findByBorrowedBalanceGreaterThan.
+
+
+[CLASS] com.brokerui.broker.UserPreference
+File Path: src/main/java/com/brokerui/broker/UserPreference.java
+Overview: Database Domain Entity / Spring Data Repository for UserPreference.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (8 property mutators).
+
+
+
+[INTERFACE] com.brokerui.broker.UserPreferenceRepository
+File Path: src/main/java/com/brokerui/broker/UserPreferenceRepository.java
+Overview: Database Domain Entity / Spring Data Repository for UserPreferenceRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByUserAndPrefKey(AppUser user, String prefKey) -> Optional<UserPreference>
+    Purpose: Spring Data JPA query executing: findByUserAndPrefKey.
+  * Query / Function: findByUser(AppUser user) -> List<UserPreference>
+    Purpose: Spring Data JPA query executing: findByUser.
+
+
+[RECORD] com.brokerui.market.CandleBar
+File Path: src/main/java/com/brokerui/market/CandleBar.java
+Overview: Database Domain Entity / Spring Data Repository for CandleBar.
+--------------------------------------------------------------------------------
+  * Query / Function: CandleBar(long time, double open, double high, double low, double close) -> record
+    Purpose: Constructor initializing CandleBar with required dependencies.
+
+
+[CLASS] com.brokerui.sim.SimTrade
+File Path: src/main/java/com/brokerui/sim/SimTrade.java
+Overview: Database Domain Entity / Spring Data Repository for SimTrade.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (8 property mutators).
+
+
+
+[RECORD] com.brokerui.sim.SimTradeDto
+File Path: src/main/java/com/brokerui/sim/SimTradeDto.java
+Overview: Database Domain Entity / Spring Data Repository for SimTradeDto.
+--------------------------------------------------------------------------------
+  * Query / Function: SimTradeDto(Long id, String symbol, int quantity, String buyerLabel, Instant createdAt) -> record
+    Purpose: Constructor initializing SimTradeDto with required dependencies.
+  * Query / Function: from(SimTrade t) -> SimTradeDto
+    Purpose: Executes operational logic for from.
+
+
+[INTERFACE] com.brokerui.sim.SimTradeRepository
+File Path: src/main/java/com/brokerui/sim/SimTradeRepository.java
+Overview: Database Domain Entity / Spring Data Repository for SimTradeRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findTop200ByOrderByIdDesc() -> List<SimTrade>
+    Purpose: Spring Data JPA query executing: findTop200ByOrderByIdDesc.
+
+
+[CLASS] com.brokerui.user.AppUser
+File Path: src/main/java/com/brokerui/user/AppUser.java
+Overview: Database Domain Entity / Spring Data Repository for AppUser.
+--------------------------------------------------------------------------------
+  * Entity Attributes & Data Accessors:
+    Contains fields, getters, setters, and constructors (16 property mutators).
+
+
+
+[INTERFACE] com.brokerui.user.AppUserRepository
+File Path: src/main/java/com/brokerui/user/AppUserRepository.java
+Overview: Database Domain Entity / Spring Data Repository for AppUserRepository.
+--------------------------------------------------------------------------------
+  * Query / Function: findByEmail(String email) -> Optional<AppUser>
+    Purpose: Spring Data JPA query executing: findByEmail.
+  * Query / Function: findByEmailIgnoreCase(String email) -> Optional<AppUser>
+    Purpose: Spring Data JPA query executing: findByEmailIgnoreCase.
+  * Query / Function: existsByEmail(String email) -> boolean
+    Purpose: Spring Data JPA query executing: existsByEmail.
+  * Query / Function: existsByEmailIgnoreCase(String email) -> boolean
+    Purpose: Spring Data JPA query executing: existsByEmailIgnoreCase.
+  * Query / Function: existsByRole(UserRole role) -> boolean
+    Purpose: Spring Data JPA query executing: existsByRole.
+
+
+[RECORD] com.brokerui.user.UserDto
+File Path: src/main/java/com/brokerui/user/UserDto.java
+Overview: Database Domain Entity / Spring Data Repository for UserDto.
+--------------------------------------------------------------------------------
+  * Query / Function: from(AppUser u) -> UserDto
+    Purpose: Executes operational logic for from.
+
+
+[ENUM] com.brokerui.user.UserRole
+File Path: src/main/java/com/brokerui/user/UserRole.java
+Overview: Database Domain Entity / Spring Data Repository for UserRole.
+--------------------------------------------------------------------------------
+

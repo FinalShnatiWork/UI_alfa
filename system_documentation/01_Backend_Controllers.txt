@@ -1,0 +1,155 @@
+================================================================================
+  DOCUMENTATION: 01 Backend Controllers
+================================================================================
+
+[CLASS] com.brokerui.broker.BrokerApiController
+File Path: src/main/java/com/brokerui/broker/BrokerApiController.java
+Overview: Primary REST API Controller handling client trading operations, position lifecycle, deposits/withdrawals, and overview financial metrics.
+--------------------------------------------------------------------------------
+  * Function: requireUser(Authentication auth) -> AppUser
+    Purpose: Executes operational logic for requireUser.
+  * Function: ensurePrimaryAccount(AppUser user) -> TradingAccount
+    Purpose: Executes operational logic for ensurePrimaryAccount.
+  * Function: overview(Authentication auth) -> ResponseEntity<?>
+    Purpose: Retrieves overall financial state (balance, equity, margin, fees, credit) of primary account.
+  * Function: symbols() -> List<Symbol>
+    Purpose: Executes operational logic for symbols.
+  * Function: positions(Authentication auth) -> ResponseEntity<?>
+    Purpose: Executes operational logic for positions.
+  * Function: orders(Authentication auth) -> ResponseEntity<?>
+    Purpose: Executes operational logic for orders.
+  * Function: transactions(Authentication auth) -> ResponseEntity<?>
+    Purpose: Executes operational logic for transactions.
+  * Function: recalcEquity(TradingAccount ta) -> BigDecimal
+    Purpose: Executes operational logic for recalcEquity.
+  * Function: applyNnRouting(BrokerOrder order, String symbolCode, BigDecimal qty, double price) -> boolean
+    Purpose: Executes operational logic for applyNnRouting.
+  * Function: openNewPosition(TradingAccount ta, String symbolCode, String side, BigDecimal qty, BigDecimal fillPrice, BigDecimal tp, BigDecimal sl) -> Position
+    Purpose: Executes operational logic for openNewPosition.
+  * Function: notifications(Authentication auth) -> ResponseEntity<?>
+    Purpose: Executes operational logic for notifications.
+  * Function: getPreferences(Authentication auth) -> ResponseEntity<?>
+    Purpose: Executes operational logic for getPreferences.
+  * Function: savePreference(Authentication auth, @RequestBody Map<String, String> body) -> ResponseEntity<?>
+    Purpose: Executes operational logic for savePreference.
+  * Function: pendingOrders(Authentication auth) -> ResponseEntity<?>
+    Purpose: Scans pending limit/stop orders and executes fills when market price conditions are satisfied.
+  * Function: cancelOrder(Authentication auth, @PathVariable Long id) -> ResponseEntity<?>
+    Purpose: Executes operational logic for cancelOrder.
+  * Function: history(Authentication auth) -> ResponseEntity<?>
+    Purpose: Executes operational logic for history.
+  * Function: getContractSize(String symbol) -> BigDecimal
+    Purpose: Executes operational logic for getContractSize.
+
+
+[CLASS] com.brokerui.admin.AdminTradeController
+File Path: src/main/java/com/brokerui/admin/AdminTradeController.java
+Overview: Administrator management controller providing REST endpoints for reviewing all platform trades, accounts, credit debt, and running manual batch tasks.
+--------------------------------------------------------------------------------
+  * Function: restartServer() -> String>
+    Purpose: Executes operational logic for restartServer.
+  * Function: TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting, BigDecimal commission) -> record
+    Purpose: Executes operational logic for TradeDto.
+  * Function: getAllTrades() -> List<TradeDto>
+    Purpose: Executes operational logic for getAllTrades.
+  * Function: getAccounts() -> List<AccountDto>
+    Purpose: Executes operational logic for getAccounts.
+  * Function: getMarginLoans() -> List<MarginLedgerDto>
+    Purpose: Executes operational logic for getMarginLoans.
+  * Function: runInterestNow() -> Object>
+    Purpose: Calculates and charges daily interest on all indebted accounts (borrowedBalance > 0).
+  * Function: runLiquidationCheckNow() -> Object>
+    Purpose: Monitors indebted accounts and executes liquidation if margin level drops below safety limit.
+  * Function: TransactionDto(Long id, Long accountId, String txType, String status, BigDecimal amount, String currency, String method, Instant createdAt) -> record
+    Purpose: Executes operational logic for TransactionDto.
+  * Function: getTransactions() -> List<TransactionDto>
+    Purpose: Executes operational logic for getTransactions.
+  * Function: KycDto(Long id, Long userId, String status, Instant submittedAt, Instant reviewedAt, String note) -> record
+    Purpose: Executes operational logic for KycDto.
+  * Function: getKyc() -> List<KycDto>
+    Purpose: Executes operational logic for getKyc.
+  * Function: NotifDto(Long id, Long userId, String notifType, String title, String body, boolean read, Instant createdAt) -> record
+    Purpose: Executes operational logic for NotifDto.
+  * Function: getNotifications() -> List<NotifDto>
+    Purpose: Executes operational logic for getNotifications.
+  * Function: AuditDto(Long id, Long userId, String action, String detail, String ip, Instant createdAt) -> record
+    Purpose: Executes operational logic for AuditDto.
+  * Function: getAuditLog() -> List<AuditDto>
+    Purpose: Executes operational logic for getAuditLog.
+  * Function: getMt5Status() -> Object>
+    Purpose: Executes operational logic for getMt5Status.
+  * Function: connectMt5() -> Boolean>
+    Purpose: Executes operational logic for connectMt5.
+  * Function: disconnectMt5() -> Boolean>
+    Purpose: Executes operational logic for disconnectMt5.
+  * Function: UpdateBalanceRequest(BigDecimal balance) -> record
+    Purpose: Executes operational logic for UpdateBalanceRequest.
+  * Function: updateBalance(@PathVariable Long id, @RequestBody UpdateBalanceRequest req) -> Object>
+    Purpose: Executes operational logic for updateBalance.
+  * Function: UpdateLoanRequest(BigDecimal borrowedBalance) -> record
+    Purpose: Executes operational logic for UpdateLoanRequest.
+  * Function: updateLoan(@PathVariable Long id, @RequestBody UpdateLoanRequest req) -> Object>
+    Purpose: Executes operational logic for updateLoan.
+
+
+[CLASS] com.brokerui.admin.AdminUserController
+File Path: src/main/java/com/brokerui/admin/AdminUserController.java
+Overview: Administrator user management controller for viewing platform users, approving/rejecting KYC compliance cases, and toggling user roles.
+--------------------------------------------------------------------------------
+  * Function: AdminUserController(AppUserRepository repo) -> public
+    Purpose: Constructor initializing AdminUserController with required dependencies.
+  * Function: listUsers() -> List<UserDto>
+    Purpose: Executes operational logic for listUsers.
+  * Function: BanRequest(String reason) -> record
+    Purpose: Executes operational logic for BanRequest.
+  * Function: findOrThrow(Long id) -> AppUser
+    Purpose: Executes operational logic for findOrThrow.
+  * Function: unban(@PathVariable Long id) -> Object>
+    Purpose: Executes operational logic for unban.
+  * Function: deleteUser(@PathVariable Long id) -> Object>
+    Purpose: Executes operational logic for deleteUser.
+  * Function: UpdateUserRequest(String displayName, String email) -> record
+    Purpose: Executes operational logic for UpdateUserRequest.
+  * Function: updateUser(@PathVariable Long id, @RequestBody UpdateUserRequest req) -> Object>
+    Purpose: Executes operational logic for updateUser.
+
+
+[CLASS] com.brokerui.auth.AuthApiController
+File Path: src/main/java/com/brokerui/auth/AuthApiController.java
+Overview: Authentication controller handling user registration, login authentication, password hashing, and session tokens.
+--------------------------------------------------------------------------------
+  * Function: AuthApiController(AppUserRepository repo, PasswordEncoder encoder) -> public
+    Purpose: Constructor initializing AuthApiController with required dependencies.
+  * Function: csrf(CsrfToken token) -> String>
+    Purpose: Executes operational logic for csrf.
+  * Function: me(@AuthenticationPrincipal User principal) -> UserDto
+    Purpose: Executes operational logic for me.
+  * Function: register(@Valid @RequestBody RegisterRequest req) -> ResponseEntity<?>
+    Purpose: Executes operational logic for register.
+
+
+[CLASS] com.brokerui.market.MarketController
+File Path: src/main/java/com/brokerui/market/MarketController.java
+Overview: REST controller exposing market price feeds and historical chart candle endpoints.
+--------------------------------------------------------------------------------
+  * Function: MarketController(MT5IntegrationService mt5, YahooFinanceService yahoo, BinanceService binance, MarketPriceService priceService) -> public
+    Purpose: Constructor initializing MarketController with required dependencies.
+  * Function: livePrice(@PathVariable String symbol) -> ResponseEntity<?>
+    Purpose: Executes operational logic for livePrice.
+  * Function: candlesResponse(String symbol, String interval) -> ResponseEntity<?>
+    Purpose: Executes operational logic for candlesResponse.
+  * Function: round(double price, String sym) -> BigDecimal
+    Purpose: Executes operational logic for round.
+  * Function: isCrypto(String symbol) -> boolean
+    Purpose: Executes operational logic for isCrypto.
+  * Function: syntheticDemoPrice(String symbol) -> BigDecimal
+    Purpose: Executes operational logic for syntheticDemoPrice.
+
+
+[CLASS] com.brokerui.api.HealthController
+File Path: src/main/java/com/brokerui/api/HealthController.java
+Overview: Health check endpoint verifying backend service availability.
+--------------------------------------------------------------------------------
+  * Function: health() -> Object>
+    Purpose: Executes operational logic for health.
+

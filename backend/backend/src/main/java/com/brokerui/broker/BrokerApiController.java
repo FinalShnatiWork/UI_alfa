@@ -450,13 +450,15 @@ public class BrokerApiController {
     } catch (Exception e) {
       return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
     }
-    BigDecimal bdPrice = BigDecimal.valueOf(price);
+    BigDecimal rawPrice = BigDecimal.valueOf(price);
     BigDecimal contractSize = getContractSize(symbolCode);
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-    BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
 
     // ── BUY order ─────────────────────────────────────────────────────────────
     if ("BUY".equals(side)) {
+      BigDecimal bdPrice = TradingFees.applySpread(rawPrice, true); // Client buys at Ask
+      BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      
       BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
       BigDecimal required = margin.add(commission);
 
@@ -501,6 +503,16 @@ public class BrokerApiController {
 
       BrokerOrder order = buildFilledOrder(ta, symbolCode, "BUY", qty, bdPrice, null);
       TradingFees.charge(ta, order, commission);
+      
+      AccountTransaction feeTx = new AccountTransaction();
+      feeTx.setTradingAccount(ta);
+      feeTx.setTxType("COMMISSION");
+      feeTx.setAmount(commission);
+      feeTx.setCurrency(ta.getCurrency());
+      feeTx.setStatus("APPROVED");
+      feeTx.setProcessedAt(java.time.Instant.now());
+      txRepo.save(feeTx);
+      
       accountRepo.save(ta);
       boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
       orderRepo.save(order);
@@ -529,8 +541,12 @@ public class BrokerApiController {
     }
 
     // ── SELL order ────────────────────────────────────────────────────────────
-    BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
-    BigDecimal sellRequired = margin.add(commission);
+    else if ("SELL".equals(side)) {
+      BigDecimal bdPrice = TradingFees.applySpread(rawPrice, false); // Client sells at Bid
+      BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      
+      BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
+      BigDecimal sellRequired = margin.add(commission);
 
     if (ta.getBalance().compareTo(sellRequired) < 0 && !Boolean.TRUE.equals(body.acceptLoan())) {
       BigDecimal shortfall = sellRequired.subtract(ta.getBalance());
@@ -573,6 +589,16 @@ public class BrokerApiController {
 
     BrokerOrder order = buildFilledOrder(ta, symbolCode, "SELL", qty, bdPrice, null);
     TradingFees.charge(ta, order, commission);
+    
+    AccountTransaction feeTx = new AccountTransaction();
+    feeTx.setTradingAccount(ta);
+    feeTx.setTxType("COMMISSION");
+    feeTx.setAmount(commission);
+    feeTx.setCurrency(ta.getCurrency());
+    feeTx.setStatus("APPROVED");
+    feeTx.setProcessedAt(java.time.Instant.now());
+    txRepo.save(feeTx);
+    
     accountRepo.save(ta);
     boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
     orderRepo.save(order);
@@ -598,6 +624,8 @@ public class BrokerApiController {
     }
     return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(),
         "fillPrice", bdPrice, "newBalance", ta.getBalance()));
+    }
+    return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "unsupported_side"));
   }
 
   /**
@@ -672,6 +700,15 @@ public class BrokerApiController {
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
     TradingFees.charge(ta, order, closeCommission);
+
+    AccountTransaction closeFeeTx = new AccountTransaction();
+    closeFeeTx.setTradingAccount(ta);
+    closeFeeTx.setTxType("COMMISSION");
+    closeFeeTx.setAmount(closeCommission);
+    closeFeeTx.setCurrency(ta.getCurrency());
+    closeFeeTx.setStatus("APPROVED");
+    closeFeeTx.setProcessedAt(Instant.now());
+    txRepo.save(closeFeeTx);
 
     marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(grossPnl).subtract(order.getCommission()));
 

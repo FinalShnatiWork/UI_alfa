@@ -27,6 +27,7 @@ public class OrderExecutionService {
   private final com.brokerui.market.MarketPriceService priceService;
   private final NNPredictorClient nnPredictorClient;
   private final MarginLoanService marginLoanService;
+  private final AccountTransactionRepository txRepo;
 
   @Autowired @Lazy
   private OrderExecutionService self;
@@ -55,8 +56,10 @@ public class OrderExecutionService {
       MT5IntegrationService mt5Service,
       com.brokerui.market.MarketPriceService priceService,
       NNPredictorClient nnPredictorClient,
-      MarginLoanService marginLoanService) {
+      MarginLoanService marginLoanService,
+      AccountTransactionRepository txRepo) {
     this.accountRepo = accountRepo;
+    this.txRepo = txRepo;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
     this.fillRepo = fillRepo;
@@ -173,9 +176,12 @@ public class OrderExecutionService {
    * @param order the matched order entity
    * @param price the actual execution price quote
    */
-  private void executeFilled(BrokerOrder order, BigDecimal price) {
+  private void executeFilled(BrokerOrder order, BigDecimal rawPrice) {
     TradingAccount ta = order.getTradingAccount();
     ta = accountRepo.findByIdForUpdate(ta.getId()).orElseThrow();
+    
+    boolean isBuy = "BUY".equalsIgnoreCase(order.getSide());
+    BigDecimal price = TradingFees.applySpread(rawPrice, isBuy);
 
     BigDecimal qty = order.getQuantity();
     BigDecimal contractSize = BrokerApiController.getContractSize(order.getSymbolCode());
@@ -187,7 +193,17 @@ public class OrderExecutionService {
     // Commission is only charged once the order actually fills (not on pending reservation).
     // Uses the same dynamic formula as MARKET orders so LIMIT/STOP fills aren't charged a
     // different (flat) fee for an equivalent trade.
-    TradingFees.charge(ta, order, TradingFees.calculateCommission(order.getSymbolCode(), qty, price));
+    BigDecimal commission = TradingFees.calculateCommission(order.getSymbolCode(), qty, price);
+    TradingFees.charge(ta, order, commission);
+
+    AccountTransaction feeTx = new AccountTransaction();
+    feeTx.setTradingAccount(ta);
+    feeTx.setTxType("COMMISSION");
+    feeTx.setAmount(commission);
+    feeTx.setCurrency(ta.getCurrency());
+    feeTx.setStatus("APPROVED");
+    feeTx.setProcessedAt(java.time.Instant.now());
+    txRepo.save(feeTx);
 
     if ("BUY".equalsIgnoreCase(order.getSide())) {
       // Regular LONG BUY - Refund reserved funds, then deduct actual cost + commission
@@ -276,6 +292,9 @@ public class OrderExecutionService {
             midPriceNorm, bookDepthBuy, bookDepthSell, 0.72
         };
 
+        // AI ROUTING DECISION:
+        // - INTERNAL (B-Book / Internal Matching): Retail / Noise trade. The brokerage acts as counterparty, capturing spread & commission.
+        // - EXTERNAL (A-Book / MT5 Routing Bridge): High-probability / Toxic trade. Forwarded to MetaTrader 5 bridge to hedge risk externally.
         java.util.Map<String, Object> pred = nnPredictorClient.getPrediction(features);
         if (pred != null) {
             double matchProb = ((Number) pred.get("matchProb")).doubleValue();
@@ -284,10 +303,15 @@ public class OrderExecutionService {
 
             order.setNnMatchProb(matchProb);
             order.setNnExpectedSavings(BigDecimal.valueOf(expectedSavings));
-            order.setNnRouteRecommendation(routeRecommendation > 0.5 ? "INTERNAL" : "EXTERNAL");
             
             if (routeRecommendation > 0.5) {
+                // INTERNAL (B-Book): Retain trade internally in platform liquidity pool
+                order.setNnRouteRecommendation("INTERNAL");
                 routeExternal = false;
+            } else {
+                // EXTERNAL (A-Book): Hedge trade externally via MetaTrader 5 Bridge
+                order.setNnRouteRecommendation("EXTERNAL");
+                routeExternal = true;
             }
         } else {
             order.setNnRouteRecommendation("EXTERNAL");
@@ -295,7 +319,7 @@ public class OrderExecutionService {
             order.setNnExpectedSavings(BigDecimal.ZERO);
         }
     } catch (Exception e) {
-        System.err.println("Failed to fetch NN recommendation: " + e.getMessage());
+        System.err.println("[AI ROUTING ERROR] Failed to fetch NN recommendation: " + e.getMessage());
         order.setNnRouteRecommendation("EXTERNAL");
         order.setNnMatchProb(0.0);
         order.setNnExpectedSavings(BigDecimal.ZERO);
@@ -311,7 +335,10 @@ public class OrderExecutionService {
     fillRepo.save(fill);
 
     if (routeExternal) {
-        // Forward to MT5
+        // EXTERNAL ROUTING: Forward trade to MetaTrader 5 Bridge
+        System.out.println(String.format(java.util.Locale.US,
+            "[AI ROUTING - EXTERNAL (A-BOOK)] Order #%d for %s %s %.4f @ %.4f routed to MetaTrader 5 Bridge.",
+            order.getId(), order.getSide(), order.getSymbolCode(), qty.doubleValue(), price.doubleValue()));
         try {
             mt5Service.sendTrade(
                 order.getSymbolCode(), 
@@ -322,10 +349,13 @@ public class OrderExecutionService {
                 qty.doubleValue()
             );
         } catch (Exception ex) {
-            System.err.println("Failed to forward trade to MT5: " + ex.getMessage());
+            System.err.println("[MT5 ROUTING ERROR] Failed to forward trade to MT5: " + ex.getMessage());
         }
     } else {
-        System.out.println("AI Advisor matching: Routed order #" + order.getId() + " internally. Skipped external MT5 routing.");
+        // INTERNAL ROUTING: Retain trade internally on platform ledger
+        System.out.println(String.format(java.util.Locale.US,
+            "[AI ROUTING - INTERNAL (B-BOOK)] Order #%d for %s %s %.4f @ %.4f matched internally. Skipped MT5 routing.",
+            order.getId(), order.getSide(), order.getSymbolCode(), qty.doubleValue(), price.doubleValue()));
     }
   }
 
@@ -443,6 +473,7 @@ public class OrderExecutionService {
     BigDecimal qty = pos.getQuantity();
     BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
     boolean isShort = "SHORT".equals(pos.getSide());
+    closePrice = TradingFees.applySpread(closePrice, isShort); // Close SHORT = BUY (Ask), Close LONG = SELL (Bid)
 
     BigDecimal contractSize = BrokerApiController.getContractSize(pos.getSymbolCode());
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
@@ -463,6 +494,7 @@ public class OrderExecutionService {
     BigDecimal totalFees = openCommission.add(closeCommission);
     BigDecimal netPnl = grossPnl.subtract(totalFees);
 
+    // Save history order
     BrokerOrder order = new BrokerOrder();
     order.setTradingAccount(ta);
     order.setSymbolCode(pos.getSymbolCode());
@@ -476,6 +508,15 @@ public class OrderExecutionService {
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
     TradingFees.charge(ta, order, closeCommission);
+
+    AccountTransaction closeFeeTx = new AccountTransaction();
+    closeFeeTx.setTradingAccount(ta);
+    closeFeeTx.setTxType("COMMISSION");
+    closeFeeTx.setAmount(closeCommission);
+    closeFeeTx.setCurrency(ta.getCurrency());
+    closeFeeTx.setStatus("APPROVED");
+    closeFeeTx.setProcessedAt(Instant.now());
+    txRepo.save(closeFeeTx);
 
     marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(grossPnl).subtract(order.getCommission()));
     positionRepo.delete(pos);

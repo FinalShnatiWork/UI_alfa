@@ -298,6 +298,7 @@ export function HistoryPage() {
               <th style={{ textAlign: 'right' }}>{t('history.volume')}</th>
               <th style={{ textAlign: 'right' }}>S/L</th>
               <th style={{ textAlign: 'right' }}>T/P</th>
+              <th style={{ textAlign: 'right' }}>GROSS P/L</th>
               <th style={{ textAlign: 'right' }}>{t('history.commission')}</th>
               <th style={{ textAlign: 'right' }}>NET P/L</th>
             </tr>
@@ -307,13 +308,14 @@ export function HistoryPage() {
               <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                <td colSpan={12} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
                   {t('history.noTrades')}
                 </td>
               </tr>
             ) : (
               filtered.slice(0, 300).map((trade, idx) => {
                 const pl = trade.realizedPnl != null ? Number(trade.realizedPnl) : null;
+                const grossPl = pl != null ? pl + Number(trade.commission ?? 0) : null;
                 const plClass = pl == null ? '' : pl >= 0 ? 'text-success' : 'text-danger';
                 return (
                   <tr key={trade.id}>
@@ -326,6 +328,9 @@ export function HistoryPage() {
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
+                    <td className="dir-ltr" style={{ textAlign: 'right', fontWeight: 600, color: grossPl != null ? (grossPl >= 0 ? 'var(--text-success)' : 'var(--text-danger)') : 'inherit' }}>
+                      {grossPl != null ? (grossPl >= 0 ? '+' : '') + fmtPl(grossPl, currency, lang) : '—'}
+                    </td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>
                       {trade.commission != null ? `−$${Number(trade.commission).toFixed(2)}` : '—'}
                     </td>
@@ -342,6 +347,9 @@ export function HistoryPage() {
               <tr>
                 <td colSpan={9} className="text-muted text-sm">
                   {t('history.totalPl')} ({withPl.length}):
+                </td>
+                <td className={`dir-ltr font-bold ${grossTradePl >= 0 ? 'text-success' : 'text-danger'}`}>
+                  {grossTradePl >= 0 ? '+' : ''}{fmtPl(grossTradePl, currency, lang)}
                 </td>
                 <td className="dir-ltr font-bold text-danger">
                   −${commissionTotal.toFixed(2)}
