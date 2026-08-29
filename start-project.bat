@@ -68,7 +68,7 @@ echo.
 
 :: ─── Step 3: Start Java Backend ──────────────────────────────────────────────
 echo [3/3] Starting Java Backend (Spring Boot)...
-cd /d "%~dp0backend\backend"
+cd /d "%~dp0backend"
 start "Backend - Spring Boot" cmd /k "mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=postgres & pause"
 echo       Backend starting on http://localhost:8080
 echo       (Wait ~15 seconds for Spring Boot to boot fully)
@@ -83,7 +83,7 @@ echo.
 
 :: ─── Step 5: Start Neural Network Server ──────────────────────────────────────
 echo [5/6] Starting Neural Network Server...
-cd /d "%~dp0buysellmodel\buysellmodel"
+cd /d "%~dp0buysellmodel"
 start "AI - Neural Network Server" cmd /k "node nn_server.js & pause"
 echo       NN Server is up on port 3005.
 echo.

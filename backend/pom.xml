@@ -104,7 +104,7 @@
               <overwrite>true</overwrite>
               <resources>
                 <resource>
-                  <directory>../../UI-react/dist</directory>
+                  <directory>../UI-react/dist</directory>
                   <filtering>false</filtering>
                 </resource>
               </resources>

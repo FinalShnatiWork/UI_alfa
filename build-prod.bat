@@ -22,19 +22,19 @@ echo.
 
 :: ─── Step 2: Build Spring Boot JAR (includes React dist/) ────────────────────
 echo [2/2] Building Spring Boot JAR...
-cd /d "%~dp0backend\backend"
+cd /d "%~dp0backend"
 call mvnw.cmd package -DskipTests
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Maven build failed.
     pause
     exit /b 1
 )
-echo       JAR built to backend\backend\target\
+echo       JAR built to backend\target\
 echo.
 
 echo  ============================================
 echo   Build complete!
-echo   JAR: backend\backend\target\backend-0.0.1-SNAPSHOT.jar
+echo   JAR: backend\target\backend-0.0.1-SNAPSHOT.jar
 echo.
 echo   To run in production:
 echo   java -jar backend\backend\target\backend-0.0.1-SNAPSHOT.jar ^

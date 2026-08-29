@@ -69,7 +69,7 @@ class CancelFillRaceGuardTest {
 
     executionService = new OrderExecutionService(
         accountRepo, positionRepo, orderRepo, fillRepo, notificationRepo, symbolRepo,
-        mt5Service, priceService, nnPredictorClient, marginLoanService);
+        mt5Service, priceService, nnPredictorClient, marginLoanService, txRepo);
 
     user = new AppUser();
     user.setId(1L);

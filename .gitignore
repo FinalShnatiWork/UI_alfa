@@ -5,4 +5,11 @@ dist/
 .env
 .env.*
 *.log
-backend/backend/backend-run.log
+*.txt.bak
+backend-log.txt
+backend/target/
+buysellmodel/buysellmodel/training_results.json
+code_function_summary.txt
+generate_summary.py
+generate_multi_file_docs.py
+erd_document.html
