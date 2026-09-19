@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class MT5IntegrationService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MT5IntegrationService.class);
 
     @Value("${broker.mt5.base-path}")
     private String basePath;
@@ -64,7 +65,7 @@ public class MT5IntegrationService {
             socket.connect(new InetSocketAddress(MT5_HOST, MT5_PORT), 2000);
             return true;
         } catch (IOException e) {
-            System.err.println("[MT5 Health] Socket connection failed: " + e.getMessage());
+            log.warn("[MT5 Health] Socket connection failed: {}", e.getMessage());
             return false;
         }
     }

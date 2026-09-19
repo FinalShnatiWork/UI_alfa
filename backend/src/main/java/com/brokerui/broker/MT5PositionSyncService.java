@@ -16,6 +16,7 @@ import java.util.Optional;
  */
 @Service
 public class MT5PositionSyncService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MT5PositionSyncService.class);
 
     private final MT5IntegrationService mt5Service;
     private final PositionRepository positionRepo;
@@ -100,7 +101,7 @@ public class MT5PositionSyncService {
             }
 
         } catch (Exception e) {
-            System.err.println("[MT5 Sync] Error syncing positions: " + e.getMessage());
+            log.error("[MT5 Sync] Error syncing positions: {}", e.getMessage());
         }
     }
 }

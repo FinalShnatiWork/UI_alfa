@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class OrderExecutionService {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OrderExecutionService.class);
   private final TradingAccountRepository accountRepo;
   private final PositionRepository positionRepo;
   private final BrokerOrderRepository orderRepo;
@@ -235,7 +236,7 @@ public class OrderExecutionService {
           order.getSide(), qty.doubleValue(), order.getSymbolCode(), price.doubleValue()));
       notificationRepo.save(notif);
     } catch (Exception e) {
-      System.err.println("Failed to create notification: " + e.getMessage());
+      log.warn("Failed to create notification: {}", e.getMessage());
     }
 
     order.setStatus("FILLED");
@@ -315,7 +316,7 @@ public class OrderExecutionService {
             order.setNnExpectedSavings(BigDecimal.ZERO);
         }
     } catch (Exception e) {
-        System.err.println("[AI ROUTING ERROR] Failed to fetch NN recommendation: " + e.getMessage());
+        log.warn("[AI ROUTING ERROR] Failed to fetch NN recommendation: {}", e.getMessage());
         order.setNnRouteRecommendation("EXTERNAL");
         order.setNnMatchProb(0.0);
         order.setNnExpectedSavings(BigDecimal.ZERO);
@@ -325,9 +326,9 @@ public class OrderExecutionService {
 
     if (routeExternal) {
         // EXTERNAL ROUTING: Forward trade to MetaTrader 5 Bridge
-        System.out.println(String.format(java.util.Locale.US,
-            "[AI ROUTING - EXTERNAL (A-BOOK)] Order #%d for %s %s %.4f @ %.4f routed to MetaTrader 5 Bridge.",
-            order.getId(), order.getSide(), order.getSymbolCode(), qty.doubleValue(), price.doubleValue()));
+        log.info("[AI ROUTING - EXTERNAL (A-BOOK)] Order #{} for {} {} {:.4f} @ {:.4f} routed to MetaTrader 5 Bridge.",
+            order.getId(), order.getSide(), order.getSymbolCode(),
+            String.format("%.4f", qty.doubleValue()), String.format("%.4f", price.doubleValue()));
         try {
             mt5Service.sendTrade(
                 order.getSymbolCode(), 
@@ -338,13 +339,13 @@ public class OrderExecutionService {
                 qty.doubleValue()
             );
         } catch (Exception ex) {
-            System.err.println("[MT5 ROUTING ERROR] Failed to forward trade to MT5: " + ex.getMessage());
+            log.error("[MT5 ROUTING ERROR] Failed to forward trade to MT5: {}", ex.getMessage());
         }
     } else {
         // INTERNAL ROUTING: Retain trade internally on platform ledger
-        System.out.println(String.format(java.util.Locale.US,
-            "[AI ROUTING - INTERNAL (B-BOOK)] Order #%d for %s %s %.4f @ %.4f matched internally. Skipped MT5 routing.",
-            order.getId(), order.getSide(), order.getSymbolCode(), qty.doubleValue(), price.doubleValue()));
+        log.info("[AI ROUTING - INTERNAL (B-BOOK)] Order #{} for {} {} {} @ {} matched internally. Skipped MT5 routing.",
+            order.getId(), order.getSide(), order.getSymbolCode(),
+            String.format("%.4f", qty.doubleValue()), String.format("%.4f", price.doubleValue()));
     }
   }
 
@@ -446,7 +447,7 @@ public class OrderExecutionService {
         try {
           self.closePositionDueToSlTp(pos.getId(), last, reason);
         } catch (Exception e) {
-          System.err.println("Failed to auto-close position #" + pos.getId() + " due to SL/TP: " + e.getMessage());
+          log.error("Failed to auto-close position #{} due to SL/TP: {}", pos.getId(), e.getMessage());
         }
       }
     }
@@ -523,7 +524,7 @@ public class OrderExecutionService {
           pos.getSide(), qty.doubleValue(), pos.getSymbolCode(), closePrice.doubleValue(), netPnl.doubleValue()));
       notificationRepo.save(notif);
     } catch (Exception e) {
-      System.err.println("Failed to push SL/TP close notification: " + e.getMessage());
+      log.warn("Failed to push SL/TP close notification: {}", e.getMessage());
     }
   }
 }

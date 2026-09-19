@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AuditLogService {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuditLogService.class);
 
   private final AuditLogRepository auditLogRepo;
 
@@ -45,7 +46,7 @@ public class AuditLogService {
       auditLogRepo.save(entry);
     } catch (Exception ex) {
       // Log to stderr but never propagate – audit must not break the request
-      System.err.println("[AuditLog] save failed: " + ex.getMessage());
+      log.error("[AuditLog] save failed: {}", ex.getMessage());
     }
   }
 

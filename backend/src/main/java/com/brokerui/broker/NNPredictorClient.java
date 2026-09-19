@@ -16,6 +16,7 @@ import java.util.List;
  */
 @Service
 public class NNPredictorClient {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NNPredictorClient.class);
     // Bounded timeouts so a stuck/unresponsive NN server can never hang order execution
     // indefinitely — callers always get a prompt exception (caught below) and fall back
     // to EXTERNAL routing instead of blocking the request thread.
@@ -64,7 +65,7 @@ public class NNPredictorClient {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Failed to fetch prediction from NN server: " + e.getMessage());
+            log.warn("Failed to fetch prediction from NN server: {}", e.getMessage());
         }
         return null;
     }

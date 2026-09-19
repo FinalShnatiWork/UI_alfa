@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class MarginLoanService {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MarginLoanService.class);
 
   /** Fixed credit line available to every demo account, regardless of equity. */
   public static final BigDecimal CREDIT_LIMIT = new BigDecimal("10000");
@@ -162,7 +163,7 @@ public class MarginLoanService {
       entry.setNote(note);
       ledgerRepo.save(entry);
     } catch (Exception e) {
-      System.err.println("[MarginLoan] Failed to write ledger entry: " + e.getMessage());
+      log.error("[MarginLoan] Failed to write ledger entry: {}", e.getMessage());
     }
   }
 
@@ -248,7 +249,7 @@ public class MarginLoanService {
     try {
       self.accrueDueInterest();
     } catch (Exception e) {
-      System.err.println("[MarginLoan] Interest accrual failed: " + e.getMessage());
+      log.error("[MarginLoan] Interest accrual failed: {}", e.getMessage());
     }
   }
 
@@ -303,7 +304,7 @@ public class MarginLoanService {
     try {
       self.checkLiquidations();
     } catch (Exception e) {
-      System.err.println("[MarginLoan] Liquidation check failed: " + e.getMessage());
+      log.error("[MarginLoan] Liquidation check failed: {}", e.getMessage());
     }
   }
 
@@ -316,7 +317,7 @@ public class MarginLoanService {
         try {
           self.liquidateAccount(ref.getId());
         } catch (Exception e) {
-          System.err.println("[MarginLoan] Failed to liquidate account #" + ref.getId() + ": " + e.getMessage());
+          log.error("[MarginLoan] Failed to liquidate account #{}: {}", ref.getId(), e.getMessage());
         }
       }
     }

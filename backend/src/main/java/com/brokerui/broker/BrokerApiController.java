@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RestController
 @RequestMapping("/api/broker")
 public class BrokerApiController {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(BrokerApiController.class);
   private final AppUserRepository userRepo;
   private final TradingAccountRepository accountRepo;
   private final SymbolRepository symbolRepo;
@@ -312,7 +313,7 @@ public class BrokerApiController {
         return routeRecommendation <= 0.5; // true = route external
       }
     } catch (Exception e) {
-      System.err.println("Failed to fetch NN recommendation: " + e.getMessage());
+      log.warn("Failed to fetch NN recommendation: {}", e.getMessage());
     }
     order.setNnRouteRecommendation("EXTERNAL");
     order.setNnMatchProb(0.0);
@@ -495,7 +496,7 @@ public class BrokerApiController {
             qty.doubleValue(), symbolCode, bdPrice.doubleValue()));
         notificationRepo.save(notif);
       } catch (Exception e) {
-        System.err.println("Failed to create notification: " + e.getMessage());
+        log.warn("Failed to create notification: {}", e.getMessage());
       }
 
       BrokerOrder order = buildFilledOrder(ta, symbolCode, "BUY", qty, bdPrice, null);
@@ -528,10 +529,10 @@ public class BrokerApiController {
               qty.doubleValue()
           );
         } catch (Exception ex) {
-          System.err.println("MT5 Send Failed: " + ex.getMessage());
+          log.error("MT5 Send Failed: {}", ex.getMessage());
         }
       } else {
-        System.out.println("AI Advisor matching: Routed BUY_LONG #" + order.getId() + " internally.");
+        log.info("AI Advisor matching: Routed BUY_LONG #{} internally.", order.getId());
       }
       return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(),
           "fillPrice", bdPrice, "newBalance", ta.getBalance()));
@@ -581,7 +582,7 @@ public class BrokerApiController {
           qty.doubleValue(), symbolCode, bdPrice.doubleValue()));
       notificationRepo.save(notif);
     } catch (Exception e) {
-      System.err.println("Failed to create notification: " + e.getMessage());
+      log.warn("Failed to create notification: {}", e.getMessage());
     }
 
     BrokerOrder order = buildFilledOrder(ta, symbolCode, "SELL", qty, bdPrice, null);
@@ -614,10 +615,10 @@ public class BrokerApiController {
             qty.doubleValue()
         );
       } catch (Exception ex) {
-        System.err.println("MT5 Send Failed: " + ex.getMessage());
+        log.error("MT5 Send Failed: {}", ex.getMessage());
       }
     } else {
-      System.out.println("AI Advisor matching: Routed SELL_SHORT #" + order.getId() + " internally.");
+      log.info("AI Advisor matching: Routed SELL_SHORT #{} internally.", order.getId());
     }
     return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(),
         "fillPrice", bdPrice, "newBalance", ta.getBalance()));
@@ -734,7 +735,7 @@ public class BrokerApiController {
           pos.getSide(), qty.doubleValue(), pos.getSymbolCode(), bdPrice.doubleValue(), netPnl.doubleValue()));
       notificationRepo.save(notif);
     } catch (Exception e) {
-      System.err.println("Failed to create notification: " + e.getMessage());
+      log.warn("Failed to create notification: {}", e.getMessage());
     }
 
     // Record order history
@@ -749,7 +750,7 @@ public class BrokerApiController {
     try {
       mt5Service.sendTrade(pos.getSymbolCode(), closeSide, price, 0, 0, qty.doubleValue());
     } catch (Exception ex) {
-      System.err.println("MT5 Send Failed: " + ex.getMessage());
+      log.error("MT5 Send Failed: {}", ex.getMessage());
     }
 
     return ResponseEntity.ok(Map.of("ok", true, "closePnl", netPnl, "commission", order.getCommission(), "newBalance", ta.getBalance()));
