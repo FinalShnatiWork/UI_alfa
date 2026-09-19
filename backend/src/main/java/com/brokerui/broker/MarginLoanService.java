@@ -290,7 +290,8 @@ public class MarginLoanService {
         (ta.getInterestAccruedTotal() == null ? BigDecimal.ZERO : ta.getInterestAccruedTotal()).add(interest));
     ta.setLastInterestAt(Instant.now());
     accountRepo.save(ta);
-    writeLedger(ta, "INTEREST", interest, "Daily interest charge (" + rate.multiply(BigDecimal.valueOf(100)) + "%/day)");
+    String rateDisplay = rate.multiply(BigDecimal.valueOf(100)).stripTrailingZeros().toPlainString();
+    writeLedger(ta, "INTEREST", interest, "Daily interest charge (" + rateDisplay + "%/day)");
   }
 
   /**

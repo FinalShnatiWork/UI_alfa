@@ -380,21 +380,21 @@ export function FinancePage() {
             <div className="text-left" style={{ marginTop: 40 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                 <span style={{ fontSize: '1.2rem' }}>📜</span>
-                <h3 className="text-xl font-bold" style={{ margin: 0 }}>Credit Line History</h3>
+                <h3 className="text-xl font-bold" style={{ margin: 0 }}>{t('finance.creditHistory')}</h3>
               </div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
-                Automatic log of all margin credit events — borrows, repayments, interest charges, and liquidations.
+                {t('finance.creditHistoryDesc')}
               </p>
               <div style={{ overflowX: 'auto' }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>Date / Time</th>
-                      <th>Event</th>
-                      <th>Amount</th>
-                      <th>Debt After</th>
-                      <th>Balance After</th>
-                      <th>Note</th>
+                      <th>{t('table.dateTime')}</th>
+                      <th>{t('table.event')}</th>
+                      <th>{t('table.amount')}</th>
+                      <th>{t('table.debtAfter')}</th>
+                      <th>{t('table.balanceAfter')}</th>
+                      <th>{t('table.note')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -403,7 +403,7 @@ export function FinancePage() {
                     ) : ledger.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-muted text-sm" style={{ padding: 20, textAlign: 'center' }}>
-                          No credit activity yet.
+                          {t('finance.noCreditActivity')}
                         </td>
                       </tr>
                     ) : (

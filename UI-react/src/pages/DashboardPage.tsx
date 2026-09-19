@@ -139,7 +139,7 @@ export function DashboardPage() {
   const hasDebt = borrowedBalance > 0;
 
   const isMarginCall = marginLevelPct != null && marginLevelPct < 110;
-  const isLiquidationRisk = marginLevelPct != null && marginLevelPct < 105;
+  const isLiquidationRisk = marginLevelPct != null && marginLevelPct < 100;
 
   return (
     <>
@@ -245,43 +245,43 @@ export function DashboardPage() {
                 }}
               >
                 {!hasDebt
-                  ? '🟢 Credit Available'
+                  ? `🟢 ${t('dashboard.creditAvailable')}`
                   : isLiquidationRisk
-                  ? `🚨 Liquidation Risk (${marginLevelPct?.toFixed(1)}%)`
+                  ? `🚨 ${t('dashboard.liquidationRisk')} (${marginLevelPct?.toFixed(1)}%)`
                   : isMarginCall
-                  ? `⚠️ Margin Call (${marginLevelPct?.toFixed(1)}%)`
-                  : `🔵 Active Debt (${marginLevelPct?.toFixed(1)}%)`}
+                  ? `⚠️ ${t('dashboard.marginCallWarning').split(':')[0]} (${marginLevelPct?.toFixed(1)}%)`
+                  : `🔵 ${t('dashboard.activeDebt')} (${marginLevelPct?.toFixed(1)}%)`}
               </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Borrowed Debt
+                  {t('dashboard.borrowedDebt')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem', color: hasDebt ? 'var(--red)' : 'inherit' }}>
                   {fmtMoney(borrowedBalance, currency)}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                  / {fmtMoney(creditLimit, currency)} Credit Limit
+                  / {fmtMoney(creditLimit, currency)} {t('dashboard.creditLimit')}
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Available Credit
+                  {t('dashboard.availableCredit')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--green)' }}>
                   {fmtMoney(Math.max(0, creditLimit - borrowedBalance), currency)}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                  Auto-borrow limit
+                  {t('dashboard.autoBorrowLimit')}
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Interest Accrued
+                  {t('dashboard.interestAccrued')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>
                   {fmtMoney(interestAccrued, currency)}
@@ -291,10 +291,9 @@ export function DashboardPage() {
                 </div>
               </div>
 
-
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Margin Level
+                  {t('dashboard.marginLevel')}
                 </div>
                 <div
                   style={{
@@ -303,10 +302,10 @@ export function DashboardPage() {
                     color: isLiquidationRisk ? 'var(--red)' : isMarginCall ? '#c99400' : hasDebt ? 'var(--green)' : 'var(--text-secondary)',
                   }}
                 >
-                  {marginLevelPct != null ? `${marginLevelPct.toFixed(1)}%` : '— No Debt'}
+                  {marginLevelPct != null ? `${marginLevelPct.toFixed(1)}%` : `— ${t('dashboard.noDebt')}`}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                  100% = Liquidation
+                  {t('dashboard.liquidationNote')}
                 </div>
               </div>
             </div>
@@ -319,7 +318,7 @@ export function DashboardPage() {
           {/* Trading Summary */}
           <div className="card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div className="flex-between" style={{ marginBottom: 20 }}>
-              <h3 style={{ margin: 0 }}>Trading Performance &amp; Summary</h3>
+              <h3 style={{ margin: 0 }}>{t('dashboard.tradingPerformance')}</h3>
               <span
                 style={{
                   background: 'var(--green-soft)',
@@ -404,7 +403,7 @@ export function DashboardPage() {
                       }}
                     >
                       <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                        Realized PnL
+                        {t('dashboard.realizedPnl')}
                       </div>
                       <div
                         style={{
@@ -417,7 +416,7 @@ export function DashboardPage() {
                         {todayRealizedPnl >= 0 ? '+' : ''}{fmtPnl(todayRealizedPnl)}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                        Closed Trades Today
+                        {t('dashboard.closedToday')}
                       </div>
                     </div>
 
@@ -429,7 +428,7 @@ export function DashboardPage() {
                       }}
                     >
                       <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                        Unrealized PnL
+                        {t('dashboard.unrealizedPnl')}
                       </div>
                       <div
                         style={{
@@ -442,7 +441,7 @@ export function DashboardPage() {
                         {totalUnrealized >= 0 ? '+' : ''}{fmtPnl(totalUnrealized)}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                        {positions.length} Open Position{positions.length === 1 ? '' : 's'}
+                        {positions.length} {t('dashboard.openPositions')}
                       </div>
                     </div>
 
@@ -454,7 +453,7 @@ export function DashboardPage() {
                       }}
                     >
                       <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                        Net PnL
+                        {t('dashboard.netPnl')}
                       </div>
                       <div
                         style={{
@@ -467,7 +466,7 @@ export function DashboardPage() {
                         {pl}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                        Total Realized + Live
+                        {t('dashboard.totalRealizedLive')}
                       </div>
                     </div>
                   </div>
