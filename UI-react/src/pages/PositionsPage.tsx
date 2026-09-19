@@ -7,72 +7,8 @@ import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
 import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder } from '@/hooks/useApi';
 import type { Position, BrokerOrder } from '@/types/api';
-
-interface PairedTrade {
-  id: number;
-  symbolCode: string;
-  quantity: string;
-  openTime?: string;
-  openPrice?: string;
-  closeTime?: string;
-  closePrice?: string;
-  stopLoss?: string;
-  takeProfit?: string;
-  realizedPnl?: string;
-}
-
-function tsMs(iso?: string) { return iso ? new Date(iso).getTime() : 0; }
-
-function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
-  const sorted = [...orders].sort(
-    (a, b) => tsMs(a.filledAt || a.createdAt) - tsMs(b.filledAt || b.createdAt)
-  );
-
-  const closing = sorted.filter(
-    (o) => o.realizedPnl != null || o.openPrice != null
-  );
-  const opening = sorted.filter(
-    (o) => o.realizedPnl == null && o.openPrice == null
-  );
-
-  const usedOpeningIds = new Set<number>();
-  const pairs: PairedTrade[] = [];
-
-  for (const sell of closing) {
-    let openPrice = sell.openPrice;
-    let openTime = sell.openedAt;
-
-    if (!openPrice || !openTime) {
-      const openSide = sell.side === 'SELL' ? 'BUY' : 'SELL';
-      const match = opening.find(
-        (o) =>
-          o.symbolCode === sell.symbolCode &&
-          o.side === openSide &&
-          !usedOpeningIds.has(o.id)
-      );
-      if (match) {
-        openPrice = openPrice || match.entryPrice;
-        openTime = openTime || match.filledAt || match.createdAt;
-        usedOpeningIds.add(match.id);
-      }
-    }
-
-    pairs.push({
-      id: sell.id,
-      symbolCode: sell.symbolCode,
-      quantity: sell.quantity,
-      openTime: openTime,
-      openPrice: openPrice,
-      closeTime: sell.filledAt || sell.createdAt,
-      closePrice: sell.entryPrice,
-      stopLoss: sell.stopLoss,
-      takeProfit: sell.takeProfit,
-      realizedPnl: sell.realizedPnl,
-    });
-  }
-
-  return pairs.sort((a, b) => tsMs(b.closeTime) - tsMs(a.closeTime));
-}
+import { pairOrders, tsMs } from '@/lib/tradeUtils';
+import type { PairedTrade } from '@/lib/tradeUtils';
 
 type Tab = 'open' | 'closed' | 'pending';
 

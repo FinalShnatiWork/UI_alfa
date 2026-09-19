@@ -6,86 +6,8 @@ import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, useTradeHistory } from '@/hooks/useApi';
 import type { BrokerOrder } from '@/types/api';
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface PairedTrade {
-  id: number;
-  symbolCode: string;
-  quantity: string;
-  openTime?: string;
-  openPrice?: string;
-  closeTime?: string;
-  closePrice?: string;
-  stopLoss?: string;
-  takeProfit?: string;
-  realizedPnl?: string;
-  commission?: string;
-}
-
-// ── Pairing logic ─────────────────────────────────────────────────────────────
-// Match BUY → SELL chronologically per symbol (FIFO).
-// Returns only completed pairs (SELL side).
-
-function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
-  // Sort all orders by date ascending
-  const sorted = [...orders].sort(
-    (a, b) => ts(a.filledAt || a.createdAt) - ts(b.filledAt || b.createdAt)
-  );
-
-  const closing = sorted.filter(
-    (o) => o.realizedPnl != null || o.openPrice != null
-  );
-  const opening = sorted.filter(
-    (o) => o.realizedPnl == null && o.openPrice == null
-  );
-
-  const usedOpeningIds = new Set<number>();
-  const pairs: PairedTrade[] = [];
-
-  for (const sell of closing) {
-    let openPrice = sell.openPrice;
-    let openTime = sell.openedAt;
-
-    // Find the matching opening order — needed for its commission even when
-    // openPrice/openTime are already populated directly on the closing order.
-    const openSide = sell.side === 'SELL' ? 'BUY' : 'SELL';
-    const match = opening.find(
-      (o) =>
-        o.symbolCode === sell.symbolCode &&
-        o.side === openSide &&
-        !usedOpeningIds.has(o.id)
-    );
-    if (match) {
-      openPrice = openPrice || match.entryPrice;
-      openTime = openTime || match.filledAt || match.createdAt;
-      usedOpeningIds.add(match.id);
-    }
-
-    const openCommission = Number(match?.commission ?? 0);
-    const closeCommission = Number(sell.commission ?? 0);
-
-    pairs.push({
-      id: sell.id,
-      symbolCode: sell.symbolCode,
-      quantity: sell.quantity,
-      openTime: openTime,
-      openPrice: openPrice,
-      closeTime: sell.filledAt || sell.createdAt,
-      closePrice: sell.entryPrice,
-      stopLoss: sell.stopLoss,
-      takeProfit: sell.takeProfit,
-      realizedPnl: sell.realizedPnl,
-      commission: (openCommission + closeCommission).toFixed(2),
-    });
-  }
-
-  return pairs.sort((a, b) => ts(b.closeTime) - ts(a.closeTime));
-}
-
-function ts(iso?: string): number {
-  return iso ? new Date(iso).getTime() : 0;
-}
+import { pairOrders, tsMs as ts } from '@/lib/tradeUtils';
+import type { PairedTrade } from '@/lib/tradeUtils';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
