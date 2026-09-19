@@ -354,7 +354,7 @@ export function PositionsPage() {
                 <tfoot>
                   <tr style={{ borderTop: '2px solid var(--border)' }}>
                     <td colSpan={5} style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                      {t('table.totalPl') || 'Total P/L'}
+                      {t('table.totalPl')}
                     </td>
                     <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
                       {totalPnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(totalPnl))}
@@ -379,8 +379,8 @@ export function PositionsPage() {
                 <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
                 <th style={{ textAlign: 'right' }}>{t('history.closePrice')}</th>
                 <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                <th style={{ textAlign: 'right' }}>S/L</th>
-                <th style={{ textAlign: 'right' }}>T/P</th>
+                <th style={{ textAlign: 'right' }}>{t('table.stopLoss')}</th>
+                <th style={{ textAlign: 'right' }}>{t('table.takeProfit')}</th>
                 <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
               </tr>
             </thead>
@@ -427,11 +427,11 @@ export function PositionsPage() {
                 <th style={{ width: 40 }}>#</th>
                 <th>{t('table.symbol')}</th>
                 <th>{t('table.type')}</th>
-                <th>{t('common.side') || 'Side'}</th>
+                <th>{t('common.side')}</th>
                 <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                <th style={{ textAlign: 'right' }}>{t('common.limitPrice') || 'Limit Price'}</th>
-                <th style={{ textAlign: 'right' }}>{t('common.stopPrice') || 'Stop Price'}</th>
-                <th className="text-sm">{t('table.createdAt') || 'Created'}</th>
+                <th style={{ textAlign: 'right' }}>{t('common.limitPrice')}</th>
+                <th style={{ textAlign: 'right' }}>{t('common.stopPrice')}</th>
+                <th className="text-sm">{t('table.createdAt')}</th>
                 <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
               </tr>
             </thead>

@@ -27,10 +27,8 @@ public class BrokerApiController {
   private final SymbolRepository symbolRepo;
   private final PositionRepository positionRepo;
   private final BrokerOrderRepository orderRepo;
-  private final TradeFillRepository fillRepo;
   private final AccountTransactionRepository txRepo;
   private final NotificationRepository notificationRepo;
-  private final KycCaseRepository kycRepo;
   private final UserPreferenceRepository preferenceRepo;
   private final MT5IntegrationService mt5Service;
   private final com.brokerui.market.MarketPriceService priceService;
@@ -45,10 +43,8 @@ public class BrokerApiController {
       SymbolRepository symbolRepo,
       PositionRepository positionRepo,
       BrokerOrderRepository orderRepo,
-      TradeFillRepository fillRepo,
       AccountTransactionRepository txRepo,
       NotificationRepository notificationRepo,
-      KycCaseRepository kycRepo,
       UserPreferenceRepository preferenceRepo,
       MT5IntegrationService mt5Service,
       com.brokerui.market.MarketPriceService priceService,
@@ -61,10 +57,8 @@ public class BrokerApiController {
     this.symbolRepo = symbolRepo;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
-    this.fillRepo = fillRepo;
     this.txRepo = txRepo;
     this.notificationRepo = notificationRepo;
-    this.kycRepo = kycRepo;
     this.preferenceRepo = preferenceRepo;
     this.mt5Service = mt5Service;
     this.priceService = priceService;

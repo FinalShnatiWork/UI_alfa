@@ -57,7 +57,6 @@ class CancelFillRaceGuardTest {
     TradeFillRepository fillRepo = mock(TradeFillRepository.class);
     NotificationRepository notificationRepo = mock(NotificationRepository.class);
     AccountTransactionRepository txRepo = mock(AccountTransactionRepository.class);
-    KycCaseRepository kycRepo = mock(KycCaseRepository.class);
     UserPreferenceRepository preferenceRepo = mock(UserPreferenceRepository.class);
     MT5IntegrationService mt5Service = mock(MT5IntegrationService.class);
     AuditLogService auditLogService = mock(AuditLogService.class);
@@ -65,8 +64,8 @@ class CancelFillRaceGuardTest {
 
     MarginLoanLedgerRepository ledgerRepo = mock(MarginLoanLedgerRepository.class);
     controller = new BrokerApiController(
-        userRepo, accountRepo, symbolRepo, positionRepo, orderRepo, fillRepo, txRepo,
-        notificationRepo, kycRepo, preferenceRepo, mt5Service, priceService,
+        userRepo, accountRepo, symbolRepo, positionRepo, orderRepo, txRepo,
+        notificationRepo, preferenceRepo, mt5Service, priceService,
         auditLogService, nnPredictorClient, marginLoanService, ledgerRepo);
 
     executionService = new OrderExecutionService(

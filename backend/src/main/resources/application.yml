@@ -26,7 +26,7 @@ spring:
 broker:
   market:
     finnhub-api-key: ${FINNHUB_API_KEY:}
-    rapidapi-key: ${RAPIDAPI_KEY:e25c43efa8mshe883d075fa34603p1190a9jsn75eaed0783c2}
+    rapidapi-key: ${RAPIDAPI_KEY:}
   mt5:
     auto-connect: ${MT5_AUTO_CONNECT:false}
     base-path: ${MT5_BASE_PATH:}
