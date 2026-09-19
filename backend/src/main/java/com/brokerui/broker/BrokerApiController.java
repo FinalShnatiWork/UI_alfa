@@ -37,6 +37,7 @@ public class BrokerApiController {
   private final AuditLogService auditLogService;
   private final NNPredictorClient nnPredictorClient;
   private final MarginLoanService marginLoanService;
+  private final MarginLoanLedgerRepository ledgerRepo;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -53,7 +54,8 @@ public class BrokerApiController {
       com.brokerui.market.MarketPriceService priceService,
       AuditLogService auditLogService,
       NNPredictorClient nnPredictorClient,
-      MarginLoanService marginLoanService) {
+      MarginLoanService marginLoanService,
+      MarginLoanLedgerRepository ledgerRepo) {
     this.userRepo = userRepo;
     this.accountRepo = accountRepo;
     this.symbolRepo = symbolRepo;
@@ -69,6 +71,7 @@ public class BrokerApiController {
     this.auditLogService = auditLogService;
     this.nnPredictorClient = nnPredictorClient;
     this.marginLoanService = marginLoanService;
+    this.ledgerRepo = ledgerRepo;
   }
 
   private AppUser requireUser(Authentication auth) {
@@ -842,6 +845,13 @@ public class BrokerApiController {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
     return ResponseEntity.ok(orderRepo.findByTradingAccountIdAndStatusOrderByFilledAtDesc(ta.getId(), "FILLED"));
+  }
+
+  @GetMapping("/credit-ledger")
+  public ResponseEntity<?> creditLedger(Authentication auth) {
+    AppUser u = requireUser(auth);
+    TradingAccount ta = ensurePrimaryAccount(u);
+    return ResponseEntity.ok(ledgerRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
   }
 
   /**

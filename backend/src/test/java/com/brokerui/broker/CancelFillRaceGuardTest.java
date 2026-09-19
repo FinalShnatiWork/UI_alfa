@@ -15,6 +15,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import com.brokerui.market.MarketPriceService;
 import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
+import com.brokerui.broker.MarginLoanLedgerRepository;
 import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,10 +63,11 @@ class CancelFillRaceGuardTest {
     AuditLogService auditLogService = mock(AuditLogService.class);
     NNPredictorClient nnPredictorClient = mock(NNPredictorClient.class);
 
+    MarginLoanLedgerRepository ledgerRepo = mock(MarginLoanLedgerRepository.class);
     controller = new BrokerApiController(
         userRepo, accountRepo, symbolRepo, positionRepo, orderRepo, fillRepo, txRepo,
         notificationRepo, kycRepo, preferenceRepo, mt5Service, priceService,
-        auditLogService, nnPredictorClient, marginLoanService);
+        auditLogService, nnPredictorClient, marginLoanService, ledgerRepo);
 
     executionService = new OrderExecutionService(
         accountRepo, positionRepo, orderRepo, fillRepo, notificationRepo, symbolRepo,

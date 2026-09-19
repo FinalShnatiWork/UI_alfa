@@ -127,3 +127,13 @@ export interface Transaction {
   createdAt?: string;
   note?: string;
 }
+
+export interface CreditLedgerEntry {
+  id: number;
+  entryType: string;         // BORROW | REPAY | INTEREST | LIQUIDATION
+  amount: number | string;
+  borrowedAfter: number | string;
+  balanceAfter: number | string;
+  note?: string;
+  createdAt?: string;
+}

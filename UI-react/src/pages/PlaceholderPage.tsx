@@ -1,25 +1,26 @@
 import { Link } from 'react-router-dom';
 
 interface Props {
-  title: string;
+  title?: string;
 }
 
 /**
- * Simple fallback page representing non-migrated endpoints or 404 targets.
+ * 404 Not Found fallback page.
  *
- * @param props title header key string
- * @returns Placeholder fallback component
+ * @param props optional title override
+ * @returns 404 page element
  */
 export function PlaceholderPage({ title }: Props) {
   return (
     <div className="container" style={{ maxWidth: 600, marginTop: 80 }}>
-      <div className="card text-center">
-        <h2>{title}</h2>
-        <p style={{ color: 'var(--text-secondary)', marginTop: 12 }}>
-          This page has not been migrated to React yet.
+      <div className="card text-center" style={{ padding: '48px 32px' }}>
+        <div style={{ fontSize: '4rem', marginBottom: 16 }}>🔍</div>
+        <h2 style={{ marginBottom: 8 }}>{title ?? 'Page Not Found'}</h2>
+        <p style={{ color: 'var(--text-secondary)', marginTop: 12, fontSize: '0.95rem' }}>
+          The page you are looking for does not exist or has been moved.
         </p>
-        <Link to="/login" className="btn btn-primary" style={{ marginTop: 20 }}>
-          Go to Login
+        <Link to="/dashboard" className="btn btn-primary" style={{ marginTop: 24, display: 'inline-block' }}>
+          Go to Dashboard
         </Link>
       </div>
     </div>

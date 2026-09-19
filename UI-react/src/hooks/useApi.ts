@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPostJson } from '@/lib/api';
-import type { BrokerOverview, Position, NotificationItem, Transaction, BrokerOrder, AuthMeResponse } from '@/types/api';
+import type { BrokerOverview, Position, NotificationItem, Transaction, BrokerOrder, AuthMeResponse, CreditLedgerEntry } from '@/types/api';
 
 export { useMutation, useQueryClient };
 
@@ -11,6 +11,7 @@ export const QK = {
   notifications: ['broker', 'notifications'] as const,
   transactions: ['broker', 'transactions'] as const,
   history: ['broker', 'history'] as const,
+  creditLedger: ['broker', 'credit-ledger'] as const,
   pendingOrders: ['broker', 'orders', 'pending'] as const,
   me: ['auth', 'me'] as const,
   preferences: ['broker', 'preferences'] as const,
@@ -288,6 +289,21 @@ export function useSavePreferences() {
  *
  * @returns React Query mutation wrapper object
  */
+/**
+ * Custom hook to fetch margin credit line ledger entries for the current user.
+ *
+ * @returns React Query query result with array of CreditLedgerEntry
+ */
+export function useCreditLedger() {
+  return useQuery({
+    queryKey: QK.creditLedger,
+    queryFn: () => apiGet<CreditLedgerEntry[]>('/api/broker/credit-ledger'),
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
+
 export function useTransactionMutation() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,6 +1,6 @@
 ﻿# UI Alfa — Broker Trading Platform
 
-Full-stack trading platform: Spring Boot (Java) + React (TypeScript) + PostgreSQL (Docker).
+Full-stack trading platform: Spring Boot (Java) + React (TypeScript) + PostgreSQL (Docker) + Neural Network AI routing.
 
 ---
 
@@ -13,16 +13,31 @@ Full-stack trading platform: Spring Boot (Java) + React (TypeScript) + PostgreSQ
 | Node.js | 18+ | https://nodejs.org |
 | Docker Desktop | latest | https://docker.com/products/docker-desktop |
 
+> **First time setup?** Run `install-requirements.bat` to install Node.js and Java automatically via winget.
+
 ---
 
-## Quick Start
+## Quick Start (Recommended)
+
+Double-click **`start-project.bat`** — it starts everything automatically:
+- PostgreSQL (Docker)
+- Spring Boot backend
+- React frontend
+- Neural Network AI server
+- Coin Analyzer bot
+
+To stop everything: double-click **`kill-server.bat`**
+
+---
+
+## Manual Start
 
 ### 1. Clone the repo
 
 ```bash
 git clone https://github.com/FinalShnatiWork/UI_alfa.git
 cd UI_alfa
-git checkout session/jun02-improvements
+git checkout develop
 ```
 
 ### 2. Start the database (Docker)
@@ -32,24 +47,17 @@ cd backend
 docker compose up -d
 ```
 
-Wait until the container is healthy:
-```bash
-docker ps
-# broker_ui_db should show (healthy)
-```
-
 ### 3. Start the backend
 
 ```bash
-cd backend/backend
+cd backend
 mvn spring-boot:run
 ```
 
 Wait for: `Started BrokerApplication in XX seconds`
 
-> On first run, Flyway automatically runs all migrations V1-V14
+> On first run, Flyway automatically runs all migrations (V1–V25)
 > and populates the database with users, accounts, positions and trade history.
-> This takes about 10-15 seconds.
 
 Backend URL: http://localhost:8080
 
@@ -63,159 +71,34 @@ npm run dev
 
 Frontend URL: http://localhost:3001
 
-### 5. Open in browser
+### 5. Start AI services (optional but recommended)
+
+Neural Network server (AI trade routing):
+```bash
+cd buysellmodel
+node nn_server.js
+```
+
+Coin Analyzer bot (market analysis page):
+```bash
+cd coin-analyzer
+npm start
+```
+
+### 6. Open in browser
 
 - App: http://localhost:3001
-- Admin Panel: Open AdminDashboard_Local.html from the project root in browser
+- Admin Panel: Open `AdminDashboard_Local.html` from the project root in browser (or run `open-admin.bat`)
+- Demo with two users: run `test-dual-users.bat`
 
 ---
 
-## Margin Credit Line (demo)
+## Demo Credentials
 
-When a BUY/SELL order needs more cash than the account balance holds, the backend
-automatically borrows the shortfall from a fixed credit line instead of rejecting the trade
-(similar to Bybit's Unified Margin). Rules for this demo:
-
-| Parameter | Value |
-|-----------|-------|
-| Credit limit | $10,000 per account (fixed) |
-| Interest rate | 0.5% per day on the borrowed balance, charged once every 24h |
-| Margin call | UI warning when margin level (equity / debt) drops below 110% |
-| Liquidation | Open positions are force-closed automatically when margin level drops below 100% |
-
-Implementation: `MarginLoanService.java` (borrow/repay logic + two `@Scheduled` jobs).
-Admin panel → **Credit Line** tab shows the full borrow/repay/interest/liquidation ledger,
-plus buttons to trigger the interest and liquidation jobs immediately (for testing, since
-the interest job normally waits 24h between charges per account).
-
----
-
-## Trade Commission (real money, tied to the AI netting model)
-
-Every order fill — market open, limit/stop fill, manual close, or auto SL/TP close — now
-charges the client a flat **$1.50 commission**, debited straight from the trading account
-balance (see `TradingFees.java`). This is real money movement, not a display-only number.
-
-The commission amount deliberately matches the exchange-fee assumption already used by the
-netting-broker AI advisor (`NNPredictorClient` / `nn_route_recommendation`), so the economics
-line up cleanly without touching the buy/sell matching logic itself:
-
-- The client pays the same $1.50 commission regardless of how the order was routed.
-- If the AI advisor matched the order **internally**, the platform pays no exchange fee, so
-  the whole commission is pure profit.
-- If the order was routed **externally** (MT5 bridge), the platform is modeled as paying the
-  same $1.50 to the liquidity provider, so that trade nets to roughly $0 profit for the
-  platform — it only covers the AI's own real-world cost of routing out.
-
-Where this shows up:
-- **History page**: every closed trade shows its commission and a "Net after fees" total.
-- **Admin panel → Dashboard**: `Commission Collected` (real revenue), `Fees Saved (Internal)`
-  (real profit from AI-matched trades), `External Fees Paid` (modeled cost), and
-  `Net Platform Profit` (the real bottom line) are now computed from actual `commission`
-  values on each order instead of a flat assumption.
-- **Admin panel → Trades / Accounts**: per-trade commission column and each account's
-  lifetime `commissionPaidTotal`.
-
-Order placement math (margin/reservation checks) already accounts for the commission on top
-of the required margin, so a trade can still trip `credit_limit_exceeded` if the extra $1.50
-would push the account past the $10,000 credit line — same shortfall-covering path as margin.
-
----
-
-## Demo Data (auto-loaded on first startup via Flyway V14)
-
-No manual import needed. All data loads automatically.
-
-| Email | Password | Role | Balance |
-|-------|----------|------|---------|
-| demo@broker.local | demo1234 | User | 100000 USD DEMO |
-| admin@gmail.com | admin1234 | Admin | — |
-| 12@gmail.com | (set by owner) | User | ~127000 USD DEMO |
-| 7@gmail.com | (set by owner) | User | ~100000 USD DEMO |
-
----
-
-## Transfer Data Between Developers
-
-### Export (on source machine)
-
-Windows:
-```powershell
-docker exec broker_ui_db pg_dump -U broker broker_ui > db_dump.sql
-```
-
-Mac/Linux:
-```bash
-docker exec -i broker_ui_db pg_dump -U broker broker_ui > db_dump.sql
-```
-
-Send db_dump.sql via Telegram, Google Drive, USB, etc.
-
-### Import (on partner machine)
-
-1. Start the database container first:
-```bash
-docker compose up -d
-```
-
-2. Import the dump:
-
-Windows:
-```powershell
-docker exec -i broker_ui_db psql -U broker -d broker_ui < db_dump.sql
-```
-
-Mac/Linux:
-```bash
-docker exec -i broker_ui_db psql -U broker -d broker_ui < db_dump.sql
-```
-
-Note: if backend ran before (tables exist), you may see duplicate key warnings - that is normal.
-
----
-
-## Common Problems
-
-### Connection refused: localhost:5433
-Docker is not running or the container is stopped.
-```bash
-docker compose up -d
-# or:
-docker start broker_ui_db
-```
-
-### Port 8080 already in use
-Windows:
-```powershell
-netstat -ano | findstr :8080
-taskkill /PID <NUMBER> /F
-```
-
-Mac/Linux:
-```bash
-lsof -ti:8080 | xargs kill -9
-```
-
-### Flyway migration failed: relation already exists
-Reset the database (WARNING: deletes all data):
-```bash
-cd backend
-docker compose down -v
-docker compose up -d
-```
-Restart backend after.
-
-### JAVA_HOME is not set
-Install JDK 17+ from https://adoptium.net
-Windows: add JAVA_HOME to System Environment Variables.
-
-### npm: command not found
-Install Node.js 18+ from https://nodejs.org
-
-### Docker Desktop not starting on Windows
-1. Enable virtualization in BIOS (Intel VT-x / AMD-V)
-2. WSL2: run in PowerShell as Admin: wsl --install
-3. Restart after installing Docker
+| Email | Password | Role |
+|-------|----------|------|
+| demo@broker.local | demo1234 | User |
+| admin@gmail.com | admin1234 | Admin |
 
 ---
 
@@ -223,22 +106,30 @@ Install Node.js 18+ from https://nodejs.org
 
 ```
 UI_alfa/
-├── backend/
+├── backend/                        # Spring Boot application
 │   ├── docker-compose.yml          # PostgreSQL in Docker (port 5433)
-│   └── backend/
-│       └── src/main/
-│           ├── java/com/brokerui/  # Spring Boot application
-│           └── resources/
-│               ├── application.yml
-│               └── db/migration/   # Flyway SQL migrations V1-V14
+│   ├── pom.xml                     # Maven build config
+│   └── src/main/
+│       ├── java/com/brokerui/      # Java source code
+│       └── resources/
+│           ├── application.yml
+│           └── db/migration/       # Flyway SQL migrations (V1–V25)
 ├── UI-react/                       # React + TypeScript (Vite)
 │   ├── src/
-│   │   ├── pages/
+│   │   ├── pages/                  # Page components
 │   │   ├── components/
 │   │   ├── hooks/
-│   │   └── locales.json            # i18n (EN / RU / HE)
+│   │   └── locales.json            # i18n (EN / HE)
 │   └── package.json
-└── AdminDashboard_Local.html       # Admin panel (open directly in browser)
+├── buysellmodel/                   # Neural Network AI routing server (Node.js, port 3005)
+├── coin-analyzer/                  # Market analysis bot (Node.js, port 3008)
+├── system_documentation/           # Auto-generated class/module docs
+├── AdminDashboard_Local.html       # Admin panel (open directly in browser)
+├── start-project.bat               # Start all services
+├── kill-server.bat                 # Stop all services
+├── build-prod.bat                  # Build production JAR
+├── open-admin.bat                  # Open admin panel
+└── test-dual-users.bat             # Demo: two traders + admin simultaneously
 ```
 
 ---
@@ -250,3 +141,77 @@ UI_alfa/
 | Frontend (React) | 3001 |
 | Backend (Spring Boot) | 8080 |
 | PostgreSQL (Docker) | 5433 |
+| Neural Network AI | 3005 |
+| Coin Analyzer | 3008 |
+
+---
+
+## Margin Credit Line
+
+When a trade needs more cash than the account balance, the backend automatically borrows the shortfall from a fixed credit line (similar to Bybit's Unified Margin).
+
+| Parameter | Value |
+|-----------|-------|
+| Credit limit | $10,000 per account |
+| Interest rate | 0.5% per day on borrowed balance |
+| Margin call | Warning when margin level drops below 110% |
+| Liquidation | Positions force-closed when margin level drops below 100% |
+
+Implementation: `MarginLoanService.java` — Admin panel → **Credit Line** tab.
+
+---
+
+## Trade Commission & AI Routing
+
+Every order fill charges a dynamic commission based on symbol, quantity, and price (see `TradingFees.java`). A profit-safety guard caps total fees at 20% of gross profit on winning trades.
+
+The AI advisor (`NNPredictorClient`) routes each order:
+- **INTERNAL (B-Book)** — retail/noise trade, platform acts as counterparty, capturing spread and commission.
+- **EXTERNAL (A-Book)** — high-probability/toxic trade, forwarded to MetaTrader 5 bridge to hedge externally.
+
+Admin panel → **Dashboard** shows: Commission Collected, Fees Saved (Internal), B-Book Client Losses, Total Broker Profit.
+
+---
+
+## Transfer Data Between Developers
+
+### Export
+```powershell
+docker exec broker_ui_db pg_dump -U broker broker_ui > db_dump.sql
+```
+
+### Import
+```powershell
+docker compose up -d
+docker exec -i broker_ui_db psql -U broker -d broker_ui < db_dump.sql
+```
+
+---
+
+## Common Problems
+
+### Connection refused: localhost:5433
+Docker is not running.
+```bash
+docker compose up -d
+```
+
+### Port 8080 already in use
+```powershell
+netstat -ano | findstr :8080
+taskkill /PID <NUMBER> /F
+```
+
+### Flyway migration failed
+Reset the database (WARNING: deletes all data):
+```bash
+cd backend
+docker compose down -v
+docker compose up -d
+```
+
+### JAVA_HOME is not set
+Install JDK 17+ from https://adoptium.net and add `JAVA_HOME` to System Environment Variables.
+
+### npm: command not found
+Install Node.js 18+ from https://nodejs.org

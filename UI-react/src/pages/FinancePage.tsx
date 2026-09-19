@@ -4,7 +4,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
-import { useBrokerOverview, useTransactions, useTransactionMutation } from '@/hooks/useApi';
+import { useBrokerOverview, useTransactions, useTransactionMutation, useCreditLedger } from '@/hooks/useApi';
 
 type TxType = 'DEPOSIT' | 'WITHDRAWAL';
 
@@ -189,6 +189,7 @@ export function FinancePage() {
 
   const { data: overview, isLoading: overviewLoading, error: overviewError } = useBrokerOverview();
   const { data: txData, isLoading: txLoading } = useTransactions();
+  const { data: ledgerData, isLoading: ledgerLoading } = useCreditLedger();
   const txMutation = useTransactionMutation();
 
   const isLoading = overviewLoading || txLoading;
@@ -358,6 +359,92 @@ export function FinancePage() {
             </table>
           </div>
         </div>
+
+        {/* ── Credit Line History ── */}
+        {(() => {
+          const ledger = Array.isArray(ledgerData) ? ledgerData.slice(0, 50) : [];
+          const hasCreditActivity = ledgerLoading || ledger.length > 0;
+          if (!hasCreditActivity) return null;
+
+          const entryColor = (type: string) => {
+            switch (type.toUpperCase()) {
+              case 'BORROW':      return 'var(--danger, #ef4444)';
+              case 'REPAY':       return 'var(--success, #22c55e)';
+              case 'INTEREST':    return 'var(--warning, #f59e0b)';
+              case 'LIQUIDATION': return '#a855f7';
+              default:            return 'var(--text-secondary)';
+            }
+          };
+
+          return (
+            <div className="text-left" style={{ marginTop: 40 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <span style={{ fontSize: '1.2rem' }}>📜</span>
+                <h3 className="text-xl font-bold" style={{ margin: 0 }}>Credit Line History</h3>
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
+                Automatic log of all margin credit events — borrows, repayments, interest charges, and liquidations.
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date / Time</th>
+                      <th>Event</th>
+                      <th>Amount</th>
+                      <th>Debt After</th>
+                      <th>Balance After</th>
+                      <th>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledgerLoading ? (
+                      <SkeletonRow />
+                    ) : ledger.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-muted text-sm" style={{ padding: 20, textAlign: 'center' }}>
+                          No credit activity yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      ledger.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="text-sm">{fmtTime(entry.createdAt)}</td>
+                          <td>
+                            <span
+                              className="badge"
+                              style={{
+                                background: `${entryColor(entry.entryType)}22`,
+                                color: entryColor(entry.entryType),
+                                border: `1px solid ${entryColor(entry.entryType)}44`,
+                                fontWeight: 700,
+                                fontSize: '0.75rem',
+                              }}
+                            >
+                              {entry.entryType}
+                            </span>
+                          </td>
+                          <td className="font-bold" style={{ color: entryColor(entry.entryType) }}>
+                            {fmtMoney(Number(entry.amount ?? 0), currency)}
+                          </td>
+                          <td style={{ color: 'var(--danger, #ef4444)', fontVariantNumeric: 'tabular-nums' }}>
+                            {fmtMoney(Number(entry.borrowedAfter ?? 0), currency)}
+                          </td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {fmtMoney(Number(entry.balanceAfter ?? 0), currency)}
+                          </td>
+                          <td className="text-sm" style={{ color: 'var(--text-secondary)', maxWidth: 220, whiteSpace: 'normal' }}>
+                            {entry.note ?? '—'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </>
   );

@@ -1,6 +1,6 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+// ReactQueryDevtools intentionally excluded from production build
 import { I18nProvider } from '@/hooks/useI18n';
 import { ToastProvider } from '@/hooks/useToast';
 import { AuthProvider } from '@/hooks/useAuth';
@@ -70,7 +70,6 @@ export function App() {
           </ToastProvider>
         </I18nProvider>
       </ErrorBoundary>
-      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }

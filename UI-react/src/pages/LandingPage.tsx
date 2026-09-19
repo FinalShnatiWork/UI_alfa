@@ -1,8 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { apiGet } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
-import { useToast } from '@/hooks/useToast';
 import { AuthHeader } from '@/components/AuthHeader';
 
 /**
@@ -14,18 +12,10 @@ import { AuthHeader } from '@/components/AuthHeader';
  */
 export function LandingPage() {
   const { t } = useI18n();
-  const toast = useToast();
 
   useEffect(() => {
     document.title = t('titles.landing');
-    // Dev smoke check: ping backend so we know API is reachable.
-    apiGet('/api/health')
-      .then(() => toast.show('API: OK', { variant: 'success', duration: 1400 }))
-      .catch(() => {
-        /* backend optional during static UI work */
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [t]);
 
 
   return (
