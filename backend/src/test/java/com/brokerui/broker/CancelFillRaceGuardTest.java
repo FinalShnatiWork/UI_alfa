@@ -54,7 +54,6 @@ class CancelFillRaceGuardTest {
     symbolRepo = mock(SymbolRepository.class);
     marginLoanService = mock(MarginLoanService.class);
     priceService = mock(MarketPriceService.class);
-    TradeFillRepository fillRepo = mock(TradeFillRepository.class);
     NotificationRepository notificationRepo = mock(NotificationRepository.class);
     AccountTransactionRepository txRepo = mock(AccountTransactionRepository.class);
     UserPreferenceRepository preferenceRepo = mock(UserPreferenceRepository.class);
@@ -69,7 +68,7 @@ class CancelFillRaceGuardTest {
         auditLogService, nnPredictorClient, marginLoanService, ledgerRepo);
 
     executionService = new OrderExecutionService(
-        accountRepo, positionRepo, orderRepo, fillRepo, notificationRepo, symbolRepo,
+        accountRepo, positionRepo, orderRepo, notificationRepo, symbolRepo,
         mt5Service, priceService, nnPredictorClient, marginLoanService, txRepo);
 
     user = new AppUser();

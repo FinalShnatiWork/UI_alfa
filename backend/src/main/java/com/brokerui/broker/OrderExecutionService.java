@@ -20,7 +20,6 @@ public class OrderExecutionService {
   private final TradingAccountRepository accountRepo;
   private final PositionRepository positionRepo;
   private final BrokerOrderRepository orderRepo;
-  private final TradeFillRepository fillRepo;
   private final NotificationRepository notificationRepo;
   private final SymbolRepository symbolRepo;
   private final MT5IntegrationService mt5Service;
@@ -38,7 +37,6 @@ public class OrderExecutionService {
    * @param accountRepo database trading account repository
    * @param positionRepo database position repository
    * @param orderRepo database order repository
-   * @param fillRepo database trade fill repository
    * @param notificationRepo database notification alerts repository
    * @param symbolRepo database symbols configuration repository
    * @param mt5Service MetaTrader 5 service integration
@@ -50,7 +48,6 @@ public class OrderExecutionService {
       TradingAccountRepository accountRepo,
       PositionRepository positionRepo,
       BrokerOrderRepository orderRepo,
-      TradeFillRepository fillRepo,
       NotificationRepository notificationRepo,
       SymbolRepository symbolRepo,
       MT5IntegrationService mt5Service,
@@ -62,7 +59,6 @@ public class OrderExecutionService {
     this.txRepo = txRepo;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
-    this.fillRepo = fillRepo;
     this.notificationRepo = notificationRepo;
     this.symbolRepo = symbolRepo;
     this.mt5Service = mt5Service;
@@ -326,13 +322,6 @@ public class OrderExecutionService {
     }
 
     orderRepo.save(order);
-
-    TradeFill fill = new TradeFill();
-    fill.setOrder(order);
-    fill.setPrice(price);
-    fill.setQuantity(qty);
-    fill.setLiquidity("TAKER");
-    fillRepo.save(fill);
 
     if (routeExternal) {
         // EXTERNAL ROUTING: Forward trade to MetaTrader 5 Bridge
