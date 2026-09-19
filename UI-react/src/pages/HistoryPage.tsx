@@ -329,7 +329,7 @@ export function HistoryPage() {
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
                     <td className="dir-ltr" style={{ textAlign: 'right', fontWeight: 600, color: grossPl != null ? (grossPl >= 0 ? 'var(--text-success)' : 'var(--text-danger)') : 'inherit' }}>
-                      {grossPl != null ? (grossPl >= 0 ? '+' : '') + fmtPl(grossPl, currency, lang) : '—'}
+                      {grossPl != null ? fmtPl(grossPl, currency, lang) : '—'}
                     </td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>
                       {trade.commission != null ? `−$${Number(trade.commission).toFixed(2)}` : '—'}
@@ -349,7 +349,7 @@ export function HistoryPage() {
                   {t('history.totalPl')} ({withPl.length}):
                 </td>
                 <td className={`dir-ltr font-bold ${grossTradePl >= 0 ? 'text-success' : 'text-danger'}`}>
-                  {grossTradePl >= 0 ? '+' : ''}{fmtPl(grossTradePl, currency, lang)}
+                  {fmtPl(grossTradePl, currency, lang)}
                 </td>
                 <td className="dir-ltr font-bold text-danger">
                   −${commissionTotal.toFixed(2)}

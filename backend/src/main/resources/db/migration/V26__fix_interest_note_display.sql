@@ -3,5 +3,5 @@
 -- After this migration new notes are written with stripTrailingZeros() in Java.
 
 UPDATE margin_loan_ledger
-SET note = REGEXP_REPLACE(note, '\(0\.([0-9]*[1-9])0+(%/day\))', '(0.\1\2)')
+SET note = REGEXP_REPLACE(note, '\(0\.([0-9]*[1-9])0+%/day\)', '(0.\1%/day)')
 WHERE note LIKE '%(0.%0%/day)%' AND entry_type = 'INTEREST';
