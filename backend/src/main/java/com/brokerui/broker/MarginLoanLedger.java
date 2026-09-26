@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.hibernate.annotations.CreationTimestamp;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * A single entry in the margin credit line ledger: a borrow, a repayment,
@@ -24,6 +25,7 @@ public class MarginLoanLedger {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @JsonIgnore
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "trading_account_id", nullable = false)
   private TradingAccount tradingAccount;

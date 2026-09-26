@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import org.hibernate.annotations.UpdateTimestamp;
 import com.brokerui.user.AppUser;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "user_preference")
@@ -20,6 +21,7 @@ public class UserPreference {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @JsonIgnore
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "user_id", nullable = false)
   private AppUser user;

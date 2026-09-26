@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "broker_order")
@@ -21,6 +22,7 @@ public class BrokerOrder {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @JsonIgnore
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "trading_account_id", nullable = false)
   private TradingAccount tradingAccount;
