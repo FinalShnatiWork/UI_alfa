@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * REST controller for administrator functions, including server control,
@@ -107,7 +108,7 @@ public class AdminTradeController {
     return Map.of("status", "restarting");
   }
 
-  public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting, BigDecimal commission) {}
+  public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting, BigDecimal commission, BigDecimal realizedPnl) {}
 
   /**
    * Retrieves all trades (orders and active positions) in the system.
@@ -116,6 +117,7 @@ public class AdminTradeController {
    * @return a list of all orders and open positions mapped to a unified DTO
    */
   @GetMapping("/trades")
+  @Transactional(readOnly = true)
   public List<TradeDto> getAllTrades() {
     List<TradeDto> orders = orderRepo.findAll().stream()
       .map(o -> new TradeDto(
@@ -128,7 +130,8 @@ public class AdminTradeController {
           o.getStatus(), 
           o.getCreatedAt(),
           o.getNnRouteRecommendation() != null ? o.getNnRouteRecommendation() : "EXTERNAL",
-          o.getCommission() != null ? o.getCommission() : BigDecimal.ZERO))
+          o.getCommission() != null ? o.getCommission() : BigDecimal.ZERO,
+          o.getRealizedPnl()))
       .collect(Collectors.toList());
 
     List<TradeDto> positions = positionRepo.findAll().stream()
@@ -142,7 +145,8 @@ public class AdminTradeController {
           "ACTIVE", 
           p.getOpenedAt(),
           "INTERNAL",
-          BigDecimal.ZERO))
+          BigDecimal.ZERO,
+          p.getUnrealizedPnl()))
       .collect(Collectors.toList());
 
     orders.addAll(positions);
@@ -161,6 +165,7 @@ public class AdminTradeController {
    * @return a list of all trading accounts mapped to their summary DTOs
    */
   @GetMapping("/accounts")
+  @Transactional(readOnly = true)
   public List<AccountDto> getAccounts() {
     return accountRepo.findAll().stream()
       .map(a -> {
@@ -183,6 +188,7 @@ public class AdminTradeController {
    * @return a list of all margin loan ledger entries
    */
   @GetMapping("/margin-loans")
+  @Transactional(readOnly = true)
   public List<MarginLedgerDto> getMarginLoans() {
     return marginLedgerRepo.findAllByOrderByCreatedAtDesc().stream()
       .map(e -> new MarginLedgerDto(e.getId(), e.getTradingAccount().getId(), e.getTradingAccount().getUser().getId(),
@@ -223,6 +229,7 @@ public class AdminTradeController {
    * @return a list of all ledger transactions
    */
   @GetMapping("/transactions")
+  @Transactional(readOnly = true)
   public List<TransactionDto> getTransactions() {
     return transactionRepo.findAll().stream()
       .map(t -> new TransactionDto(t.getId(), t.getTradingAccount().getId(), t.getTxType(), t.getStatus(), t.getAmount(), t.getCurrency(), t.getMethod(), t.getCreatedAt()))
@@ -238,6 +245,7 @@ public class AdminTradeController {
    * @return a list of all KYC cases
    */
   @GetMapping("/kyc")
+  @Transactional(readOnly = true)
   public List<KycDto> getKyc() {
     return kycRepo.findAll().stream()
       .map(k -> new KycDto(k.getId(), k.getUser().getId(), k.getStatus(), k.getSubmittedAt(), k.getReviewedAt(), k.getNote()))
@@ -253,6 +261,7 @@ public class AdminTradeController {
    * @return a list of all user notifications
    */
   @GetMapping("/notifications")
+  @Transactional(readOnly = true)
   public List<NotifDto> getNotifications() {
     return notifRepo.findAll().stream()
       .map(n -> new NotifDto(n.getId(), n.getUser().getId(), n.getNotifType(), n.getTitle(), n.getBody(), n.getReadAt() != null, n.getCreatedAt()))
@@ -268,6 +277,7 @@ public class AdminTradeController {
    * @return a list of all system audit logs
    */
   @GetMapping("/audit")
+  @Transactional(readOnly = true)
   public List<AuditDto> getAuditLog() {
     return auditRepo.findAll().stream()
       .map(a -> new AuditDto(a.getId(), a.getUser() != null ? a.getUser().getId() : null, a.getAction(), a.getDetail(), a.getIp(), a.getCreatedAt()))
