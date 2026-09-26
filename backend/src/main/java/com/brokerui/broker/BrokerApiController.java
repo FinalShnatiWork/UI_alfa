@@ -92,7 +92,7 @@ public class BrokerApiController {
     return accountRepo.save(ta);
   }
 
-  @GetMapping("/overview")
+  @Transactional(readOnly = true)@GetMapping("/overview")
   public ResponseEntity<?> overview(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
@@ -111,26 +111,26 @@ public class BrokerApiController {
         ta.getCommissionPaidTotal(), ta.getDailyInterestRate()));
   }
 
-  @GetMapping("/symbols")
+  @Transactional(readOnly = true)@GetMapping("/symbols")
   public List<Symbol> symbols() {
     return symbolRepo.findByEnabledTrueOrderByKindAscCodeAsc();
   }
 
-  @GetMapping("/positions")
+  @Transactional(readOnly = true)@GetMapping("/positions")
   public ResponseEntity<?> positions(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
     return ResponseEntity.ok(positionRepo.findByTradingAccountIdOrderByOpenedAtDescIdDesc(ta.getId()));
   }
 
-  @GetMapping("/orders")
+  @Transactional(readOnly = true)@GetMapping("/orders")
   public ResponseEntity<?> orders(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
     return ResponseEntity.ok(orderRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
   }
 
-  @GetMapping("/transactions")
+  @Transactional(readOnly = true)@GetMapping("/transactions")
   public ResponseEntity<?> transactions(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
@@ -756,13 +756,13 @@ public class BrokerApiController {
     return ResponseEntity.ok(Map.of("ok", true, "closePnl", netPnl, "commission", order.getCommission(), "newBalance", ta.getBalance()));
   }
 
-  @GetMapping("/notifications")
+  @Transactional(readOnly = true)@GetMapping("/notifications")
   public ResponseEntity<?> notifications(Authentication auth) {
     AppUser u = requireUser(auth);
     return ResponseEntity.ok(notificationRepo.findTop20ByUserIdOrderByCreatedAtDesc(u.getId()));
   }
 
-  @GetMapping("/preferences")
+  @Transactional(readOnly = true)@GetMapping("/preferences")
   public ResponseEntity<?> getPreferences(Authentication auth) {
     AppUser u = requireUser(auth);
     List<UserPreference> prefs = preferenceRepo.findByUser(u);
@@ -790,7 +790,7 @@ public class BrokerApiController {
     return ResponseEntity.ok(Map.of("ok", true));
   }
 
-  @GetMapping("/orders/pending")
+  @Transactional(readOnly = true)@GetMapping("/orders/pending")
   public ResponseEntity<?> pendingOrders(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
@@ -835,14 +835,14 @@ public class BrokerApiController {
     return ResponseEntity.ok(Map.of("ok", true, "newBalance", ta.getBalance()));
   }
 
-  @GetMapping("/history")
+  @Transactional(readOnly = true)@GetMapping("/history")
   public ResponseEntity<?> history(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
     return ResponseEntity.ok(orderRepo.findByTradingAccountIdAndStatusOrderByFilledAtDesc(ta.getId(), "FILLED"));
   }
 
-  @GetMapping("/credit-ledger")
+  @Transactional(readOnly = true)@GetMapping("/credit-ledger")
   public ResponseEntity<?> creditLedger(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
