@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -41,6 +43,7 @@ public class MarginLoanService {
   private final BrokerOrderRepository orderRepo;
   private final MarginLoanLedgerRepository ledgerRepo;
   private final NotificationRepository notificationRepo;
+  private final AccountTransactionRepository txRepo;
   private final MarketPriceService priceService;
   private final AuditLogService auditLogService;
 
@@ -53,6 +56,7 @@ public class MarginLoanService {
       BrokerOrderRepository orderRepo,
       MarginLoanLedgerRepository ledgerRepo,
       NotificationRepository notificationRepo,
+      AccountTransactionRepository txRepo,
       MarketPriceService priceService,
       AuditLogService auditLogService) {
     this.accountRepo = accountRepo;
@@ -60,6 +64,7 @@ public class MarginLoanService {
     this.orderRepo = orderRepo;
     this.ledgerRepo = ledgerRepo;
     this.notificationRepo = notificationRepo;
+    this.txRepo = txRepo;
     this.priceService = priceService;
     this.auditLogService = auditLogService;
   }
@@ -215,21 +220,36 @@ public class MarginLoanService {
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     BigDecimal collateral = BigDecimal.ZERO;
     for (Position p : positions) {
-      try {
-        double live = priceService.getLivePrice(p.getSymbolCode());
-        if (live <= 0) continue;
-        BigDecimal contractSize = BrokerApiController.getContractSize(p.getSymbolCode());
-        BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
-        BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
-        BigDecimal marginLocked = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-        BigDecimal diff = "SHORT".equals(p.getSide())
-            ? avg.subtract(BigDecimal.valueOf(live))
-            : BigDecimal.valueOf(live).subtract(avg);
-        BigDecimal pnl = diff.multiply(qty).multiply(contractSize);
-        collateral = collateral.add(marginLocked).add(pnl);
-      } catch (Exception ignored) {}
+      BigDecimal contractSize = BrokerApiController.getContractSize(p.getSymbolCode());
+      BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
+      BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
+      BigDecimal marginLocked = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      // A missing quote must never drop the position out of the collateral base: doing so
+      // understated equity by the whole position and could margin-call a healthy account on
+      // nothing worse than a price-feed blip. floatingPnl() falls back to the stored value.
+      collateral = collateral.add(marginLocked).add(floatingPnl(p));
     }
     return ta.getBalance().add(collateral);
+  }
+
+  /**
+   * Floating P/L for a position at its live quote, falling back to the last value stored on
+   * the position when no quote is available.
+   *
+   * @param p the open position
+   * @return signed floating P/L
+   */
+  private BigDecimal floatingPnl(Position p) {
+    try {
+      double live = priceService.getLivePrice(p.getSymbolCode());
+      if (live > 0) {
+        return BrokerApiController.liveUnrealizedPnl(p, BigDecimal.valueOf(live));
+      }
+    } catch (Exception e) {
+      log.warn("[MarginLoan] No live quote for {} — using last stored floating P/L: {}",
+          p.getSymbolCode(), e.getMessage());
+    }
+    return p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl();
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -336,15 +356,27 @@ public class MarginLoanService {
     if (ta == null) return;
     if (ta.getBorrowedBalance() == null || ta.getBorrowedBalance().compareTo(BigDecimal.ZERO) <= 0) return;
 
-    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    // Close the most negative (worst loss) positions first, matching real exchange behavior.
-    positions.sort((a, b) -> unrealizedPnlOf(a).compareTo(unrealizedPnlOf(b)));
+    // Re-evaluate under the row lock. The scheduler's pre-check used a stale unlocked snapshot
+    // and could force-close an account that had already recovered (or miss one that hadn't).
+    BigDecimal lockedLevel = computeMarginLevel(ta);
+    if (lockedLevel == null || lockedLevel.compareTo(LIQUIDATION_LEVEL) >= 0) return;
+
+    List<Position> positions = new ArrayList<>(positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()));
+    // One quote per position (cached in MarketPriceService), then a stable sort — calling
+    // getLivePrice inside the comparator used to hammer the feed and could throw
+    // "Comparison method violates its general contract".
+    positions.sort(Comparator.comparing(this::floatingPnl));
 
     int closedCount = 0;
     boolean recovered = false;
-    for (Position pos : positions) {
+    for (Position snapshot : positions) {
       BigDecimal level = computeMarginLevel(ta);
-      if (level != null && level.compareTo(MARGIN_CALL_LEVEL) >= 0) { recovered = true; break; } // recovered above safe threshold
+      if (level != null && level.compareTo(MARGIN_CALL_LEVEL) >= 0) { recovered = true; break; }
+
+      Position pos = snapshot.getId() == null
+          ? snapshot
+          : positionRepo.findByIdForUpdate(snapshot.getId()).orElse(null);
+      if (pos == null) continue;
 
       double live;
       try {
@@ -354,33 +386,34 @@ public class MarginLoanService {
       }
       if (live <= 0) continue;
 
-      BigDecimal closePrice = BigDecimal.valueOf(live);
-      BigDecimal qty = pos.getQuantity();
-      BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-      boolean isShort = "SHORT".equals(pos.getSide());
-      BigDecimal contractSize = BrokerApiController.getContractSize(pos.getSymbolCode());
-      BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-      BigDecimal marginReturned = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      BigDecimal pnl = isShort
-          ? avg.subtract(closePrice).multiply(qty).multiply(contractSize)
-          : closePrice.subtract(avg).multiply(qty).multiply(contractSize);
-
-      positionRepo.delete(pos);
-      repaySettlementOrBorrow(ta, marginReturned.add(pnl));
+      PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, BigDecimal.valueOf(live));
 
       BrokerOrder order = new BrokerOrder();
       order.setTradingAccount(ta);
       order.setSymbolCode(pos.getSymbolCode());
-      order.setSide(isShort ? "BUY" : "SELL");
+      order.setSide(close.closeSide());
       order.setOrderType("MARKET");
       order.setStatus("FILLED");
-      order.setQuantity(qty);
+      order.setQuantity(close.quantity());
       order.setFilledAt(Instant.now());
-      order.setEntryPrice(closePrice);
-      order.setOpenPrice(avg);
+      order.setEntryPrice(close.closePrice());
+      order.setOpenPrice(close.avgPrice());
       order.setOpenedAt(pos.getOpenedAt());
-      order.setRealizedPnl(pnl);
+      order.setRealizedPnl(close.netPnl());
+      TradingFees.charge(ta, order, close.closeCommission());
       orderRepo.save(order);
+
+      AccountTransaction closeFeeTx = new AccountTransaction();
+      closeFeeTx.setTradingAccount(ta);
+      closeFeeTx.setTxType("COMMISSION");
+      closeFeeTx.setAmount(close.closeCommission());
+      closeFeeTx.setCurrency(ta.getCurrency() == null ? "USD" : ta.getCurrency());
+      closeFeeTx.setStatus("APPROVED");
+      closeFeeTx.setProcessedAt(Instant.now());
+      txRepo.save(closeFeeTx);
+
+      positionRepo.delete(pos);
+      repaySettlementOrBorrow(ta, close.settlement());
       closedCount++;
 
       try {
@@ -390,9 +423,12 @@ public class MarginLoanService {
         notif.setTitle("notification.liquidation.title");
         notif.setBody(String.format(java.util.Locale.US,
             "{\"symbol\":\"%s\",\"qty\":\"%.4f\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",
-            pos.getSymbolCode(), qty.doubleValue(), closePrice.doubleValue(), pnl.doubleValue()));
+            pos.getSymbolCode(), close.quantity().doubleValue(), close.closePrice().doubleValue(),
+            close.netPnl().doubleValue()));
         notificationRepo.save(notif);
-      } catch (Exception ignored) {}
+      } catch (Exception e) {
+        log.warn("[MarginLoan] Failed to push liquidation notification: {}", e.getMessage());
+      }
     }
 
     // Only write off remaining debt when every position has actually been liquidated and
@@ -421,21 +457,5 @@ public class MarginLoanService {
 
     auditLogService.log(ta.getUser(), "LIQUIDATION",
         closedCount + " position(s) force-closed due to margin call", null);
-  }
-
-  private BigDecimal unrealizedPnlOf(Position p) {
-    try {
-      double live = priceService.getLivePrice(p.getSymbolCode());
-      if (live <= 0) return BigDecimal.ZERO;
-      BigDecimal contractSize = BrokerApiController.getContractSize(p.getSymbolCode());
-      BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
-      BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
-      BigDecimal diff = "SHORT".equals(p.getSide())
-          ? avg.subtract(BigDecimal.valueOf(live))
-          : BigDecimal.valueOf(live).subtract(avg);
-      return diff.multiply(qty).multiply(contractSize);
-    } catch (Exception e) {
-      return BigDecimal.ZERO;
-    }
   }
 }

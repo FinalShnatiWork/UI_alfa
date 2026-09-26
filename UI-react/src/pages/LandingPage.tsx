@@ -34,16 +34,13 @@ export function LandingPage() {
       <div className="container text-center mt-20" style={{ padding: '60px 20px 20px' }}>
         <h1 style={{ fontSize: '2.5rem', marginBottom: 10 }}>{t('landing.hero')}</h1>
         <p
-          className="landing-sub-en"
-          lang="en"
-          dir="ltr"
           style={{
             color: 'var(--text-secondary)',
             fontSize: '1.1rem',
             marginBottom: 30,
           }}
         >
-          Trade Forex, Stocks, Commodities &amp; Crypto — Connected to MetaTrader 5
+          {t('landing.sub')}
         </p>
 
         <div

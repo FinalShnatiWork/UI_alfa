@@ -78,11 +78,17 @@ public class OrderExecutionService {
     for (BrokerOrder o : open) {
       try {
         self.tryExecute(o.getId());
-      } catch (Exception ignored) {}
+      } catch (Exception e) {
+        // Must not abort the whole tick, but silence here used to leave orders stuck in NEW
+        // with no trace of why.
+        log.error("Failed to execute order #{}: {}", o.getId(), e.getMessage(), e);
+      }
     }
     try {
       checkPositionsSlTp();
-    } catch (Exception ignored) {}
+    } catch (Exception e) {
+      log.error("SL/TP sweep failed: {}", e.getMessage(), e);
+    }
   }
 
   /**
@@ -191,8 +197,32 @@ public class OrderExecutionService {
     // Uses the same dynamic formula as MARKET orders so LIMIT/STOP fills aren't charged a
     // different (flat) fee for an equivalent trade.
     BigDecimal commission = TradingFees.calculateCommission(order.getSymbolCode(), qty, price);
-    TradingFees.charge(ta, order, commission);
 
+    BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
+        : (order.getStopPrice() != null ? order.getStopPrice() : price);
+    BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+    BigDecimal actualCost = margin.add(commission);
+    BigDecimal unusedReserve = reserved.subtract(actualCost);
+    if (unusedReserve.compareTo(BigDecimal.ZERO) >= 0) {
+      marginLoanService.repaySettlementOrBorrow(ta, unusedReserve);
+    } else {
+      // Fill is more expensive than the reservation (worse price + commission). Extra borrow
+      // used to skip the credit-limit check; a client at the ceiling could open uncapped debt.
+      BigDecimal extra = actualCost.subtract(reserved);
+      if (!marginLoanService.tryCoverShortfall(ta, extra, ta.getUser(), null)) {
+        marginLoanService.repaySettlementOrBorrow(ta, reserved);
+        order.setStatus("REJECTED");
+        orderRepo.save(order);
+        ta.setEquity(recalcEquity(ta));
+        ta.setFreeMargin(ta.getBalance());
+        accountRepo.save(ta);
+        log.warn("Rejected fill of order #{} — adverse price would exceed credit limit (reserved {}, needed {})",
+            order.getId(), reserved, actualCost);
+        return;
+      }
+    }
+
+    TradingFees.charge(ta, order, commission);
     AccountTransaction feeTx = new AccountTransaction();
     feeTx.setTradingAccount(ta);
     feeTx.setTxType("COMMISSION");
@@ -202,25 +232,8 @@ public class OrderExecutionService {
     feeTx.setProcessedAt(java.time.Instant.now());
     txRepo.save(feeTx);
 
-    if ("BUY".equalsIgnoreCase(order.getSide())) {
-      // Regular LONG BUY - Refund reserved funds, then deduct actual cost + commission
-      BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
-          : (order.getStopPrice() != null ? order.getStopPrice() : price);
-      BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      marginLoanService.repaySettlementOrBorrow(ta, reserved.subtract(margin).subtract(order.getCommission()));
-
-      Position longPos = openNewPosition(ta, order.getSymbolCode(), "LONG", qty, price, order.getTakeProfit(), order.getStopLoss());
-      positionRepo.save(longPos);
-    } else { // SELL order
-      // SELL-SHORT (open new SHORT position) - Refund reserved funds, then lock actual collateral + commission
-      BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
-          : (order.getStopPrice() != null ? order.getStopPrice() : price);
-      BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      marginLoanService.repaySettlementOrBorrow(ta, reserved.subtract(margin).subtract(order.getCommission()));
-
-      Position shortPos = openNewPosition(ta, order.getSymbolCode(), "SHORT", qty, price, order.getTakeProfit(), order.getStopLoss());
-      positionRepo.save(shortPos);
-    }
+    String posSide = isBuy ? "LONG" : "SHORT";
+    positionRepo.save(openNewPosition(ta, order.getSymbolCode(), posSide, qty, price, order.getTakeProfit(), order.getStopLoss()));
 
     ta.setEquity(recalcEquity(ta));
     // Prepaid-margin model: remaining balance is free cash.
@@ -326,7 +339,7 @@ public class OrderExecutionService {
 
     if (routeExternal) {
         // EXTERNAL ROUTING: Forward trade to MetaTrader 5 Bridge
-        log.info("[AI ROUTING - EXTERNAL (A-BOOK)] Order #{} for {} {} {:.4f} @ {:.4f} routed to MetaTrader 5 Bridge.",
+        log.info("[AI ROUTING - EXTERNAL (A-BOOK)] Order #{} for {} {} {} @ {} routed to MetaTrader 5 Bridge.",
             order.getId(), order.getSide(), order.getSymbolCode(),
             String.format("%.4f", qty.doubleValue()), String.format("%.4f", price.doubleValue()));
         try {
@@ -410,12 +423,10 @@ public class OrderExecutionService {
       // Keep stored floating P/L fresh so equity/API stay aligned with live prices
       // even when the position has no SL/TP attached.
       try {
-        BigDecimal uPnl = BrokerApiController.liveUnrealizedPnl(pos, last);
-        if (pos.getUnrealizedPnl() == null || pos.getUnrealizedPnl().compareTo(uPnl) != 0) {
-          pos.setUnrealizedPnl(uPnl);
-          positionRepo.save(pos);
-        }
-      } catch (Exception ignored) {}
+        self.refreshUnrealizedPnl(pos.getId(), last);
+      } catch (Exception e) {
+        log.warn("Failed to refresh floating P/L for position #{}: {}", pos.getId(), e.getMessage());
+      }
 
       BigDecimal sl = pos.getStopLoss();
       BigDecimal tp = pos.getTakeProfit();
@@ -424,22 +435,25 @@ public class OrderExecutionService {
       }
 
       boolean isShort = "SHORT".equals(pos.getSide());
+      // Trigger on the executable price (same Bid/Ask the fill will use), not the mid.
+      // Triggering on mid then filling at spread systematically closed the client past their SL.
+      BigDecimal exec = TradingFees.applySpread(last, isShort);
       boolean shouldClose = false;
       String reason = "";
 
       if (sl != null && sl.compareTo(BigDecimal.ZERO) > 0) {
         if (isShort) {
-          if (last.compareTo(sl) >= 0) { shouldClose = true; reason = "STOP_LOSS"; }
+          if (exec.compareTo(sl) >= 0) { shouldClose = true; reason = "STOP_LOSS"; }
         } else {
-          if (last.compareTo(sl) <= 0) { shouldClose = true; reason = "STOP_LOSS"; }
+          if (exec.compareTo(sl) <= 0) { shouldClose = true; reason = "STOP_LOSS"; }
         }
       }
 
       if (tp != null && tp.compareTo(BigDecimal.ZERO) > 0) {
         if (isShort) {
-          if (last.compareTo(tp) <= 0) { shouldClose = true; reason = "TAKE_PROFIT"; }
+          if (exec.compareTo(tp) <= 0) { shouldClose = true; reason = "TAKE_PROFIT"; }
         } else {
-          if (last.compareTo(tp) >= 0) { shouldClose = true; reason = "TAKE_PROFIT"; }
+          if (exec.compareTo(tp) >= 0) { shouldClose = true; reason = "TAKE_PROFIT"; }
         }
       }
 
@@ -453,42 +467,51 @@ public class OrderExecutionService {
     }
   }
 
+  /**
+   * Re-reads the position inside its own transaction and updates its stored floating P/L.
+   * <p>
+   * The caller iterates over a snapshot taken before the (network-bound) price lookups, so by
+   * now a position may already have been closed. Re-reading by id and bailing out when it is
+   * gone is what keeps that case safe: calling {@code save()} on the stale detached instance
+   * would make Hibernate re-insert the deleted row, resurrecting a closed position.
+   *
+   * @param posId     the position to refresh
+   * @param livePrice the live quote to value it at
+   */
+  @Transactional
+  public void refreshUnrealizedPnl(Long posId, BigDecimal livePrice) {
+    Position pos = positionRepo.findById(posId).orElse(null);
+    if (pos == null) return; // already closed — must not be written back
+    BigDecimal uPnl = BrokerApiController.liveUnrealizedPnl(pos, livePrice);
+    if (pos.getUnrealizedPnl() == null || pos.getUnrealizedPnl().compareTo(uPnl) != 0) {
+      pos.setUnrealizedPnl(uPnl); // managed entity — flushed on commit, no merge/insert risk
+    }
+  }
+
   @Transactional
   public void closePositionDueToSlTp(Long posId, BigDecimal closePrice, String reason) {
+    // Locks are always taken account-first, then position — the same order used by
+    // BrokerApiController.closePosition and MarginLoanService.liquidateAccount. Mixing the
+    // order between these paths let two concurrent closes deadlock on each other.
+    Long accountId = positionRepo.findById(posId)
+        .map(p -> p.getTradingAccount().getId())
+        .orElse(null);
+    if (accountId == null) return;
+    TradingAccount ta = accountRepo.findByIdForUpdate(accountId).orElse(null);
+    if (ta == null) return;
     Position pos = positionRepo.findByIdForUpdate(posId).orElse(null);
-    if (pos == null) return;
-    TradingAccount ta = pos.getTradingAccount();
-    ta = accountRepo.findByIdForUpdate(ta.getId()).orElseThrow();
+    if (pos == null) return; // closed by the user (or liquidated) while we waited for the lock
 
-    BigDecimal qty = pos.getQuantity();
-    BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-    boolean isShort = "SHORT".equals(pos.getSide());
-    closePrice = TradingFees.applySpread(closePrice, isShort); // Close SHORT = BUY (Ask), Close LONG = SELL (Bid)
+    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, closePrice);
+    BigDecimal qty = close.quantity();
+    boolean isShort = close.shortPosition();
+    closePrice = close.closePrice();
+    BigDecimal netPnl = close.netPnl();
 
-    BigDecimal contractSize = BrokerApiController.getContractSize(pos.getSymbolCode());
-    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-    BigDecimal marginReturned = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-
-    BigDecimal grossPnl;
-    if (isShort) {
-      grossPnl = avg.subtract(closePrice).multiply(qty).multiply(contractSize);
-    } else {
-      grossPnl = closePrice.subtract(avg).multiply(qty).multiply(contractSize);
-    }
-
-    // Same profit-safety guard + net P/L as manual closePosition (BrokerApiController),
-    // so SL/TP auto-closes are not stricter on fees and History shows net, not gross.
-    BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
-    BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, closePrice);
-    closeCommission = TradingFees.applyProfitSafetyGuard(openCommission, closeCommission, grossPnl);
-    BigDecimal totalFees = openCommission.add(closeCommission);
-    BigDecimal netPnl = grossPnl.subtract(totalFees);
-
-    // Save history order
     BrokerOrder order = new BrokerOrder();
     order.setTradingAccount(ta);
     order.setSymbolCode(pos.getSymbolCode());
-    order.setSide(isShort ? "BUY" : "SELL");
+    order.setSide(close.closeSide());
     order.setOrderType("MARKET");
     order.setStatus("FILLED");
     order.setQuantity(qty);
@@ -497,18 +520,18 @@ public class OrderExecutionService {
     order.setRealizedPnl(netPnl);
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
-    TradingFees.charge(ta, order, closeCommission);
+    TradingFees.charge(ta, order, close.closeCommission());
 
     AccountTransaction closeFeeTx = new AccountTransaction();
     closeFeeTx.setTradingAccount(ta);
     closeFeeTx.setTxType("COMMISSION");
-    closeFeeTx.setAmount(closeCommission);
+    closeFeeTx.setAmount(close.closeCommission());
     closeFeeTx.setCurrency(ta.getCurrency());
     closeFeeTx.setStatus("APPROVED");
     closeFeeTx.setProcessedAt(Instant.now());
     txRepo.save(closeFeeTx);
 
-    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(grossPnl).subtract(order.getCommission()));
+    marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
     positionRepo.delete(pos);
     ta.setEquity(recalcEquity(ta));
     ta.setFreeMargin(ta.getBalance());

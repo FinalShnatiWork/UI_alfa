@@ -59,7 +59,7 @@ export function AnalyzerPage() {
                 const res = await fetch('http://localhost:3008/api/analysis/all');
                 if (res.ok && active) {
                     const data = await res.json();
-                    setAssets(data);
+                    setAssets(Array.isArray(data) ? data : []);
                 }
             } catch (e) {
                 console.error("Failed to fetch analyzer overview:", e);
@@ -115,7 +115,7 @@ export function AnalyzerPage() {
     };
 
     // Filter logic
-    const filteredAssets = assets.filter(asset => {
+    const filteredAssets = (Array.isArray(assets) ? assets : []).filter(asset => {
         const matchesSearch = asset.symbol.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = filterCategory === 'all' || asset.category === filterCategory;
         return matchesSearch && matchesCategory;
@@ -298,7 +298,7 @@ export function AnalyzerPage() {
                                         {isRtl ? 'מחיר נוכחי' : 'Live Price'}
                                     </div>
                                     <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--primary, #38bdf8)', marginBottom: 12 }}>
-                                        ${analysis.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                                        {typeof analysis.price === 'number' ? analysis.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 }) : '—'}
                                     </div>
                                     <button onClick={handleTradeNow} className="btn btn-primary" style={{ width: '100%', padding: '10px 0', borderRadius: 8, fontSize: '0.85rem' }}>
                                         {isRtl ? 'פתח עסקה בגרף ⚡' : 'Trade Now on Chart ⚡'}
@@ -313,12 +313,12 @@ export function AnalyzerPage() {
                                 <div className="card" style={{ background: 'rgba(30, 41, 59, 0.45)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: 16 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                         <span style={{ fontWeight: 700, color: '#94a3b8', fontSize: '0.85rem' }}>RSI (14)</span>
-                                        <span className={`badge ${analysis.indicators.rsi && analysis.indicators.rsi.status.includes('OVERSOLD') ? 'badge-success' : analysis.indicators.rsi && analysis.indicators.rsi.status.includes('OVERBOUGHT') ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
-                                            {isRtl ? analysis.indicators.rsi?.statusHe : analysis.indicators.rsi?.status}
+                                        <span className={`badge ${analysis.indicators?.rsi?.status?.includes('OVERSOLD') ? 'badge-success' : analysis.indicators?.rsi?.status?.includes('OVERBOUGHT') ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
+                                            {isRtl ? analysis.indicators?.rsi?.statusHe : analysis.indicators?.rsi?.status}
                                         </span>
                                     </div>
                                     <div style={{ fontSize: '2.1rem', fontWeight: 800, margin: '10px 0', display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                                        {analysis.indicators.rsi?.value.toFixed(1)}
+                                        {typeof analysis.indicators?.rsi?.value === 'number' ? analysis.indicators.rsi.value.toFixed(1) : '—'}
                                         <span style={{ fontSize: '0.8rem', fontWeight: 400, color: '#64748b' }}>/ 100</span>
                                     </div>
                                     {/* Slider Bar for RSI indicator value */}
@@ -328,7 +328,7 @@ export function AnalyzerPage() {
                                         {/* Oversold Limit Overlay */}
                                         <div style={{ position: 'absolute', left: 0, width: '30%', height: '100%', background: 'rgba(34, 197, 94, 0.08)', borderRight: '1px dashed rgba(34, 197, 94, 0.3)' }}></div>
                                         {/* Position Pointer Bar */}
-                                        <div style={{ position: 'absolute', left: `${analysis.indicators.rsi?.value}%`, transform: 'translateX(-50%)', top: 0, width: 4, height: '100%', background: '#fff', boxShadow: '0 0 6px #fff' }}></div>
+                                        <div style={{ position: 'absolute', left: `${typeof analysis.indicators?.rsi?.value === 'number' ? analysis.indicators.rsi.value : 0}%`, transform: 'translateX(-50%)', top: 0, width: 4, height: '100%', background: '#fff', boxShadow: '0 0 6px #fff' }}></div>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#64748b', marginTop: 6 }}>
                                         <span>30 ({isRtl ? 'תחתון' : 'Oversold'})</span>
@@ -340,23 +340,23 @@ export function AnalyzerPage() {
                                 <div className="card" style={{ background: 'rgba(30, 41, 59, 0.45)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: 16 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                         <span style={{ fontWeight: 700, color: '#94a3b8', fontSize: '0.85rem' }}>MACD (12, 26, 9)</span>
-                                        <span className={`badge ${analysis.indicators.macd && analysis.indicators.macd.status === 'BULLISH' ? 'badge-success' : analysis.indicators.macd && analysis.indicators.macd.status === 'BEARISH' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
+                                        <span className={`badge ${analysis.indicators?.macd?.status === 'BULLISH' ? 'badge-success' : analysis.indicators?.macd?.status === 'BEARISH' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
                                             {isRtl ? analysis.indicators.macd?.statusHe : analysis.indicators.macd?.status}
                                         </span>
                                     </div>
                                     <div style={{ marginTop: 8 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                                             <span style={{ color: '#94a3b8' }}>MACD Line:</span>
-                                            <span style={{ fontWeight: 600 }}>{analysis.indicators.macd?.macdLine.toFixed(5)}</span>
+                                            <span style={{ fontWeight: 600 }}>{typeof analysis.indicators?.macd?.macdLine === 'number' ? analysis.indicators.macd.macdLine.toFixed(5) : '—'}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                                             <span style={{ color: '#94a3b8' }}>Signal Line:</span>
-                                            <span style={{ fontWeight: 600 }}>{analysis.indicators.macd?.signalLine.toFixed(5)}</span>
+                                            <span style={{ fontWeight: 600 }}>{typeof analysis.indicators?.macd?.signalLine === 'number' ? analysis.indicators.macd.signalLine.toFixed(5) : '—'}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0' }}>
                                             <span style={{ color: '#94a3b8' }}>Histogram:</span>
-                                            <span style={{ fontWeight: 700, color: analysis.indicators.macd && analysis.indicators.macd.hist >= 0 ? '#4ade80' : '#f87171' }}>
-                                                {analysis.indicators.macd?.hist.toFixed(5)}
+                                            <span style={{ fontWeight: 700, color: (analysis.indicators?.macd?.hist ?? 0) >= 0 ? '#4ade80' : '#f87171' }}>
+                                                {typeof analysis.indicators?.macd?.hist === 'number' ? analysis.indicators.macd.hist.toFixed(5) : '—'}
                                             </span>
                                         </div>
                                     </div>
@@ -366,7 +366,7 @@ export function AnalyzerPage() {
                                 <div className="card" style={{ background: 'rgba(30, 41, 59, 0.45)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: 16 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                         <span style={{ fontWeight: 700, color: '#94a3b8', fontSize: '0.85rem' }}>{isRtl ? 'ממוצעים נעים (MA)' : 'Moving Averages'}</span>
-                                        <span className={`badge ${analysis.indicators.sma && analysis.indicators.sma.status === 'BULLISH' ? 'badge-success' : analysis.indicators.sma && analysis.indicators.sma.status === 'BEARISH' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
+                                        <span className={`badge ${analysis.indicators?.sma?.status === 'BULLISH' ? 'badge-success' : analysis.indicators?.sma?.status === 'BEARISH' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
                                             {isRtl ? analysis.indicators.sma?.statusHe : analysis.indicators.sma?.status}
                                         </span>
                                     </div>
@@ -374,13 +374,13 @@ export function AnalyzerPage() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                                             <span style={{ color: '#94a3b8' }}>SMA 20:</span>
                                             <span style={{ fontWeight: 600, color: analysis.price > (analysis.indicators.sma?.sma20 || 0) ? '#4ade80' : '#f87171' }}>
-                                                ${analysis.indicators.sma?.sma20.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                                                {typeof analysis.indicators?.sma?.sma20 === 'number' ? `$${analysis.indicators.sma.sma20.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` : '—'}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '6px 0' }}>
                                             <span style={{ color: '#94a3b8' }}>SMA 50:</span>
                                             <span style={{ fontWeight: 600, color: analysis.price > (analysis.indicators.sma?.sma50 || 0) ? '#4ade80' : '#f87171' }}>
-                                                ${analysis.indicators.sma?.sma50.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                                                {typeof analysis.indicators?.sma?.sma50 === 'number' ? `$${analysis.indicators.sma.sma50.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` : '—'}
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 10, textAlign: 'center', fontStyle: 'italic' }}>
@@ -393,22 +393,22 @@ export function AnalyzerPage() {
                                 <div className="card" style={{ background: 'rgba(30, 41, 59, 0.45)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: 16 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                         <span style={{ fontWeight: 700, color: '#94a3b8', fontSize: '0.85rem' }}>Bollinger Bands (20, 2)</span>
-                                        <span className={`badge ${analysis.indicators.bb && analysis.indicators.bb.status.includes('OVERSOLD') ? 'badge-success' : analysis.indicators.bb && analysis.indicators.bb.status.includes('OVERBOUGHT') ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
-                                            {isRtl ? analysis.indicators.bb?.statusHe : analysis.indicators.bb?.status}
+                                        <span className={`badge ${analysis.indicators?.bb?.status?.includes('OVERSOLD') ? 'badge-success' : analysis.indicators?.bb?.status?.includes('OVERBOUGHT') ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.65rem' }}>
+                                            {isRtl ? analysis.indicators?.bb?.statusHe : analysis.indicators?.bb?.status}
                                         </span>
                                     </div>
                                     <div style={{ marginTop: 8 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                                             <span style={{ color: '#94a3b8' }}>Upper Band (Resistance):</span>
-                                            <span style={{ fontWeight: 600 }}>${analysis.indicators.bb?.upper.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</span>
+                                            <span style={{ fontWeight: 600 }}>{typeof analysis.indicators?.bb?.upper === 'number' ? `$${analysis.indicators.bb.upper.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` : '—'}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                                             <span style={{ color: '#94a3b8' }}>Middle Band (Basis):</span>
-                                            <span style={{ fontWeight: 600 }}>${analysis.indicators.bb?.middle.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</span>
+                                            <span style={{ fontWeight: 600 }}>{typeof analysis.indicators?.bb?.middle === 'number' ? `$${analysis.indicators.bb.middle.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` : '—'}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '5px 0' }}>
                                             <span style={{ color: '#94a3b8' }}>Lower Band (Support):</span>
-                                            <span style={{ fontWeight: 600 }}>${analysis.indicators.bb?.lower.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</span>
+                                            <span style={{ fontWeight: 600 }}>{typeof analysis.indicators?.bb?.lower === 'number' ? `$${analysis.indicators.bb.lower.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}` : '—'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -420,7 +420,7 @@ export function AnalyzerPage() {
                                     {isRtl ? 'פירוט איתות טכני והסבר אסטרטגיה' : 'Detailed Technical Analysis breakdown'}
                                 </h4>
                                 <ul style={{ margin: 0, paddingInlineStart: 20, display: 'flex', flexDirection: 'column', gap: 10, lineHeight: 1.5 }}>
-                                    {(isRtl ? analysis.explanationsHe : analysis.explanationsEn).map((exp, idx) => (
+                                    {(Array.isArray(isRtl ? analysis.explanationsHe : analysis.explanationsEn) ? (isRtl ? analysis.explanationsHe : analysis.explanationsEn) : []).map((exp, idx) => (
                                         <li key={idx} style={{ color: '#e2e8f0', fontSize: '0.9rem' }}>
                                             {exp}
                                         </li>

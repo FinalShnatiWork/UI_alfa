@@ -3,6 +3,7 @@ package com.brokerui.market;
 import com.brokerui.broker.MT5IntegrationService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,9 +12,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class MarketPriceService {
+    private static final long CACHE_TTL_MS = 1500;
+
     private final MT5IntegrationService mt5;
     private final YahooFinanceService yahoo;
     private final BinanceService binance;
+    private final ConcurrentHashMap<String, CachedQuote> cache = new ConcurrentHashMap<>();
+
+    private record CachedQuote(double price, long fetchedAtMs) {}
 
     /**
      * Constructs the MarketPriceService with required data adapters.
@@ -37,7 +43,20 @@ public class MarketPriceService {
      */
     public double getLivePrice(String symbol) {
         String sym = symbol == null ? "" : symbol.trim().toUpperCase();
+        if (sym.isEmpty()) return 0.0;
 
+        long now = System.currentTimeMillis();
+        CachedQuote cached = cache.get(sym);
+        if (cached != null && now - cached.fetchedAtMs() < CACHE_TTL_MS) {
+            return cached.price();
+        }
+
+        double price = fetchLivePriceUncached(sym);
+        cache.put(sym, new CachedQuote(price, now));
+        return price;
+    }
+
+    private double fetchLivePriceUncached(String sym) {
         // 0. Try Binance for crypto
         if (isCrypto(sym)) {
             try {

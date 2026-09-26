@@ -82,8 +82,6 @@ export function SettingsPage() {
   const { data: prefs, isLoading: prefsLoading } = usePreferences();
   const { mutate: savePrefs } = useSavePreferences();
 
-  const [twofa, setTwofa] = useState(true);
-  const [biometric, setBiometric] = useState(false);
   const [pushNotif, setPushNotif] = useState(true);
   const [emailReports, setEmailReports] = useState(true);
   const [theme, setThemeState] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
@@ -91,8 +89,6 @@ export function SettingsPage() {
   // Hydrate from DB once loaded
   useEffect(() => {
     if (!prefs) return;
-    if ('twofa' in prefs) setTwofa(prefs.twofa === 'true');
-    if ('biometric' in prefs) setBiometric(prefs.biometric === 'true');
     if ('pushNotif' in prefs) setPushNotif(prefs.pushNotif === 'true');
     if ('emailReports' in prefs) setEmailReports(prefs.emailReports === 'true');
     if ('theme' in prefs) {
@@ -136,7 +132,7 @@ export function SettingsPage() {
   }
 
   function handleChangePassword() {
-    toast.show(t('alerts.passwordEmail'), { variant: 'info' });
+    toast.show(t('alerts.comingSoon'), { variant: 'info' });
   }
 
   return (
@@ -163,15 +159,17 @@ export function SettingsPage() {
             <>
               <ToggleRow
                 label={t('settings.twofa')}
-                description={t('settings.twofaDesc')}
-                checked={twofa}
-                onChange={handleToggle('twofa', setTwofa)}
+                description={t('settings.unavailable')}
+                checked={false}
+                onChange={() => undefined}
+                disabled
               />
               <ToggleRow
                 label={t('settings.biometric')}
-                description={t('settings.biometricDesc')}
-                checked={biometric}
-                onChange={handleToggle('biometric', setBiometric)}
+                description={t('settings.unavailable')}
+                checked={false}
+                onChange={() => undefined}
+                disabled
                 borderBottom={false}
               />
             </>

@@ -54,7 +54,7 @@ export function AccountPage() {
       : t('account.uid');
 
   const handleEdit = () => {
-    toast.show(t('alerts.editProfile'), { variant: 'info' });
+    toast.show(t('alerts.comingSoon'), { variant: 'info' });
   };
 
   const handleLogout = () => {

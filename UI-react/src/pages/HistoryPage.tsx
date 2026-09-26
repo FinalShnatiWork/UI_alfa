@@ -208,7 +208,8 @@ export function HistoryPage() {
         </div>
 
         {/* Table */}
-        <table style={{ marginTop: 24 }}>
+        <div className="table-scroll">
+        <table className="table-compact" style={{ marginTop: 8 }}>
           <thead>
             <tr>
               <th style={{ width: 40 }}>#</th>
@@ -283,6 +284,7 @@ export function HistoryPage() {
             </tfoot>
           )}
         </table>
+        </div>
       </div>
     </>
   );

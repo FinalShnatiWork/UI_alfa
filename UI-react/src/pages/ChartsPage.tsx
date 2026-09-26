@@ -271,6 +271,7 @@ export function ChartsPage() {
   const synthTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionOpenPriceRef = useRef<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [searchParams] = useSearchParams();
   const paramSymbol = searchParams.get('symbol');
@@ -492,6 +493,7 @@ export function ChartsPage() {
 
   function stopLive() {
     sessionOpenPriceRef.current = null;
+    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     if (wsRef.current) { try { wsRef.current.close(); } catch { /* */ } wsRef.current = null; }
     if (stockPollRef.current) { clearInterval(stockPollRef.current); stockPollRef.current = null; }
     if (synthTickRef.current) { clearInterval(synthTickRef.current); synthTickRef.current = null; }
@@ -526,10 +528,16 @@ export function ChartsPage() {
     const spread = close * 0.00015;
     setBidAsk(t('charts.bidAskFormatted', { bid: (close - spread).toFixed(d), ask: (close + spread).toFixed(d) }));
     setLivePrice(close > 100 ? close.toFixed(2) : close.toFixed(d));
-    if (sessionOpenPriceRef.current == null) sessionOpenPriceRef.current = close;
-    const pct = ((close - sessionOpenPriceRef.current) / sessionOpenPriceRef.current) * 100;
-    setLiveChange(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
-    setLiveChangePct(pct);
+    if (sessionOpenPriceRef.current == null && close !== 0) sessionOpenPriceRef.current = close;
+    const open = sessionOpenPriceRef.current;
+    if (open == null || open === 0) {
+      setLiveChange('—');
+      setLiveChangePct(0);
+    } else {
+      const pct = ((close - open) / open) * 100;
+      setLiveChange(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
+      setLiveChangePct(pct);
+    }
     // Keep live price map updated so positions table reflects chart feed
     setChartLivePrices(prev => ({ ...prev, [instr.id.toUpperCase()]: close }));
   }
@@ -596,7 +604,11 @@ export function ChartsPage() {
         ws.onclose = () => {
           if (gen !== liveGenRef.current || wsRef.current !== ws) return;
           wsRef.current = null;
-          setTimeout(() => { if (gen === liveGenRef.current) void loadChart(cat, sym, iv); }, 2500);
+          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (gen === liveGenRef.current) void loadChart(cat, sym, iv);
+          }, 2500);
         };
       } else {
         let realPrice: number | null = null;
@@ -680,20 +692,12 @@ export function ChartsPage() {
     debounceRef.current = setTimeout(() => { void loadChart(cat, sym, iv); }, 250);
   }
 
-  // Initial load + reload on state change
+  // Initial load + reload when the chart is ready or the symbol/interval changes
   useEffect(() => {
-    if (seriesRef.current) debouncedLoad(category, symbol, interval);
+    if (!isChartReady || !seriesRef.current) return;
+    debouncedLoad(category, symbol, interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, symbol, interval]);
-
-  // When chart becomes ready after mount, trigger first load
-  const chartReadyRef = useRef(false);
-  useEffect(() => {
-    if (seriesRef.current && !chartReadyRef.current) {
-      chartReadyRef.current = true;
-      debouncedLoad(category, symbol, interval);
-    }
-  });
+  }, [isChartReady, category, symbol, interval]);
 
   // chartLivePrices is updated inside tickPrice (every 500ms) for the active chart symbol.
   // All other position symbols get live prices through queryLivePrices (useLivePrices hook),

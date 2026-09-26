@@ -51,8 +51,9 @@ class MarginLoanServiceLiquidationTest {
     notificationRepo = mock(NotificationRepository.class);
     priceService = mock(MarketPriceService.class);
     auditLogService = mock(AuditLogService.class);
+    AccountTransactionRepository txRepo = mock(AccountTransactionRepository.class);
     service = new MarginLoanService(accountRepo, positionRepo, orderRepo, ledgerRepo,
-        notificationRepo, priceService, auditLogService);
+        notificationRepo, txRepo, priceService, auditLogService);
 
     livePositions = new ArrayList<>(initialPositions);
     livePrices = new HashMap<>();
@@ -78,6 +79,16 @@ class MarginLoanServiceLiquidationTest {
     p.setAvgPrice(avg);
     p.setOpenedAt(Instant.now());
     return p;
+  }
+
+  /** Mirrors {@link MarginLoanService#repaySettlementOrBorrow} for a single settlement. */
+  private static BigDecimal debtAfterSettle(BigDecimal startDebt, BigDecimal startBal, BigDecimal amount) {
+    if (amount.compareTo(BigDecimal.ZERO) > 0) {
+      return startDebt.subtract(amount.min(startDebt));
+    }
+    BigDecimal loss = amount.abs();
+    if (startBal.compareTo(loss) >= 0) return startDebt;
+    return startDebt.add(loss.subtract(startBal));
   }
 
   private static TradingAccount account(BigDecimal balance, BigDecimal debt, int leverage) {
@@ -112,11 +123,14 @@ class MarginLoanServiceLiquidationTest {
       return null;
     }).when(positionRepo).delete(any(Position.class));
 
+    PositionCloseMath.Snapshot firstClose = PositionCloseMath.compute(posA, ta, new BigDecimal("50"));
+    BigDecimal expectedDebt = debtAfterSettle(new BigDecimal("10"), BigDecimal.ZERO, firstClose.settlement());
+
     service.liquidateAccount(1L);
 
     assertFalse(livePositions.contains(posA), "the worst position should have been closed");
     assertTrue(livePositions.contains(posB), "recovery should stop the liquidation before touching the 2nd position");
-    assertEquals(0, ta.getBorrowedBalance().compareTo(new BigDecimal("59")),
+    assertEquals(0, ta.getBorrowedBalance().compareTo(expectedDebt),
         "remaining debt must NOT be forgiven once margin level recovers — got " + ta.getBorrowedBalance());
   }
 

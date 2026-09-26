@@ -107,19 +107,21 @@ export function DashboardPage() {
     return sum + Number(order.realizedPnl);
   }, 0);
 
-  const nowMs = Date.now();
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todayStartMs = startOfToday.getTime();
   const todayRealizedPnl = history.reduce((sum, order) => {
     if (order.realizedPnl == null) return sum;
     const dateToCheck = order.filledAt || order.createdAt;
     if (!dateToCheck) return sum;
     const orderMs = new Date(dateToCheck).getTime();
-    const isToday = (nowMs - orderMs) <= ONE_DAY_MS;
-    return sum + (isToday ? Number(order.realizedPnl) : 0);
+    if (Number.isNaN(orderMs) || orderMs < todayStartMs) return sum;
+    return sum + Number(order.realizedPnl);
   }, 0);
 
   const liveEquity = rawBalance + livePnl;
-  const liveFreeMargin = liveEquity - rawMarginUsed;
+  const backendFreeMargin = Number(overview?.freeMargin ?? rawBalance);
+  const liveFreeMargin = backendFreeMargin;
 
   const balance = overview ? fmtMoney(rawBalance, currency) : '—';
   const equity = overview ? fmtMoney(liveEquity, currency) : '—';
@@ -635,12 +637,12 @@ export function DashboardPage() {
           </Link>
         </div>
 
-        <div style={{
+        <div className="table-scroll" style={{
           maxHeight: positions.length > 6 ? 340 : undefined,
           overflowY: positions.length > 6 ? 'auto' : undefined,
           borderRadius: 16,
         }}>
-        <table>
+        <table className="table-compact">
           <thead style={{ position: positions.length > 6 ? 'sticky' : undefined, top: 0, zIndex: 1 }}>
             <tr>
               <th>{t('table.symbol')}</th>
@@ -683,7 +685,7 @@ export function DashboardPage() {
                           {fmtPrice(livePrice)}
                         </span>
                       ) : (
-                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>loading…</span>
+                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>{t('common.loading')}</span>
                       )}
                     </td>
                     <td className={`font-bold dir-ltr ${pnlPos >= 0 ? 'text-success' : 'text-danger'}`}>

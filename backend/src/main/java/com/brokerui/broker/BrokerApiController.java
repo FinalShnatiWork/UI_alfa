@@ -188,13 +188,27 @@ public class BrokerApiController {
     tx.setCurrency(ta.getCurrency());
     tx.setStatus("APPROVED");
     tx.setProcessedAt(Instant.now());
+    Object rawMethod = body.get("method");
+    if (rawMethod != null) {
+      String method = String.valueOf(rawMethod).trim();
+      if (method.length() > 32) method = method.substring(0, 32);
+      if (!method.isEmpty()) tx.setMethod(method);
+    }
+    Object rawNote = body.get("note");
+    if (rawNote != null) {
+      String note = String.valueOf(rawNote).trim();
+      if (note.length() > 2000) note = note.substring(0, 2000);
+      if (!note.isEmpty()) tx.setNote(note);
+    }
     txRepo.save(tx);
 
     if ("DEPOSIT".equals(type))
       ta.setBalance(ta.getBalance().add(amount));
     else
       ta.setBalance(ta.getBalance().subtract(amount));
-    ta.setEquity(ta.getBalance());
+    // Equity is balance + floating P/L everywhere else; writing bare cash here made the
+    // stored column disagree with the account's real value until the next trade.
+    ta.setEquity(recalcEquity(ta));
     accountRepo.save(ta);
 
     auditLogService.log(u, type, type + " " + amount + " " + ta.getCurrency(), request);
@@ -669,30 +683,15 @@ public class BrokerApiController {
       return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
     }
 
-    BigDecimal bdPrice = BigDecimal.valueOf(price);
-    BigDecimal qty = pos.getQuantity();
-    BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
-    boolean isShort = "SHORT".equals(pos.getSide());
-
-    BigDecimal contractSize = getContractSize(pos.getSymbolCode());
-    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-    BigDecimal marginReturned = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-
-    BigDecimal grossPnl;
-    if (isShort) {
-      // SHORT close: profit = (avgEntry - closePrice) * qty * contractSize
-      grossPnl = avg.subtract(bdPrice).multiply(qty).multiply(contractSize);
-    } else {
-      // LONG close: profit = (closePrice - avgEntry) * qty * contractSize
-      grossPnl = bdPrice.subtract(avg).multiply(qty).multiply(contractSize);
-    }
-    String closeSide = isShort ? "BUY" : "SELL";
-
-    BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
-    BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, bdPrice);
-    closeCommission = TradingFees.applyProfitSafetyGuard(openCommission, closeCommission, grossPnl);
-    BigDecimal totalFees = openCommission.add(closeCommission);
-    BigDecimal netPnl = grossPnl.subtract(totalFees);
+    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, BigDecimal.valueOf(price));
+    BigDecimal bdPrice = close.closePrice();
+    BigDecimal qty = close.quantity();
+    boolean isShort = close.shortPosition();
+    String closeSide = close.closeSide();
+    BigDecimal grossPnl = close.grossPnl();
+    BigDecimal closeCommission = close.closeCommission();
+    BigDecimal totalFees = close.totalFees();
+    BigDecimal netPnl = close.netPnl();
 
     BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, netPnl);
     order.setOpenPrice(pos.getAvgPrice());
@@ -708,7 +707,7 @@ public class BrokerApiController {
     closeFeeTx.setProcessedAt(Instant.now());
     txRepo.save(closeFeeTx);
 
-    marginLoanService.repaySettlementOrBorrow(ta, marginReturned.add(grossPnl).subtract(order.getCommission()));
+    marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
 
     positionRepo.delete(pos);
     ta.setEquity(recalcEquity(ta));
@@ -824,7 +823,7 @@ public class BrokerApiController {
         BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
         BigDecimal refund = reservePrice.multiply(order.getQuantity()).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
         marginLoanService.repaySettlementOrBorrow(ta, refund);
-        ta.setEquity(ta.getBalance());
+        ta.setEquity(recalcEquity(ta));
         // Prepaid-margin model: free cash is the remaining balance (margin already deducted).
         ta.setFreeMargin(ta.getBalance());
         accountRepo.save(ta);

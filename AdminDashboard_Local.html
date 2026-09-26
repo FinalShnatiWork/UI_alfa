@@ -112,7 +112,12 @@
     .scroll-area {
       flex: 1;
       padding: 40px;
-      overflow-y: auto;
+      overflow: auto;
+    }
+    .table-scroll {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .card {
@@ -132,9 +137,9 @@
     .card-title { font-size: 1.25rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 10px; }
 
     /* Tables */
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 15px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
-    td { padding: 18px 15px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 0.95rem; }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 0.85rem; }
 
     .badge { padding: 5px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
     .badge-success { background: rgba(35, 209, 96, 0.1); color: var(--success); }
@@ -147,8 +152,8 @@
     /* Overview stat cards */
     .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 28px; }
     .stat-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 14px; padding: 22px 20px; box-sizing: border-box; overflow: hidden; }
-    .stat-card .sc-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .stat-card .sc-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-card .sc-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+    .stat-card .sc-value { font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
     .stat-card .sc-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
 
     /* Inner tabs (for Trades) */
@@ -364,8 +369,8 @@
           <div class="stat-card"><div class="sc-label">Internal Cross Rate</div><div class="sc-value" id="ov-internal-rate" style="color:#a78bfa">–</div><div class="sc-sub">AI Local Crossing %</div></div>
           <div class="stat-card"><div class="sc-label">Commission Collected</div><div class="sc-value" id="ov-total-commission" style="color:var(--primary)">–</div><div class="sc-sub">Real, charged to client balances</div></div>
           <div class="stat-card"><div class="sc-label">Fees Saved (Internal)</div><div class="sc-value" id="ov-total-saved" style="color:var(--success)">–</div><div class="sc-sub">Commission on AI-matched trades</div></div>
-          <div class="stat-card"><div class="sc-label">B-Book Client Losses</div><div class="sc-value" id="ov-bbook-profit" style="color:var(--success)">–</div><div class="sc-sub">Client realized losses + Spread</div></div>
-          <div class="stat-card"><div class="sc-label">Total Broker Profit</div><div class="sc-value" id="ov-total-profit" style="color:var(--success)">–</div><div class="sc-sub">Realized PNL (Commissions + B-Book)</div></div>
+          <div class="stat-card"><div class="sc-label">B-Book Client Losses</div><div class="sc-value" id="ov-bbook-profit" style="color:var(--success)">–</div><div class="sc-sub">−sum of client closed net P/L (fees already inside)</div></div>
+          <div class="stat-card"><div class="sc-label">Total Broker Profit</div><div class="sc-value" id="ov-total-profit" style="color:var(--success)">–</div><div class="sc-sub">Same as B-Book: local book, no double-counted fees</div></div>
         </div>
         
         <div class="card" style="border-color: rgba(0,200,255,0.3);">
@@ -405,6 +410,7 @@
           <div class="table-toolbar">
             <input type="text" id="users-search" placeholder="Search by name or email…" oninput="renderUsersTable()">
           </div>
+          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -420,6 +426,7 @@
             </thead>
             <tbody id="table-users-body"></tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -439,6 +446,7 @@
               <option value="EXTERNAL">External (MT5)</option>
             </select>
           </div>
+          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -456,6 +464,7 @@
             </thead>
             <tbody id="table-trades-body"></tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -463,6 +472,7 @@
       <div id="tab-finance" class="tab-content" style="display:none;">
         <div class="card">
           <div class="card-header"><h3 class="card-title">Accounts Balance</h3></div>
+          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -481,6 +491,7 @@
             </thead>
             <tbody id="table-accounts-body"></tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -489,6 +500,7 @@
         <div class="card">
           <div class="card-header"><h3 class="card-title">Deposits &amp; Withdrawals</h3></div>
           <div class="tx-summary" id="tx-summary-bar"></div>
+          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -503,6 +515,7 @@
             </thead>
             <tbody id="table-transactions-body"></tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -550,6 +563,7 @@
               <option value="LIQUIDATION">Liquidation</option>
             </select>
           </div>
+          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -565,6 +579,7 @@
             </thead>
             <tbody id="table-creditline-body"></tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -597,6 +612,7 @@
             <span id="audit-count" style="color:var(--text-muted);font-size:0.83rem;margin-left:auto"></span>
           </div>
 
+          <div class="table-scroll">
           <table>
             <thead>
               <tr>
@@ -610,6 +626,7 @@
             </thead>
             <tbody id="table-audit-body"></tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -827,19 +844,13 @@
       const totalCommission = allOrders.reduce((s, t) => s + Number(t.commission || 0), 0);
       const feesSaved = internalOrders.reduce((s, t) => s + Number(t.commission || 0), 0);
       
-      // B-Book Profit is -sum(realizedPnl). If client realizedPnl is negative (loss), B-Book profit is positive.
-      // Note: realizedPnl includes commissions! So -sum(realizedPnl) is the exact net profit from closed trades.
+      // Every fill is still booked on this platform (EXTERNAL only notifies MT5), so
+      // broker book P/L = -sum(client realizedPnl). That number already includes the
+      // open+close commissions of those closed trades. Adding commissions from FILLED
+      // opening legs (realizedPnl === 0) on top double-counted the open fee.
       const closedOrders = allOrders.filter(t => t.realizedPnl != null && Number(t.realizedPnl) !== 0);
       const bBookProfit = -1 * closedOrders.reduce((s, t) => s + Number(t.realizedPnl || 0), 0);
-      
-      // Total Broker Profit = Net Profit from closed trades (-sum(realizedPnl)) + commissions collected from OPEN trades.
-      // Since totalCommission includes ALL commissions, we need to subtract the commissions of CLOSED trades 
-      // (which are already baked into realizedPnl) to avoid double counting if we want true total profit.
-      // But actually, -sum(realizedPnl) = -sum(grossPnl) + sum(commissions_of_closed_trades).
-      // So -sum(realizedPnl) is already the total net profit from all closed trades!
-      // Add commissions of OPEN trades to get true total realized + unrealized commission profit.
-      const openTradesComm = allOrders.filter(t => t.realizedPnl == null || Number(t.realizedPnl) === 0).reduce((s, t) => s + Number(t.commission || 0), 0);
-      const totalBrokerProfit = bBookProfit + openTradesComm;
+      const totalBrokerProfit = bBookProfit;
 
       document.getElementById('ov-internal-rate').innerText = internalRate;
       document.getElementById('ov-total-commission').innerText = '$' + totalCommission.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});

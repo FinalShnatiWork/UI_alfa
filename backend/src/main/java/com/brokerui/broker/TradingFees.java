@@ -21,11 +21,9 @@ public final class TradingFees {
   public static final BigDecimal COMMISSION_PER_TRADE = new BigDecimal("1.50");
 
   /**
-   * Dynamically calculates commission for a trade based on notional value, asset class tier, and value caps.
-   * <p>
-   * Formula:
-   * Base Fee ($1.00) + (Price * Quantity * ContractSize * 0.0002 * AssetMultiplier)
-   * Subject to minimum $1.00 and maximum $25.00 cap to ensure high broker profitability while preserving client value.
+   * Dynamically calculates commission for a trade as 0.0025% (2.5 bps) of notional value
+   * ({@code price × quantity × contractSize}), floored at $0.10 and capped at $50.00.
+   * Falls back to {@link #COMMISSION_PER_TRADE} when quantity or price is missing/non-positive.
    *
    * @param symbolCode the asset symbol code
    * @param quantity trade volume / quantity

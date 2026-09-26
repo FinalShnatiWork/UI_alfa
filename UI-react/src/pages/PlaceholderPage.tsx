@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useI18n } from '@/hooks/useI18n';
 
 interface Props {
   title?: string;
@@ -11,16 +12,17 @@ interface Props {
  * @returns 404 page element
  */
 export function PlaceholderPage({ title }: Props) {
+  const { t } = useI18n();
   return (
     <div className="container" style={{ maxWidth: 600, marginTop: 80 }}>
       <div className="card text-center" style={{ padding: '48px 32px' }}>
         <div style={{ fontSize: '4rem', marginBottom: 16 }}>🔍</div>
-        <h2 style={{ marginBottom: 8 }}>{title ?? 'Page Not Found'}</h2>
+        <h2 style={{ marginBottom: 8 }}>{title ?? t('notFound.title')}</h2>
         <p style={{ color: 'var(--text-secondary)', marginTop: 12, fontSize: '0.95rem' }}>
-          The page you are looking for does not exist or has been moved.
+          {t('notFound.body')}
         </p>
         <Link to="/dashboard" className="btn btn-primary" style={{ marginTop: 24, display: 'inline-block' }}>
-          Go to Dashboard
+          {t('notFound.back')}
         </Link>
       </div>
     </div>

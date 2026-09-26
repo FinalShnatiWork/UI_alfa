@@ -7,8 +7,7 @@ import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
 import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder } from '@/hooks/useApi';
 import type { Position, BrokerOrder } from '@/types/api';
-import { pairOrders, tsMs } from '@/lib/tradeUtils';
-import type { PairedTrade } from '@/lib/tradeUtils';
+import { pairOrders } from '@/lib/tradeUtils';
 
 type Tab = 'open' | 'closed' | 'pending';
 
@@ -202,7 +201,8 @@ export function PositionsPage() {
 
         {/* ── OPEN POSITIONS ── */}
         {tab === 'open' && (
-          <table>
+          <div className="table-scroll">
+          <table className="table-compact">
             <thead>
               <tr>
                 <th>{t('table.symbol')}</th>
@@ -235,9 +235,9 @@ export function PositionsPage() {
                       <td className="font-bold">{p.symbolCode}</td>
                       <td>
                         {p.side === 'SHORT' ? (
-                          <span className="badge badge-danger">{t('badge.sell')}</span>
+                          <span className="badge badge-danger">{t('badge.short')}</span>
                         ) : (
-                          <span className="badge badge-success">{t('badge.buy')}</span>
+                          <span className="badge badge-success">{t('badge.long')}</span>
                         )}
                       </td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(qty)}</td>
@@ -301,11 +301,13 @@ export function PositionsPage() {
               );
             })()}
           </table>
+          </div>
         )}
 
         {/* ── CLOSED TRADES (paired BUY+SELL) ── */}
         {tab === 'closed' && (
-          <table>
+          <div className="table-scroll">
+          <table className="table-compact">
             <thead>
               <tr>
                 <th style={{ width: 40 }}>#</th>
@@ -353,11 +355,13 @@ export function PositionsPage() {
               )}
             </tbody>
           </table>
+          </div>
         )}
 
         {/* ── PENDING ORDERS ── */}
         {tab === 'pending' && (
-          <table>
+          <div className="table-scroll">
+          <table className="table-compact">
             <thead>
               <tr>
                 <th style={{ width: 40 }}>#</th>
@@ -418,6 +422,7 @@ export function PositionsPage() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </>

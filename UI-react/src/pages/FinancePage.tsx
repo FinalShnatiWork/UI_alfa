@@ -21,7 +21,9 @@ function fmtMoney(n: unknown, currency = 'USD'): string {
 function fmtTime(iso: string | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  if (Number.isNaN(d.getTime())) return '—';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 interface TxModalProps {
@@ -208,7 +210,10 @@ export function FinancePage() {
   const currency = overview?.currency || 'USD';
   const available = overview ? fmtMoney(overview.balance, currency) : '$0.00';
 
-  const transactions = Array.isArray(txData) ? txData.slice(0, 50) : [];
+  const transactions = (Array.isArray(txData) ? txData : []).filter((r) => {
+    const typ = (r.txType || '').toUpperCase();
+    return typ === 'DEPOSIT' || typ === 'WITHDRAWAL';
+  }).slice(0, 50);
   const pendingSum = transactions
     .filter((r) => r.txType.toUpperCase() === 'WITHDRAWAL' && r.status.toUpperCase() === 'PENDING')
     .reduce((s, r) => s + Number(r.amount ?? 0), 0);
@@ -256,7 +261,7 @@ export function FinancePage() {
         />
       )}
 
-      <div className="container mt-20" style={{ maxWidth: 800 }}>
+      <div className="container mt-20" style={{ maxWidth: 1100 }}>
         <div className="stats-grid mb-20" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="card stat-card mb-0">
             <div className="label" style={{ color: 'var(--text-secondary)' }}>
@@ -299,8 +304,8 @@ export function FinancePage() {
 
         <div className="text-left" style={{ marginTop: 40 }}>
           <h3 className="mb-20 text-xl font-bold">{t('finance.ledger')}</h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="mt-20">
+          <div className="table-scroll">
+            <table className="table-compact">
               <thead>
                 <tr>
                   <th>{t('table.dateTime')}</th>
@@ -308,7 +313,6 @@ export function FinancePage() {
                   <th>{t('table.amount')}</th>
                   <th>{t('table.method')}</th>
                   <th>{t('table.status')}</th>
-                  <th>{t('table.ref')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -316,8 +320,8 @@ export function FinancePage() {
                   <SkeletonRow />
                 ) : transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-muted text-sm" style={{ padding: 20, textAlign: 'center' }}>
-                      {t('alerts.comingSoon')}
+                    <td colSpan={5} className="text-muted text-sm" style={{ padding: 20, textAlign: 'center' }}>
+                      {t('finance.noTransactions')}
                     </td>
                   </tr>
                 ) : (
@@ -331,12 +335,13 @@ export function FinancePage() {
                         : statusUpper === 'PENDING'
                           ? 'badge-warning'
                           : 'badge-danger';
+                    const typeLabel = isDeposit ? t('finance.depositType') : t('finance.withdrawType');
 
                     return (
                       <tr key={r.id}>
                         <td>{fmtTime(r.createdAt)}</td>
                         <td className={`font-bold ${isDeposit ? 'text-success' : 'text-danger'}`}>
-                          {r.txType}
+                          {typeLabel}
                         </td>
                         <td className="font-bold">
                           {isDeposit ? '+' : '-'}{fmtMoney(amt, currency)}
@@ -350,7 +355,6 @@ export function FinancePage() {
                             {r.status}
                           </span>
                         </td>
-                        <td className="text-sm dir-ltr">tx-{r.id}</td>
                       </tr>
                     );
                   })
@@ -385,8 +389,8 @@ export function FinancePage() {
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
                 {t('finance.creditHistoryDesc')}
               </p>
-              <div style={{ overflowX: 'auto' }}>
-                <table>
+              <div className="table-scroll">
+                <table className="table-compact">
                   <thead>
                     <tr>
                       <th>{t('table.dateTime')}</th>
@@ -433,7 +437,7 @@ export function FinancePage() {
                           <td style={{ fontVariantNumeric: 'tabular-nums' }}>
                             {fmtMoney(Number(entry.balanceAfter ?? 0), currency)}
                           </td>
-                          <td className="text-sm" style={{ color: 'var(--text-secondary)', maxWidth: 220, whiteSpace: 'normal' }}>
+                          <td className="text-sm wrap" style={{ color: 'var(--text-secondary)', maxWidth: 280 }}>
                             {entry.note ?? '—'}
                           </td>
                         </tr>
