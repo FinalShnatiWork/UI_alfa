@@ -161,15 +161,27 @@ Implementation: `MarginLoanService.java` — Admin panel → **Credit Line** tab
 
 ---
 
-## Trade Commission & AI Routing
+## Trade Commission & Netting
 
 Every order fill charges a dynamic commission based on symbol, quantity, and price (see `TradingFees.java`). A profit-safety guard caps total fees at 20% of gross profit on winning trades.
 
-The AI advisor (`NNPredictorClient`) routes each order:
-- **INTERNAL (B-Book)** — retail/noise trade, platform acts as counterparty, capturing spread and commission.
-- **EXTERNAL (A-Book)** — high-probability/toxic trade, forwarded to MetaTrader 5 bridge to hedge externally.
+**Netting (client vs client / client vs computer)** — see `buysellmodel/NETTING_IMPLEMENTATION_PLAN.md`:
+- Every order first tries to **cross internally at the mid price** against an opposite order (another client, or "the computer" — simulated clients that quote around the mid). Both sides get the mid instead of paying the spread.
+- A cross is allowed only if the buyer accepts ≥ mid and the seller accepts ≤ mid (NBBO), never with yourself, never computer-vs-computer.
+- Whatever is left goes to the external market (MT5 if connected). A marketable LIMIT first waits `limit-wait-ms` (8 s) for an internal counterparty.
+- The broker **never keeps a side**: it earns commission + the external fees it saved. The neural network runs in **shadow mode** only (recorded, never decides).
+- Settings: `broker.netting.*` in `backend/src/main/resources/application.yml` (turn the computer off with `sim.enabled: false`).
 
-Admin panel → **Dashboard** shows: Commission Collected, Fees Saved (Internal), B-Book Client Losses, Total Broker Profit.
+Admin panel → **Dashboard** shows: Internal Cross Rate, Commission Collected, External Fees Saved, Client Price Improvement, Broker Revenue (Netting), House Net Exposure (must be 0), Computer P/L (demo), Legacy Orders.
+
+**Testing it** (the backend must be running for the live parts):
+
+| Double-click | What it does |
+|---|---|
+| `run-netting-tests.bat` | model + feature check, Java engine tests, then the 16 live scenarios (PASS/FAIL + report in `reports/`) |
+| `run-netting-visual.bat` | live page at http://localhost:4010: Trader A, Trader B and the computer play every scenario on screen (press ▶ Play) |
+
+The test users `netting.a@broker.local` / `netting.b@broker.local` (password `Netting123!`) are created automatically on the first run.
 
 ---
 

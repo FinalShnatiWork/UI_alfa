@@ -93,6 +93,32 @@ public class BrokerOrder {
   @Column(nullable = false, precision = 18, scale = 8)
   private BigDecimal commission = BigDecimal.ZERO;
 
+  // ─── Netting (V32) ─────────────────────────────────────────────────────────
+  @Column(name = "filled_qty", nullable = false, precision = 18, scale = 8)
+  private BigDecimal filledQty = BigDecimal.ZERO;
+
+  @Column(name = "internal_qty", nullable = false, precision = 18, scale = 8)
+  private BigDecimal internalQty = BigDecimal.ZERO;
+
+  @Column(name = "external_qty", nullable = false, precision = 18, scale = 8)
+  private BigDecimal externalQty = BigDecimal.ZERO;
+
+  /** Cash still reserved for the unfilled part (null for orders created before V32). */
+  @Column(name = "reserve_remaining", precision = 18, scale = 8)
+  private BigDecimal reserveRemaining;
+
+  /** INTERNAL | EXTERNAL | SPLIT | LEGACY (null while nothing has been filled). */
+  @Column(name = "routing", length = 16)
+  private String routing;
+
+  /** When a marketable LIMIT stops waiting for an internal counterparty (status PENDING_NET). */
+  @Column(name = "net_deadline")
+  private Instant netDeadline;
+
+  /** NN advisor (shadow mode) agreed with what the engine actually did. */
+  @Column(name = "nn_shadow_correct")
+  private Boolean nnShadowCorrect;
+
   public Long getId() {
     return id;
   }
@@ -268,6 +294,27 @@ public class BrokerOrder {
   public void setCommission(BigDecimal commission) {
     this.commission = commission;
   }
+
+  public BigDecimal getFilledQty() { return filledQty; }
+  public void setFilledQty(BigDecimal filledQty) { this.filledQty = filledQty; }
+  public BigDecimal getInternalQty() { return internalQty; }
+  public void setInternalQty(BigDecimal internalQty) { this.internalQty = internalQty; }
+  public BigDecimal getExternalQty() { return externalQty; }
+  public void setExternalQty(BigDecimal externalQty) { this.externalQty = externalQty; }
+  public BigDecimal getReserveRemaining() { return reserveRemaining; }
+  public void setReserveRemaining(BigDecimal reserveRemaining) { this.reserveRemaining = reserveRemaining; }
+  public String getRouting() { return routing; }
+  public void setRouting(String routing) { this.routing = routing; }
+  public Instant getNetDeadline() { return netDeadline; }
+  public void setNetDeadline(Instant netDeadline) { this.netDeadline = netDeadline; }
+  public Boolean getNnShadowCorrect() { return nnShadowCorrect; }
+  public void setNnShadowCorrect(Boolean nnShadowCorrect) { this.nnShadowCorrect = nnShadowCorrect; }
+
+  /** Quantity not yet filled (never negative). */
+  public BigDecimal remainingQty() {
+    BigDecimal q = quantity == null ? BigDecimal.ZERO : quantity;
+    BigDecimal f = filledQty == null ? BigDecimal.ZERO : filledQty;
+    BigDecimal r = q.subtract(f);
+    return r.signum() < 0 ? BigDecimal.ZERO : r;
+  }
 }
-
-

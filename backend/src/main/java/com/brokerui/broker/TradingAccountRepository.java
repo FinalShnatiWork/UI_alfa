@@ -25,5 +25,8 @@ public interface TradingAccountRepository extends JpaRepository<TradingAccount, 
 
   /** Accounts that currently owe money on the margin credit line. */
   List<TradingAccount> findByBorrowedBalanceGreaterThan(BigDecimal threshold);
-}
 
+  /** Ids of the simulated "computer" accounts (V32). */
+  @Query("SELECT ta.id FROM TradingAccount ta WHERE ta.simulated = true ORDER BY ta.id")
+  List<Long> findSimulatedIds();
+}

@@ -45,6 +45,9 @@ public class MarketPriceService {
         String sym = symbol == null ? "" : symbol.trim().toUpperCase();
         if (sym.isEmpty()) return 0.0;
 
+        TestOverride override = getTestOverride(sym);
+        if (override != null) return override.mid();
+
         long now = System.currentTimeMillis();
         CachedQuote cached = cache.get(sym);
         if (cached != null && now - cached.fetchedAtMs() < CACHE_TTL_MS) {
@@ -127,5 +130,51 @@ public class MarketPriceService {
 
         return base.multiply(BigDecimal.valueOf(0.99 + (u * 0.02)))
                    .setScale(scale, RoundingMode.HALF_UP);
+    }
+
+    // ─── Test-only price overrides (netting scenarios, admin test endpoints) ─────
+    // Localhost-only admin endpoints freeze a symbol's price so "1bp below mid" scenarios are
+    // exact. Every consumer (fills, equity, SL/TP, UI) goes through getLivePrice, so they all see
+    // the same frozen price. Overrides expire on their own so a crashed test never leaves them on.
+
+    /** A frozen mid, optionally flagged as a crossed (broken) market. */
+    public record TestOverride(double mid, boolean crossed, long expiresAtMs) {}
+
+    private final ConcurrentHashMap<String, TestOverride> testOverrides = new ConcurrentHashMap<>();
+
+    public void setTestOverride(String symbol, double mid, boolean crossed, long ttlMs) {
+        if (symbol == null || !(mid > 0)) throw new IllegalArgumentException("symbol and positive mid required");
+        testOverrides.put(symbol.trim().toUpperCase(), new TestOverride(mid, crossed, System.currentTimeMillis() + Math.max(1000, ttlMs)));
+    }
+
+    public void clearTestOverride(String symbol) {
+        if (symbol == null) return;
+        testOverrides.remove(symbol.trim().toUpperCase());
+    }
+
+    public void clearAllTestOverrides() {
+        testOverrides.clear();
+    }
+
+    /** @return the active override for this symbol, or null (expired ones are removed). */
+    public TestOverride getTestOverride(String symbol) {
+        if (symbol == null) return null;
+        String sym = symbol.trim().toUpperCase();
+        TestOverride o = testOverrides.get(sym);
+        if (o == null) return null;
+        if (System.currentTimeMillis() > o.expiresAtMs()) {
+            testOverrides.remove(sym, o);
+            return null;
+        }
+        return o;
+    }
+
+    public java.util.Map<String, TestOverride> activeTestOverrides() {
+        java.util.Map<String, TestOverride> out = new java.util.TreeMap<>();
+        for (String k : testOverrides.keySet()) {
+            TestOverride o = getTestOverride(k);
+            if (o != null) out.put(k, o);
+        }
+        return out;
     }
 }

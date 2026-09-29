@@ -79,6 +79,22 @@ public class BrokerApiController {
     TradingAccount existing = accountRepo.findFirstByUserIdOrderByIdAsc(user.getId()).orElse(null);
     if (existing != null)
       return existing;
+    // GET endpoints run in read-only transactions; a brand-new user's first GET (e.g. /overview)
+    // used to fail with "cannot execute INSERT in a read-only transaction". Create it in its own
+    // short read-write transaction instead.
+    if (txManager != null
+        && org.springframework.transaction.support.TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+      org.springframework.transaction.support.TransactionTemplate rw =
+          new org.springframework.transaction.support.TransactionTemplate(txManager);
+      rw.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+      Long id = rw.execute(s -> accountRepo.findFirstByUserIdOrderByIdAsc(user.getId())
+          .orElseGet(() -> createPrimaryAccount(user)).getId());
+      return accountRepo.findById(id).orElseThrow();
+    }
+    return createPrimaryAccount(user);
+  }
+
+  private TradingAccount createPrimaryAccount(AppUser user) {
     TradingAccount ta = new TradingAccount();
     ta.setUser(user);
     ta.setAccountType("DEMO");
@@ -276,65 +292,6 @@ public class BrokerApiController {
     return used;
   }
 
-  /**
-   * Calls the Neural Network predictor and sets routing fields on the order.
-   * Returns true when the order should be routed to MT5 (external), false for
-   * internal match.
-   */
-  private boolean applyNnRouting(BrokerOrder order, String symbolCode, BigDecimal qty, double price) {
-    try {
-      double buyQtyNorm = qty.doubleValue() / 100.0;
-      double sellQtyNorm = 0.45;
-      try {
-        long activeSellQty = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW");
-        if (activeSellQty > 0)
-          sellQtyNorm = activeSellQty / 100.0;
-      } catch (Exception ignored) {
-      }
-
-      double scaledPrice = price;
-      if (price > 0) {
-        double log10 = Math.log10(price);
-        long exp = Math.round(log10) - 2;
-        scaledPrice = price / Math.pow(10, exp);
-      }
-      double spreadNorm = Math.min((scaledPrice * 0.00015) / 1.0, 1.0);
-
-      double imbalance = 0.0;
-      try {
-        long buys = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "BUY", "NEW");
-        long sells = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW");
-        if (buys + sells > 0)
-          imbalance = (double) (buys - sells) / (buys + sells);
-      } catch (Exception ignored) {
-      }
-
-      double midPriceNorm = Math.min(scaledPrice / 200.0, 1.0);
-      double bookDepthBuy = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "BUY", "NEW") / 10.0;
-      double bookDepthSell = orderRepo.countBySymbolCodeAndSideAndStatus(symbolCode, "SELL", "NEW") / 10.0;
-
-      double[] features = { buyQtyNorm, sellQtyNorm, spreadNorm, imbalance,
-          midPriceNorm, bookDepthBuy, bookDepthSell, 0.72 };
-
-      java.util.Map<String, Object> pred = nnPredictorClient.getPrediction(features);
-      if (pred != null) {
-        double matchProb = ((Number) pred.get("matchProb")).doubleValue();
-        double expectedSavings = ((Number) pred.get("expectedSavings")).doubleValue();
-        double routeRecommendation = ((Number) pred.get("routeRecommendation")).doubleValue();
-        order.setNnMatchProb(matchProb);
-        order.setNnExpectedSavings(BigDecimal.valueOf(expectedSavings));
-        order.setNnRouteRecommendation(routeRecommendation > 0.5 ? "INTERNAL" : "EXTERNAL");
-        return routeRecommendation <= 0.5; // true = route external
-      }
-    } catch (Exception e) {
-      log.warn("Failed to fetch NN recommendation: {}", e.getMessage());
-    }
-    order.setNnRouteRecommendation("EXTERNAL");
-    order.setNnMatchProb(0.0);
-    order.setNnExpectedSavings(BigDecimal.ZERO);
-    return true;
-  }
-
   /** Builds a FILLED BrokerOrder record for history/audit. */
   private BrokerOrder buildFilledOrder(TradingAccount ta, String symbolCode, String side,
       BigDecimal qty, BigDecimal fillPrice, BigDecimal realizedPnl) {
@@ -355,22 +312,76 @@ public class BrokerApiController {
   // Place Order (POST /api/broker/orders)
   // ───────────────────────────────────────────────────────────────────────────
 
+  /**
+   * @param strictLimit optional (netting tests / API clients): keep an explicit LIMIT as a LIMIT even
+   *                    when it is marketable, instead of the UI's automatic LIMIT→STOP re-classification.
+   *                    The React UI never sends it, so its behaviour is unchanged.
+   */
   public record PlaceOrderRequest(String symbolCode, String side, String orderType,
       BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopPrice,
-      BigDecimal takeProfit, BigDecimal stopLoss, Boolean acceptLoan) {
+      BigDecimal takeProfit, BigDecimal stopLoss, Boolean acceptLoan, Boolean strictLimit) {
   }
 
+  /** Result of the placement transaction: either a finished response, or an order to execute next. */
+  private record Placement(ResponseEntity<?> response, Long executeOrderId, String auditAction) {}
+
   @PostMapping("/orders")
-  @Transactional
   public ResponseEntity<?> placeOrder(Authentication auth,
       @RequestBody PlaceOrderRequest body, HttpServletRequest request) {
+    // Phase 1 (own transaction): validate, reserve cash, store the order. Committing here releases
+    // the account lock before netting locks accounts in id order (plan R1: no deadlocks).
+    Placement placement = inTransaction(() -> reserveAndStore(auth, body, request));
+    if (placement.executeOrderId() == null) {
+      return placement.response();
+    }
+    // Phase 2 (NettingService's own transaction): internal book first, then the remainder.
+    if (nettingService == null) {
+      throw new IllegalStateException("NettingService is not available");
+    }
+    com.brokerui.broker.netting.NettingService.Result r = nettingService.executeNow(placement.executeOrderId());
+    AppUser u = requireUser(auth);
+    if ("REJECTED".equals(r.status())) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
+          "orderId", r.orderId()));
+    }
+    auditLogService.log(u, placement.auditAction(),
+        body.side().trim().toUpperCase() + " " + body.quantity() + " " + body.symbolCode().trim().toUpperCase()
+            + " status=" + r.status() + " routing=" + r.routing() + " internal=" + r.internalQty()
+            + " external=" + r.externalQty() + (r.avgPrice() != null ? " @ " + r.avgPrice() : ""),
+        request);
+    Map<String, Object> resp = new java.util.LinkedHashMap<>();
+    resp.put("ok", true);
+    resp.put("orderId", r.orderId());
+    resp.put("status", r.status());
+    if (r.avgPrice() != null) resp.put("fillPrice", r.avgPrice());
+    resp.put("newBalance", r.newBalance());
+    resp.put("routing", r.routing());
+    resp.put("filledQty", r.filledQty());
+    resp.put("internalQty", r.internalQty());
+    resp.put("externalQty", r.externalQty());
+    resp.put("matches", r.matches());
+    return ResponseEntity.ok(resp);
+  }
 
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  private org.springframework.transaction.PlatformTransactionManager txManager;
+
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  @org.springframework.context.annotation.Lazy
+  private com.brokerui.broker.netting.NettingService nettingService;
+
+  private <T> T inTransaction(java.util.function.Supplier<T> work) {
+    if (txManager == null) return work.get(); // plain unit tests
+    return new org.springframework.transaction.support.TransactionTemplate(txManager).execute(s -> work.get());
+  }
+
+  private Placement reserveAndStore(Authentication auth, PlaceOrderRequest body, HttpServletRequest request) {
     AppUser u = requireUser(auth);
     TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId())
         .orElseGet(() -> ensurePrimaryAccount(u));
 
     if (body.symbolCode() == null || body.side() == null || body.quantity() == null) {
-      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "missing_fields"));
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "missing_fields")));
     }
     String symbolCode = body.symbolCode().trim().toUpperCase();
     String side = body.side().trim().toUpperCase();
@@ -378,7 +389,7 @@ public class BrokerApiController {
     BigDecimal qty = body.quantity();
 
     if (qty.compareTo(BigDecimal.ZERO) <= 0) {
-      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_quantity"));
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_quantity")));
     }
 
     // ── Pending (LIMIT / STOP) orders – basic validation + fund reservation ─
@@ -387,25 +398,29 @@ public class BrokerApiController {
       try {
         currentPrice = priceService.getLivePrice(symbolCode);
         if (currentPrice <= 0) {
-          return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+          return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
         }
       } catch (Exception e) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+        return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
       }
       BigDecimal bdPrice = BigDecimal.valueOf(currentPrice);
 
       BigDecimal targetPrice = body.limitPrice() != null ? body.limitPrice()
           : (body.stopPrice() != null ? body.stopPrice() : BigDecimal.ZERO);
       if (targetPrice.compareTo(BigDecimal.ZERO) <= 0) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "limit_price_required"));
+        return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "limit_price_required")));
       }
 
       // Classify into STOP or LIMIT dynamically based on relationship with current market price at creation:
       String mappedOrderType = "LIMIT";
       BigDecimal mappedLimitPrice = null;
       BigDecimal mappedStopPrice = null;
+      boolean strictLimit = Boolean.TRUE.equals(body.strictLimit()) && "LIMIT".equals(orderType) && body.limitPrice() != null;
 
-      if ("BUY".equals(side)) {
+      if (strictLimit) {
+        // Explicit LIMIT kept as LIMIT even when marketable (netting: it may cross internally at the mid).
+        mappedLimitPrice = targetPrice;
+      } else if ("BUY".equals(side)) {
         if (targetPrice.compareTo(bdPrice) > 0) {
           mappedOrderType = "STOP";
           mappedStopPrice = targetPrice;
@@ -427,8 +442,8 @@ public class BrokerApiController {
       BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
       BigDecimal reserved = targetPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
       if (!marginLoanService.tryCoverShortfall(ta, reserved, u, request)) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
-            "required", reserved, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit()));
+        return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
+            "required", reserved, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit())));
       }
       ta.setEquity(recalcEquity(ta));
       // Prepaid-margin model: remaining balance is free cash.
@@ -446,215 +461,81 @@ public class BrokerApiController {
       order.setStopPrice(mappedStopPrice);
       order.setTakeProfit(body.takeProfit());
       order.setStopLoss(body.stopLoss());
+      order.setReserveRemaining(reserved);
       order = orderRepo.save(order);
       auditLogService.log(u, "ORDER_PENDING", side + " " + qty + " " + symbolCode + " type=" + mappedOrderType, request);
-      return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW",
-          "newBalance", ta.getBalance()));
+      if (strictLimit) {
+        return new Placement(null, order.getId(), "ORDER_PLACED");
+      }
+      return done(ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(), "status", "NEW",
+          "newBalance", ta.getBalance())));
     }
 
     // ── MARKET order – fetch live price ──────────────────────────────────────
+    if (!"BUY".equals(side) && !"SELL".equals(side)) {
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "unsupported_side")));
+    }
     double price;
     try {
       price = priceService.getLivePrice(symbolCode);
       if (price <= 0) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+        return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
       }
     } catch (Exception e) {
-      return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+      return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
     }
     BigDecimal rawPrice = BigDecimal.valueOf(price);
     BigDecimal contractSize = getContractSize(symbolCode);
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
+    boolean isBuy = "BUY".equals(side);
 
-    // ── BUY order ─────────────────────────────────────────────────────────────
-    if ("BUY".equals(side)) {
-      BigDecimal bdPrice = TradingFees.applySpread(rawPrice, true); // Client buys at Ask
-      BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      
-      BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
-      BigDecimal required = margin.add(commission);
+    // Worst case = the external price (BUY at Ask, SELL at Bid). Netting can only make it cheaper;
+    // whatever is not used is returned by FillBooking when the order fills.
+    BigDecimal bdPrice = TradingFees.applySpread(rawPrice, isBuy);
+    BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+    BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
+    BigDecimal required = margin.add(commission);
 
-      if (ta.getBalance().compareTo(required) < 0 && !Boolean.TRUE.equals(body.acceptLoan())) {
-        BigDecimal shortfall = required.subtract(ta.getBalance());
-        BigDecimal currentDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
-        if (currentDebt.add(shortfall).compareTo(ta.getCreditLimit()) <= 0) {
-          return ResponseEntity.badRequest().body(Map.of(
-              "ok", false,
-              "error", "credit_offer_available",
-              "shortfall", shortfall,
-              "required", required,
-              "cashBalance", ta.getBalance(),
-              "creditLimit", ta.getCreditLimit(),
-              "dailyInterestRate", ta.getDailyInterestRate()
-          ));
-        }
-      }
-
-      if (!marginLoanService.tryCoverShortfall(ta, required, u, request)) {
-        return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
-            "required", required, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit()));
-      }
-
-      Position longPos = openNewPosition(ta, symbolCode, "LONG", qty, bdPrice, body.takeProfit(), body.stopLoss());
-      positionRepo.save(longPos);
-
-      ta.setEquity(recalcEquity(ta));
-      accountRepo.save(ta);
-
-      try {
-        Notification notif = new Notification();
-        notif.setUser(u);
-        notif.setNotifType("TRADE");
-        notif.setTitle("notification.tradeOpened.title");
-        notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"BUY\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\"}", 
-            qty.doubleValue(), symbolCode, bdPrice.doubleValue()));
-        notificationRepo.save(notif);
-      } catch (Exception e) {
-        log.warn("Failed to create notification: {}", e.getMessage());
-      }
-
-      BrokerOrder order = buildFilledOrder(ta, symbolCode, "BUY", qty, bdPrice, null);
-      TradingFees.charge(ta, order, commission);
-      
-      AccountTransaction feeTx = new AccountTransaction();
-      feeTx.setTradingAccount(ta);
-      feeTx.setTxType("COMMISSION");
-      feeTx.setAmount(commission);
-      feeTx.setCurrency(ta.getCurrency());
-      feeTx.setStatus("APPROVED");
-      feeTx.setProcessedAt(java.time.Instant.now());
-      txRepo.save(feeTx);
-      
-      accountRepo.save(ta);
-      boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
-      orderRepo.save(order);
-
-      auditLogService.log(u, "ORDER_PLACED",
-          "BUY_LONG " + qty + " " + symbolCode + " @ " + bdPrice, request);
-
-      if (routeExternal) {
-        try {
-          mt5Service.sendTrade(
-              symbolCode, 
-              side, 
-              price, 
-              body.takeProfit() != null ? body.takeProfit().doubleValue() : 0.0, 
-              body.stopLoss() != null ? body.stopLoss().doubleValue() : 0.0, 
-              qty.doubleValue()
-          );
-        } catch (Exception ex) {
-          log.error("MT5 Send Failed: {}", ex.getMessage());
-        }
-      } else {
-        log.info("AI Advisor matching: Routed BUY_LONG #{} internally.", order.getId());
-      }
-      return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(),
-          "fillPrice", bdPrice, "newBalance", ta.getBalance()));
-    }
-
-    // ── SELL order ────────────────────────────────────────────────────────────
-    else if ("SELL".equals(side)) {
-      BigDecimal bdPrice = TradingFees.applySpread(rawPrice, false); // Client sells at Bid
-      BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      
-      BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
-      BigDecimal sellRequired = margin.add(commission);
-
-    if (ta.getBalance().compareTo(sellRequired) < 0 && !Boolean.TRUE.equals(body.acceptLoan())) {
-      BigDecimal shortfall = sellRequired.subtract(ta.getBalance());
+    if (ta.getBalance().compareTo(required) < 0 && !Boolean.TRUE.equals(body.acceptLoan())) {
+      BigDecimal shortfall = required.subtract(ta.getBalance());
       BigDecimal currentDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
       if (currentDebt.add(shortfall).compareTo(ta.getCreditLimit()) <= 0) {
-        return ResponseEntity.badRequest().body(Map.of(
+        return done(ResponseEntity.badRequest().body(Map.of(
             "ok", false,
             "error", "credit_offer_available",
             "shortfall", shortfall,
-            "required", sellRequired,
+            "required", required,
             "cashBalance", ta.getBalance(),
             "creditLimit", ta.getCreditLimit(),
             "dailyInterestRate", ta.getDailyInterestRate()
-        ));
+        )));
       }
     }
 
-    if (!marginLoanService.tryCoverShortfall(ta, sellRequired, u, request)) {
-      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
-          "required", sellRequired, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit()));
+    if (!marginLoanService.tryCoverShortfall(ta, required, u, request)) {
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
+          "required", required, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit())));
     }
-
-    Position shortPos = openNewPosition(ta, symbolCode, "SHORT", qty, bdPrice, body.takeProfit(), body.stopLoss());
-    positionRepo.save(shortPos);
-
     ta.setEquity(recalcEquity(ta));
+    ta.setFreeMargin(ta.getBalance());
     accountRepo.save(ta);
 
-    try {
-      Notification notif = new Notification();
-      notif.setUser(u);
-      notif.setNotifType("TRADE");
-      notif.setTitle("notification.tradeOpened.title");
-      notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"SELL\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\"}", 
-          qty.doubleValue(), symbolCode, bdPrice.doubleValue()));
-      notificationRepo.save(notif);
-    } catch (Exception e) {
-      log.warn("Failed to create notification: {}", e.getMessage());
-    }
-
-    BrokerOrder order = buildFilledOrder(ta, symbolCode, "SELL", qty, bdPrice, null);
-    TradingFees.charge(ta, order, commission);
-    
-    AccountTransaction feeTx = new AccountTransaction();
-    feeTx.setTradingAccount(ta);
-    feeTx.setTxType("COMMISSION");
-    feeTx.setAmount(commission);
-    feeTx.setCurrency(ta.getCurrency());
-    feeTx.setStatus("APPROVED");
-    feeTx.setProcessedAt(java.time.Instant.now());
-    txRepo.save(feeTx);
-    
-    accountRepo.save(ta);
-    boolean routeExternal = applyNnRouting(order, symbolCode, qty, price);
-    orderRepo.save(order);
-
-    auditLogService.log(u, "ORDER_PLACED",
-        "SELL_SHORT " + qty + " " + symbolCode + " @ " + bdPrice, request);
-
-    if (routeExternal) {
-      try {
-        mt5Service.sendTrade(
-            symbolCode, 
-            side, 
-            price, 
-            body.takeProfit() != null ? body.takeProfit().doubleValue() : 0.0, 
-            body.stopLoss() != null ? body.stopLoss().doubleValue() : 0.0, 
-            qty.doubleValue()
-        );
-      } catch (Exception ex) {
-        log.error("MT5 Send Failed: {}", ex.getMessage());
-      }
-    } else {
-      log.info("AI Advisor matching: Routed SELL_SHORT #{} internally.", order.getId());
-    }
-    return ResponseEntity.ok(Map.of("ok", true, "orderId", order.getId(),
-        "fillPrice", bdPrice, "newBalance", ta.getBalance()));
-    }
-    return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "unsupported_side"));
+    BrokerOrder order = new BrokerOrder();
+    order.setTradingAccount(ta);
+    order.setSymbolCode(symbolCode);
+    order.setSide(side);
+    order.setOrderType("MARKET");
+    order.setStatus("NEW");
+    order.setQuantity(qty);
+    order.setTakeProfit(body.takeProfit());
+    order.setStopLoss(body.stopLoss());
+    order.setReserveRemaining(required);
+    order = orderRepo.save(order);
+    return new Placement(null, order.getId(), "ORDER_PLACED");
   }
 
-  /**
-   * Creates a new Position for a specific side (Hedging model).
-   */
-  private Position openNewPosition(TradingAccount ta, String symbolCode, String side, BigDecimal qty, BigDecimal fillPrice, BigDecimal tp, BigDecimal sl) {
-    Position pos = new Position();
-    pos.setTradingAccount(ta);
-    pos.setSymbolCode(symbolCode);
-    pos.setSide(side);
-    pos.setQuantity(qty);
-    pos.setAvgPrice(fillPrice);
-    pos.setUnrealizedPnl(BigDecimal.ZERO);
-    pos.setOpenedAt(Instant.now());
-    pos.setTakeProfit(tp);
-    pos.setStopLoss(sl);
-    return pos;
+  private static Placement done(ResponseEntity<?> response) {
+    return new Placement(response, null, null);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -793,7 +674,8 @@ public class BrokerApiController {
   public ResponseEntity<?> pendingOrders(Authentication auth) {
     AppUser u = requireUser(auth);
     TradingAccount ta = ensurePrimaryAccount(u);
-    return ResponseEntity.ok(orderRepo.findByTradingAccountIdAndStatusOrderByCreatedAtDesc(ta.getId(), "NEW"));
+    return ResponseEntity.ok(orderRepo.findByTradingAccountIdAndStatusInOrderByCreatedAtDesc(ta.getId(),
+        com.brokerui.broker.netting.NettingService.OPEN_STATUSES));
   }
 
   @PostMapping("/orders/{id}/cancel")
@@ -810,19 +692,17 @@ public class BrokerApiController {
     if (order.getTradingAccount() == null || !order.getTradingAccount().getId().equals(owned.getId())) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "order_not_found"));
     }
-    if (!"NEW".equalsIgnoreCase(order.getStatus())) {
+    String st = order.getStatus() == null ? "" : order.getStatus().toUpperCase();
+    if (!com.brokerui.broker.netting.NettingService.OPEN_STATUSES.contains(st)) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "order_not_cancellable"));
     }
     TradingAccount ta = accountRepo.findByIdForUpdate(owned.getId()).orElseThrow();
-    // Refund reserved balance for BUY and SELL orders
+    // Refund what is still reserved for the unfilled part (whole reserve if nothing filled yet).
     if ("BUY".equalsIgnoreCase(order.getSide()) || "SELL".equalsIgnoreCase(order.getSide())) {
-      BigDecimal reservePrice = order.getLimitPrice() != null ? order.getLimitPrice()
-          : (order.getStopPrice() != null ? order.getStopPrice() : BigDecimal.ZERO);
-      if (reservePrice.compareTo(BigDecimal.ZERO) > 0) {
-        BigDecimal contractSize = getContractSize(order.getSymbolCode());
-        BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-        BigDecimal refund = reservePrice.multiply(order.getQuantity()).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      BigDecimal refund = com.brokerui.broker.netting.FillBooking.outstandingReserve(order, ta);
+      if (refund.compareTo(BigDecimal.ZERO) > 0) {
         marginLoanService.repaySettlementOrBorrow(ta, refund);
+        order.setReserveRemaining(BigDecimal.ZERO);
         ta.setEquity(recalcEquity(ta));
         // Prepaid-margin model: free cash is the remaining balance (margin already deducted).
         ta.setFreeMargin(ta.getBalance());
@@ -830,6 +710,7 @@ public class BrokerApiController {
       }
     }
     order.setStatus("CANCELLED");
+    order.setNetDeadline(null);
     orderRepo.save(order);
     return ResponseEntity.ok(Map.of("ok", true, "newBalance", ta.getBalance()));
   }
@@ -855,14 +736,6 @@ public class BrokerApiController {
    * @returns contract size multiplier
    */
   public static BigDecimal getContractSize(String symbol) {
-    if (symbol == null) return BigDecimal.ONE;
-    String sym = symbol.toUpperCase();
-    if (sym.contains("BTC")) return BigDecimal.ONE;
-    if (sym.contains("ETH")) return BigDecimal.ONE;
-    if (sym.contains("SOL")) return BigDecimal.valueOf(100);
-    if (sym.contains("XRP")) return BigDecimal.valueOf(1000);
-    if (sym.contains("XAU")) return BigDecimal.valueOf(100);
-    if (sym.contains("XAG")) return BigDecimal.valueOf(5000);
-    return BigDecimal.valueOf(100000);
+    return ContractSpecs.getContractSize(symbol);
   }
 }

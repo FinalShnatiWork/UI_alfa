@@ -129,7 +129,9 @@ public class AdminTradeController {
           o.getQuantity(), 
           o.getStatus(), 
           o.getCreatedAt(),
-          o.getNnRouteRecommendation() != null ? o.getNnRouteRecommendation() : "EXTERNAL",
+          // Netting (V32): the real routing. Pending orders have none yet; LEGACY = pre-netting history.
+          // Close orders (position closes, SL/TP, liquidation) carry no routing: shown as CLOSE.
+          o.getRouting() != null ? o.getRouting() : ("FILLED".equalsIgnoreCase(o.getStatus()) ? "CLOSE" : o.getStatus()),
           o.getCommission() != null ? o.getCommission() : BigDecimal.ZERO,
           o.getRealizedPnl()))
       .collect(Collectors.toList());
@@ -144,7 +146,7 @@ public class AdminTradeController {
           p.getQuantity(), 
           "ACTIVE", 
           p.getOpenedAt(),
-          "INTERNAL",
+          "OPEN_POSITION",
           BigDecimal.ZERO,
           p.getUnrealizedPnl()))
       .collect(Collectors.toList());

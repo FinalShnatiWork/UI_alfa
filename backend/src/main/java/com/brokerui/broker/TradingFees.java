@@ -35,7 +35,7 @@ public final class TradingFees {
       return COMMISSION_PER_TRADE;
     }
 
-    BigDecimal contractSize = BrokerApiController.getContractSize(symbolCode);
+    BigDecimal contractSize = ContractSpecs.getContractSize(symbolCode);
     BigDecimal notional = fillPrice.multiply(quantity).multiply(contractSize);
 
     // Fixed commission rate of 0.0025% (2.5 bps) of notional value
@@ -117,14 +117,8 @@ public final class TradingFees {
    * @param isBuy True if the client is buying (paying the higher Ask price), False if selling (receiving the lower Bid price)
    */
   public static BigDecimal applySpread(BigDecimal rawPrice, boolean isBuy) {
-      if (rawPrice == null || rawPrice.compareTo(BigDecimal.ZERO) <= 0) return rawPrice;
-      // 0.015% markup per side (1.5 basis points) - standard broker spread
-      BigDecimal spreadRate = new BigDecimal("0.00015"); 
-      if (isBuy) {
-          return rawPrice.multiply(BigDecimal.ONE.add(spreadRate)).setScale(5, java.math.RoundingMode.HALF_UP);
-      } else {
-          return rawPrice.multiply(BigDecimal.ONE.subtract(spreadRate)).setScale(5, java.math.RoundingMode.HALF_UP);
-      }
+      // 0.015% markup per side (1.5 basis points) - standard broker spread (see PriceSpread)
+      return PriceSpread.apply(rawPrice, isBuy);
   }
 }
 

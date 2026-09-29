@@ -12,8 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Core service class for executing and managing limit, stop, and market orders.
- * Feeds live pricing quotes, executes orders when conditions match, recalculates accounts equity,
- * calls the Python NN model advisor, and routes orders either internally or forwards them to the MT5 bridge.
+ * Feeds live pricing quotes and, when an order's fill condition is met, hands it to
+ * {@link com.brokerui.broker.netting.NettingService}: the internal book first (netting at the mid),
+ * then the remainder (external market / MT5, or a PENDING_NET wait for marketable LIMITs).
+ * Also runs the SL/TP sweep. The NN advisor is only consulted in shadow mode, after commit.
  */
 @Service
 public class OrderExecutionService {
@@ -25,12 +27,17 @@ public class OrderExecutionService {
   private final SymbolRepository symbolRepo;
   private final MT5IntegrationService mt5Service;
   private final com.brokerui.market.MarketPriceService priceService;
+  /** Kept for constructor compatibility; the NN is now called by NettingService in shadow mode. */
   private final NNPredictorClient nnPredictorClient;
   private final MarginLoanService marginLoanService;
   private final AccountTransactionRepository txRepo;
 
   @Autowired @Lazy
   private OrderExecutionService self;
+
+  /** Netting engine entry point (field-injected so existing constructor-based tests stay unchanged). */
+  @Autowired(required = false) @Lazy
+  private com.brokerui.broker.netting.NettingService nettingService;
 
   /**
    * Constructs the OrderExecutionService with required components.
@@ -74,7 +81,9 @@ public class OrderExecutionService {
    */
   @Scheduled(fixedDelay = 2000)
   public void tick() {
-    List<BrokerOrder> open = orderRepo.findTop50ByStatusOrderByCreatedAtAsc("NEW");
+    // NEW + PARTIALLY_FILLED + PENDING_NET, never the simulator's LIQUIDITY orders (they only fill by netting).
+    List<BrokerOrder> open = orderRepo.findExecutable(com.brokerui.broker.netting.NettingService.OPEN_STATUSES,
+        org.springframework.data.domain.PageRequest.of(0, 50));
     for (BrokerOrder o : open) {
       try {
         self.tryExecute(o.getId());
@@ -102,7 +111,9 @@ public class OrderExecutionService {
     // reservation while this fill is in flight — both paths share this lock order.
     BrokerOrder order = orderRepo.findByIdForUpdate(orderId).orElse(null);
     if (order == null) return;
-    if (!"NEW".equalsIgnoreCase(order.getStatus())) return;
+    if (!isOpen(order.getStatus())) return;
+    // Simulator quotes never fill against the market — only through netting.
+    if ("LIQUIDITY".equalsIgnoreCase(order.getOrderType())) return;
 
     String symbolCode = order.getSymbolCode();
     Symbol sym = symbolRepo.findByCode(symbolCode).orElse(null);
@@ -130,13 +141,30 @@ public class OrderExecutionService {
           case "STOP" -> shouldFillStop(order, side, last);
           default -> false;
         };
-    if (!shouldFill) return;
+    if (!shouldFill) {
+      // A LIMIT that was waiting for an internal counterparty is no longer marketable: back to resting.
+      if ("PENDING_NET".equalsIgnoreCase(order.getStatus())) {
+        boolean partly = order.getFilledQty() != null && order.getFilledQty().signum() > 0;
+        order.setStatus(partly ? "PARTIALLY_FILLED" : "NEW");
+        order.setNetDeadline(null);
+        orderRepo.save(order);
+      }
+      return;
+    }
 
     // Re-check under the same row lock: a concurrent cancel that already finished would
     // have flipped status away from NEW before we could acquire the lock.
-    if (!"NEW".equalsIgnoreCase(order.getStatus())) return;
+    if (!isOpen(order.getStatus())) return;
 
-    executeFilled(order, last);
+    if (nettingService == null) {
+      throw new IllegalStateException("NettingService is not available");
+    }
+    // Internal book first, then the remainder (external now, or wait as PENDING_NET for LIMITs).
+    nettingService.executeLocked(order, last);
+  }
+
+  private static boolean isOpen(String status) {
+    return status != null && com.brokerui.broker.netting.NettingService.OPEN_STATUSES.contains(status.toUpperCase());
   }
 
   /**
@@ -172,197 +200,6 @@ public class OrderExecutionService {
   }
 
   /**
-   * Core logic that fills the matched order.
-   * Deducts funds/collateral, updates balance, creates position record, queries the AI advisor,
-   * logs the fill, and forwards to MT5 if internal AI matching is skipped.
-   *
-   * @param order the matched order entity
-   * @param price the actual execution price quote
-   */
-  private void executeFilled(BrokerOrder order, BigDecimal rawPrice) {
-    TradingAccount ta = order.getTradingAccount();
-    ta = accountRepo.findByIdForUpdate(ta.getId()).orElseThrow();
-    
-    boolean isBuy = "BUY".equalsIgnoreCase(order.getSide());
-    BigDecimal price = TradingFees.applySpread(rawPrice, isBuy);
-
-    BigDecimal qty = order.getQuantity();
-    BigDecimal contractSize = BrokerApiController.getContractSize(order.getSymbolCode());
-    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-    BigDecimal margin = price.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-    BigDecimal orderEntryPrice = price;
-    BigDecimal orderRealizedPnl = BigDecimal.ZERO;
-
-    // Commission is only charged once the order actually fills (not on pending reservation).
-    // Uses the same dynamic formula as MARKET orders so LIMIT/STOP fills aren't charged a
-    // different (flat) fee for an equivalent trade.
-    BigDecimal commission = TradingFees.calculateCommission(order.getSymbolCode(), qty, price);
-
-    BigDecimal reservedPrice = order.getLimitPrice() != null ? order.getLimitPrice()
-        : (order.getStopPrice() != null ? order.getStopPrice() : price);
-    BigDecimal reserved = reservedPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-    BigDecimal actualCost = margin.add(commission);
-    BigDecimal unusedReserve = reserved.subtract(actualCost);
-    if (unusedReserve.compareTo(BigDecimal.ZERO) >= 0) {
-      marginLoanService.repaySettlementOrBorrow(ta, unusedReserve);
-    } else {
-      // Fill is more expensive than the reservation (worse price + commission). Extra borrow
-      // used to skip the credit-limit check; a client at the ceiling could open uncapped debt.
-      BigDecimal extra = actualCost.subtract(reserved);
-      if (!marginLoanService.tryCoverShortfall(ta, extra, ta.getUser(), null)) {
-        marginLoanService.repaySettlementOrBorrow(ta, reserved);
-        order.setStatus("REJECTED");
-        orderRepo.save(order);
-        ta.setEquity(recalcEquity(ta));
-        ta.setFreeMargin(ta.getBalance());
-        accountRepo.save(ta);
-        log.warn("Rejected fill of order #{} — adverse price would exceed credit limit (reserved {}, needed {})",
-            order.getId(), reserved, actualCost);
-        return;
-      }
-    }
-
-    TradingFees.charge(ta, order, commission);
-    AccountTransaction feeTx = new AccountTransaction();
-    feeTx.setTradingAccount(ta);
-    feeTx.setTxType("COMMISSION");
-    feeTx.setAmount(commission);
-    feeTx.setCurrency(ta.getCurrency());
-    feeTx.setStatus("APPROVED");
-    feeTx.setProcessedAt(java.time.Instant.now());
-    txRepo.save(feeTx);
-
-    String posSide = isBuy ? "LONG" : "SHORT";
-    positionRepo.save(openNewPosition(ta, order.getSymbolCode(), posSide, qty, price, order.getTakeProfit(), order.getStopLoss()));
-
-    ta.setEquity(recalcEquity(ta));
-    // Prepaid-margin model: remaining balance is free cash.
-    ta.setFreeMargin(ta.getBalance());
-    accountRepo.save(ta);
-
-    try {
-      Notification notif = new Notification();
-      notif.setUser(ta.getUser());
-      notif.setNotifType("TRADE");
-      notif.setTitle("notification.tradeOpened.title");
-      notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\"}", 
-          order.getSide(), qty.doubleValue(), order.getSymbolCode(), price.doubleValue()));
-      notificationRepo.save(notif);
-    } catch (Exception e) {
-      log.warn("Failed to create notification: {}", e.getMessage());
-    }
-
-    order.setStatus("FILLED");
-    order.setFilledAt(Instant.now());
-    order.setEntryPrice(orderEntryPrice);
-    order.setRealizedPnl(orderRealizedPnl);
-
-    // Call Neural Network Predictor for Routing Decision
-    boolean routeExternal = true;
-    try {
-        double buyQtyNorm = qty.doubleValue() / 100.0;
-        double sellQtyNorm = 0.45;
-        try {
-            long activeSellQty = orderRepo.countBySymbolCodeAndSideAndStatus(order.getSymbolCode(), "SELL", "NEW");
-            if (activeSellQty > 0) sellQtyNorm = activeSellQty / 100.0;
-        } catch (Exception ignored) {}
-
-        double pVal = price.doubleValue();
-        double scaledPrice = pVal;
-        if (pVal > 0) {
-            double log10 = Math.log10(pVal);
-            long exp = Math.round(log10) - 2;
-            scaledPrice = pVal / Math.pow(10, exp);
-        }
-        double spreadNorm = Math.min((scaledPrice * 0.00015) / 1.0, 1.0);
-
-        double imbalance = 0.0;
-        try {
-            long buys = orderRepo.countBySymbolCodeAndSideAndStatus(order.getSymbolCode(), "BUY", "NEW");
-            long sells = orderRepo.countBySymbolCodeAndSideAndStatus(order.getSymbolCode(), "SELL", "NEW");
-            if (buys + sells > 0) {
-                imbalance = (double) (buys - sells) / (buys + sells);
-            }
-        } catch (Exception ignored) {}
-
-        double midPriceNorm = Math.min(scaledPrice / 200.0, 1.0);
-
-        double bookDepthBuy = 0.0;
-        try {
-            bookDepthBuy = orderRepo.countBySymbolCodeAndSideAndStatus(order.getSymbolCode(), "BUY", "NEW") / 10.0;
-        } catch (Exception ignored) {}
-
-        double bookDepthSell = 0.0;
-        try {
-            bookDepthSell = orderRepo.countBySymbolCodeAndSideAndStatus(order.getSymbolCode(), "SELL", "NEW") / 10.0;
-        } catch (Exception ignored) {}
-
-        double[] features = {
-            buyQtyNorm, sellQtyNorm, spreadNorm, imbalance,
-            midPriceNorm, bookDepthBuy, bookDepthSell, 0.72
-        };
-
-        // AI ROUTING DECISION:
-        // - INTERNAL (B-Book / Internal Matching): Retail / Noise trade. The brokerage acts as counterparty, capturing spread & commission.
-        // - EXTERNAL (A-Book / MT5 Routing Bridge): High-probability / Toxic trade. Forwarded to MetaTrader 5 bridge to hedge risk externally.
-        java.util.Map<String, Object> pred = nnPredictorClient.getPrediction(features);
-        if (pred != null) {
-            double matchProb = ((Number) pred.get("matchProb")).doubleValue();
-            double expectedSavings = ((Number) pred.get("expectedSavings")).doubleValue();
-            double routeRecommendation = ((Number) pred.get("routeRecommendation")).doubleValue();
-
-            order.setNnMatchProb(matchProb);
-            order.setNnExpectedSavings(BigDecimal.valueOf(expectedSavings));
-            
-            if (routeRecommendation > 0.5) {
-                // INTERNAL (B-Book): Retain trade internally in platform liquidity pool
-                order.setNnRouteRecommendation("INTERNAL");
-                routeExternal = false;
-            } else {
-                // EXTERNAL (A-Book): Hedge trade externally via MetaTrader 5 Bridge
-                order.setNnRouteRecommendation("EXTERNAL");
-                routeExternal = true;
-            }
-        } else {
-            order.setNnRouteRecommendation("EXTERNAL");
-            order.setNnMatchProb(0.0);
-            order.setNnExpectedSavings(BigDecimal.ZERO);
-        }
-    } catch (Exception e) {
-        log.warn("[AI ROUTING ERROR] Failed to fetch NN recommendation: {}", e.getMessage());
-        order.setNnRouteRecommendation("EXTERNAL");
-        order.setNnMatchProb(0.0);
-        order.setNnExpectedSavings(BigDecimal.ZERO);
-    }
-
-    orderRepo.save(order);
-
-    if (routeExternal) {
-        // EXTERNAL ROUTING: Forward trade to MetaTrader 5 Bridge
-        log.info("[AI ROUTING - EXTERNAL (A-BOOK)] Order #{} for {} {} {} @ {} routed to MetaTrader 5 Bridge.",
-            order.getId(), order.getSide(), order.getSymbolCode(),
-            String.format("%.4f", qty.doubleValue()), String.format("%.4f", price.doubleValue()));
-        try {
-            mt5Service.sendTrade(
-                order.getSymbolCode(), 
-                order.getSide(), 
-                price.doubleValue(), 
-                order.getTakeProfit() != null ? order.getTakeProfit().doubleValue() : 0.0, 
-                order.getStopLoss() != null ? order.getStopLoss().doubleValue() : 0.0, 
-                qty.doubleValue()
-            );
-        } catch (Exception ex) {
-            log.error("[MT5 ROUTING ERROR] Failed to forward trade to MT5: {}", ex.getMessage());
-        }
-    } else {
-        // INTERNAL ROUTING: Retain trade internally on platform ledger
-        log.info("[AI ROUTING - INTERNAL (B-BOOK)] Order #{} for {} {} {} @ {} matched internally. Skipped MT5 routing.",
-            order.getId(), order.getSide(), order.getSymbolCode(),
-            String.format("%.4f", qty.doubleValue()), String.format("%.4f", price.doubleValue()));
-    }
-  }
-
-  /**
    * Recalculates equity as cash balance + live floating P/L (prepaid-margin model).
    * Same definition as {@link BrokerApiController} overview equity / Dashboard.
    */
@@ -382,30 +219,6 @@ public class OrderExecutionService {
       }
     }
     return ta.getBalance().add(totalUnrealized);
-  }
-
-  /**
-   * Factory method to build a new Position instance.
-   *
-   * @param ta trading account
-   * @param symbolCode asset symbol
-   * @param side position side (LONG or SHORT)
-   * @param qty asset volume quantity
-   * @param fillPrice entry rate price
-   * @return populated Position entity
-   */
-  private Position openNewPosition(TradingAccount ta, String symbolCode, String side, BigDecimal qty, BigDecimal fillPrice, BigDecimal tp, BigDecimal sl) {
-    Position pos = new Position();
-    pos.setTradingAccount(ta);
-    pos.setSymbolCode(symbolCode);
-    pos.setSide(side);
-    pos.setQuantity(qty);
-    pos.setAvgPrice(fillPrice);
-    pos.setUnrealizedPnl(BigDecimal.ZERO);
-    pos.setOpenedAt(Instant.now());
-    pos.setTakeProfit(tp);
-    pos.setStopLoss(sl);
-    return pos;
   }
 
   private void checkPositionsSlTp() {

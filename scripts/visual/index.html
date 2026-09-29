@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Netting Live</title>
+<style>
+  :root {
+    --bg: #0d1016; --panel: #151a23; --panel2: #1b2130; --line: #2a3242; --text: #e7ecf3; --muted: #8b95a7;
+    --a: #60a5fa; --b: #f59e0b; --c: #a78bfa; --ok: #34d399; --bad: #f87171; --ext: #94a3b8; --warn: #fbbf24;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; letter-spacing: .3px; }
+  .quote { font-family: var(--mono); display: flex; gap: 14px; }
+  .quote b { color: var(--muted); font-weight: 500; margin-right: 4px; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .badge.on { color: #0d1016; background: var(--warn); border-color: var(--warn); }
+  .badge.bad { color: #0d1016; background: var(--bad); border-color: var(--bad); }
+  .spacer { flex: 1; }
+  button, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--a); }
+  button.primary { background: var(--ok); color: #0d1016; border-color: var(--ok); font-weight: 600; }
+  .offline { background: var(--warn); color: #111; text-align: center; font-weight: 700; padding: 6px; display: none; }
+  main { padding: 12px 16px 40px; display: grid; gap: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font: 12px var(--mono); padding: 4px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); }
+  .chip.run { border-color: var(--a); color: var(--text); box-shadow: 0 0 0 2px rgba(96,165,250,.25) inset; }
+  .chip.pass { color: #0d1016; background: var(--ok); border-color: var(--ok); }
+  .chip.fail { color: #0d1016; background: var(--bad); border-color: var(--bad); }
+  .narr { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; min-height: 70px; }
+  .narr .sid { font: 12px var(--mono); color: var(--muted); }
+  .narr .title { font-size: 16px; font-weight: 600; margin: 2px 0 6px; }
+  .narr .say { font-size: 18px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 12px; }
+  @media (max-width: 1100px) { .grid3 { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  .who { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; font: 700 12px var(--mono); color: #0d1016; flex: none; }
+  .who.A { background: var(--a); } .who.B { background: var(--b); } .who.C { background: var(--c); } .who.other, .who.\3F { background: var(--muted); }
+  .big { font: 600 20px var(--mono); }
+  .sub { color: var(--muted); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
+  td, th { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  .buy { color: var(--ok); } .sell { color: var(--bad); }
+  .book-mid { text-align: center; font: 600 12px var(--mono); color: var(--warn); padding: 6px; border-top: 1px dashed var(--warn); border-bottom: 1px dashed var(--warn); margin: 4px 0; }
+  .row-flash { animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: rgba(251,191,36,.35); } to { background: transparent; } }
+  .flow { display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+  .flowitem { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--panel2); border-left: 4px solid var(--line); animation: slidein .35s ease-out; }
+  .flowitem.internal { border-left-color: var(--ok); } .flowitem.external { border-left-color: var(--ext); } .flowitem.reject { border-left-color: var(--bad); } .flowitem.wait { border-left-color: var(--warn); } .flowitem.order { border-left-color: var(--a); background: transparent; }
+  .flowitem .arrow { font: 700 16px var(--mono); }
+  .flowitem.internal .arrow { color: var(--ok); } .flowitem.external .arrow { color: var(--ext); } .flowitem.reject .arrow { color: var(--bad); } .flowitem.wait .arrow { color: var(--warn); }
+  .flowitem .txt { font: 12px var(--mono); }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .card { background: var(--panel2); border-radius: 10px; padding: 8px 10px; }
+  .card .k { color: var(--muted); font-size: 11px; }
+  .card .v { font: 600 16px var(--mono); }
+  .log { max-height: 280px; overflow: auto; }
+  .code { font-weight: 700; }
+  .code.FILL, .code.MATCHED, .code.NBBO_OK { color: var(--ok); }
+  .code.EXTERNAL_FILL, .code.REMAINDER { color: var(--ext); }
+  .code.SELL_LIMIT_ABOVE_MID, .code.BUY_LIMIT_BELOW_MID, .code.CROSSED_MARKET, .code.SELF_MATCH_SKIP, .code.SIM_SIM_SKIP, .code.ORDER_REJECTED, .code.FUNDS_SKIP, .code.LOCK_SKIP { color: var(--bad); }
+  .code.WAITING_FOR_MATCH, .code.RESTING { color: var(--warn); }
+  .checks div { font: 12px var(--mono); padding: 2px 0; }
+  .ok { color: var(--ok); } .no { color: var(--bad); }
+  .result { font-size: 18px; font-weight: 700; padding: 10px 14px; border-radius: 10px; display: none; }
+  .result.pass { display: block; background: rgba(52,211,153,.15); color: var(--ok); border: 1px solid var(--ok); }
+  .result.fail { display: block; background: rgba(248,113,113,.15); color: var(--bad); border: 1px solid var(--bad); }
+  [dir="rtl"] .narr .say, [dir="rtl"] .narr .title { text-align: right; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+  @media (prefers-reduced-motion: reduce) { .row-flash, .flowitem { animation: none; } }
+</style>
+</head>
+<body>
+<div class="offline" id="offline">OFFLINE SIMULATION — not the real backend</div>
+<header>
+  <h1>Netting Live — <span id="sym">…</span></h1>
+  <div class="quote"><span><b>bid</b><span id="bid">–</span></span><span><b>mid</b><span id="mid">–</span></span><span><b>ask</b><span id="ask">–</span></span></div>
+  <span class="badge" id="frozen">FROZEN</span>
+  <span class="badge" id="crossed">CROSSED</span>
+  <div class="spacer"></div>
+  <button class="primary" id="play">▶ Play</button>
+  <button id="pause">⏸ Pause</button>
+  <button id="step">⏭ Step</button>
+  <select id="speed" title="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+  <button id="lang">עברית</button>
+</header>
+<main>
+  <div class="chips" id="chips"></div>
+  <div class="narr"><div class="sid" id="sid">Waiting — press ▶ Play</div><div class="title" id="stitle"></div><div class="say" id="say"></div></div>
+  <div class="result" id="result"></div>
+  <div class="legend">
+    <span><span class="who A">A</span> Trader A</span><span><span class="who B">B</span> Trader B</span><span><span class="who C">C</span> <span data-en="Computer (simulated client)" data-he="מחשב (לקוח מדומה)"></span></span>
+    <span class="ok">⇄ <span data-en="internal cross at mid" data-he="הצלבה פנימית באמצע"></span></span><span style="color:var(--ext)">→ 🌐 <span data-en="external market" data-he="שוק חיצוני"></span></span><span class="no">✖ <span data-en="rejected pair" data-he="צמד שנדחה"></span></span>
+  </div>
+  <div class="grid3">
+    <section class="panel" id="panelA"></section>
+    <section class="panel">
+      <h2><span data-en="Internal order book" data-he="ספר ההוראות הפנימי"></span><span class="sub" id="bookcount"></span></h2>
+      <table><thead><tr><th></th><th>side</th><th>remaining</th><th>limit</th><th>bps</th><th>status</th></tr></thead><tbody id="asks"></tbody></table>
+      <div class="book-mid" id="bookmid">mid</div>
+      <table><tbody id="bids"></tbody></table>
+      <h2 style="margin-top:12px"><span data-en="Computer" data-he="המחשב"></span></h2>
+      <div id="computer" class="sub"></div>
+    </section>
+    <section class="panel" id="panelB"></section>
+  </div>
+  <section class="panel">
+    <h2><span data-en="Routing — what just happened" data-he="ניתוב — מה קרה עכשיו"></span></h2>
+    <div class="flow" id="flow"></div>
+  </section>
+  <section class="panel">
+    <h2><span data-en="Broker (real clients only)" data-he="הברוקר (לקוחות אמיתיים בלבד)"></span></h2>
+    <div class="cards" id="cards"></div>
+  </section>
+  <div class="grid3" style="grid-template-columns: 2fr 1fr">
+    <section class="panel"><h2><span data-en="Engine decisions (from the Java backend)" data-he="החלטות המנוע (מה-Java)"></span></h2>
+      <div class="log"><table><thead><tr><th>time</th><th>order</th><th>vs</th><th>code</th><th>detail</th></tr></thead><tbody id="log"></tbody></table></div></section>
+    <section class="panel"><h2><span data-en="Checks" data-he="בדיקות"></span></h2><div class="checks" id="checks"></div></section>
+  </div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  let lang = 'en';
+  let scenarios = [];
+  const status = {};
+  let current = null;
+  let lastSay = null;
+  let seenBook = new Set();
+
+  const CODE_TEXT = {
+    NBBO_OK: { en: 'NBBO ok', he: 'NBBO תקין' },
+    FILL: { en: 'fill at mid', he: 'מילוי באמצע' },
+    MATCHED: { en: 'internal match', he: 'התאמה פנימית' },
+    REMAINDER: { en: 'remainder', he: 'שארית' },
+    EXTERNAL_FILL: { en: 'filled on the external market', he: 'בוצע בשוק החיצוני' },
+    SELL_LIMIT_ABOVE_MID: { en: 'seller asks above mid', he: 'המוכר דורש מעל האמצע' },
+    BUY_LIMIT_BELOW_MID: { en: 'buyer bids below mid', he: 'הקונה מציע מתחת לאמצע' },
+    CROSSED_MARKET: { en: 'broken market (bid ≥ ask)', he: 'שוק שבור (Bid ≥ Ask)' },
+    SELF_MATCH_SKIP: { en: 'same client — skipped', he: 'אותו לקוח — דילוג' },
+    SIM_SIM_SKIP: { en: 'computer vs computer — skipped', he: 'מחשב מול מחשב — דילוג' },
+    WAITING_FOR_MATCH: { en: 'waiting for a counterparty', he: 'ממתין לצד נגדי' },
+    RESTING: { en: 'resting in the book', he: 'ממתין בספר' },
+    ORDER_REJECTED: { en: 'rejected (funds)', he: 'נדחה (כסף)' },
+    FUNDS_SKIP: { en: 'skipped (funds)', he: 'דילוג (כסף)' },
+    LOCK_SKIP: { en: 'busy — skipped', he: 'תפוס — דילוג' },
+  };
+  const t = (o) => (o ? (o[lang] || o.en) : '');
+  const who = (w) => `<span class="who ${w || '?'}">${w === 'other' ? '·' : (w || '?')}</span>`;
+  const num = (v, d = 8) => (v === null || v === undefined || v === '' ? '–' : Number(v).toLocaleString('en-US', { maximumFractionDigits: d }));
+  const money = (v) => (v === null || v === undefined ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function applyLang() {
+    document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
+    $('lang').textContent = lang === 'he' ? 'English' : 'עברית';
+    document.querySelectorAll('[data-en]').forEach((el) => { el.textContent = el.dataset[lang] || el.dataset.en; });
+    renderChips();
+    if (lastSay) $('say').textContent = lastSay[lang] || lastSay.en;
+    if (current) $('stitle').textContent = t(current.title);
+  }
+
+  function renderChips() {
+    $('chips').innerHTML = scenarios.map((s) => `<span class="chip ${status[s.id] || ''}" title="${esc(t(s.title))}">${s.id}</span>`).join('');
+  }
+
+  function renderTrader(el, label, cls, d) {
+    if (!d) return;
+    const pend = (d.pending || []).map((o) => `<tr><td class="${o.side === 'BUY' ? 'buy' : 'sell'}">${o.side}</td><td>${num(o.quantity)}</td><td>${o.limitPrice ? num(o.limitPrice, 2) : o.orderType}</td><td>${o.status}</td><td>${num(o.filledQty)}</td></tr>`).join('');
+    const pos = (d.positions || []).map((p) => `<tr><td class="${p.side === 'LONG' ? 'buy' : 'sell'}">${p.side}</td><td>${num(p.quantity)}</td><td>${num(p.avgPrice, 2)}</td><td>${money(p.unrealizedPnl)}</td></tr>`).join('');
+    el.innerHTML = `<h2><span>${who(cls)} ${label}</span><span class="sub">${esc(d.email)}</span></h2>
+      <div class="big">${money(d.balance)}</div><div class="sub">${lang === 'he' ? 'יתרה · הון' : 'balance · equity'} ${money(d.equity)}</div>
+      <h2 style="margin-top:10px"><span>${lang === 'he' ? 'הוראות פתוחות' : 'Open orders'}</span></h2>
+      <table><thead><tr><th>side</th><th>qty</th><th>limit</th><th>status</th><th>filled</th></tr></thead><tbody>${pend || '<tr><td colspan=5 class="sub">–</td></tr>'}</tbody></table>
+      <h2 style="margin-top:10px"><span>${lang === 'he' ? 'פוזיציות' : 'Positions'}</span></h2>
+      <table><thead><tr><th>side</th><th>qty</th><th>avg</th><th>P/L</th></tr></thead><tbody>${pos || '<tr><td colspan=4 class="sub">–</td></tr>'}</tbody></table>`;
+  }
+
+  function ownerLabel(row, st) {
+    if (row.simulated) return 'C';
+    if (st.A && row.owner === st.A.email) return 'A';
+    if (st.B && row.owner === st.B.email) return 'B';
+    return 'other';
+  }
+
+  function renderState(st) {
+    $('sym').textContent = st.symbol;
+    $('bid').textContent = num(st.quote.bid, 5); $('mid').textContent = num(st.quote.mid, 5); $('ask').textContent = num(st.quote.ask, 5);
+    $('frozen').classList.toggle('on', !!st.quote.frozen);
+    $('crossed').classList.toggle('bad', !!st.quote.crossed);
+    renderTrader($('panelA'), 'Trader A', 'A', st.A);
+    renderTrader($('panelB'), 'Trader B', 'B', st.B);
+    const row = (r, side) => {
+      const fresh = !seenBook.has(r.orderId);
+      return `<tr class="${fresh ? 'row-flash' : ''}"><td>${who(ownerLabel(r, st))}</td><td class="${side}">${side === 'buy' ? 'BUY' : 'SELL'}</td><td>${num(r.remaining)}</td><td>${r.limit ? num(r.limit, 2) : r.type}</td><td>${r.bpsFromMid ?? ''}</td><td>${r.status}</td></tr>`;
+    };
+    const asks = [...(st.book.sells || [])].reverse();
+    $('asks').innerHTML = asks.map((r) => row(r, 'sell')).join('') || `<tr><td colspan=6 class="sub">${lang === 'he' ? 'אין מוכרים' : 'no sellers'}</td></tr>`;
+    $('bids').innerHTML = (st.book.buys || []).map((r) => row(r, 'buy')).join('') || `<tr><td colspan=6 class="sub">${lang === 'he' ? 'אין קונים' : 'no buyers'}</td></tr>`;
+    seenBook = new Set([...(st.book.sells || []), ...(st.book.buys || [])].map((r) => r.orderId));
+    $('bookmid').textContent = `mid ${num(st.quote.mid, 5)} — ${lang === 'he' ? 'הצלבה רק אם הקונה ≥ אמצע ≥ המוכר' : 'cross only if buyer ≥ mid ≥ seller'}`;
+    $('bookcount').textContent = `${(st.book.buys || []).length + (st.book.sells || []).length}`;
+    const c = st.computer || {};
+    $('computer').innerHTML = `${lang === 'he' ? 'סימולטור' : 'simulator'}: <b>${c.enabled ? 'ON' : 'OFF'}</b> · ` +
+      (c.accounts || []).map((a) => `${esc(a.displayName)}: ${money(a.balance)} · ${a.openPositions} pos · P/L ${money(a.unrealizedPnl)}`).join(' | ');
+    const s = st.summary || {};
+    const exp = s.houseNetExposure || {};
+    const expOk = Object.values(exp).every((v) => Number(v) === 0);
+    const cards = [
+      [lang === 'he' ? 'אחוז פנימי (כמות)' : 'Internal rate (qty)', `${(Number(s.internalRateByQty || 0) * 100).toFixed(1)}%`],
+      [lang === 'he' ? 'התאמות' : 'Matches', `${s.matches ?? 0} (${s.matchesWithComputer ?? 0} C)`],
+      [lang === 'he' ? 'הכנסות ברוקר' : 'Broker revenue', `$${money(s.brokerRevenue)}`],
+      [lang === 'he' ? 'עמלות חוץ שנחסכו' : 'External fees saved', `$${money(s.externalFeesSaved)}`],
+      [lang === 'he' ? 'חיסכון ללקוחות' : 'Client price improvement', `$${money(s.clientPriceImprovement)}`],
+      [lang === 'he' ? 'חשיפה נטו של הבית' : 'House net exposure', expOk ? '0 ✔' : JSON.stringify(exp)],
+    ];
+    $('cards').innerHTML = cards.map(([k, v]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  }
+
+  function flow(kind, html) {
+    const el = document.createElement('div');
+    el.className = `flowitem ${kind}`;
+    el.innerHTML = html;
+    $('flow').prepend(el);
+    while ($('flow').children.length > 40) $('flow').lastChild.remove();
+  }
+
+  function onEngine(m) {
+    const e = m.event;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${new Date(e.ts).toLocaleTimeString()}</td><td>${who(m.owner)} #${e.orderId ?? ''}</td><td>${e.restingOrderId ? who(m.restingOwner) + ' #' + e.restingOrderId : ''}</td><td class="code ${e.code}">${esc(t(CODE_TEXT[e.code]) || e.code)}</td><td>${esc(e.detail)}</td>`;
+    $('log').prepend(tr);
+    while ($('log').children.length > 300) $('log').lastChild.remove();
+    if (e.code === 'EXTERNAL_FILL') flow('external', `${who(m.owner)}<span class="arrow">──→ 🌐</span><span class="txt">${esc(e.detail)} · ${esc(t(CODE_TEXT.EXTERNAL_FILL))}</span>`);
+    if (['SELL_LIMIT_ABOVE_MID', 'BUY_LIMIT_BELOW_MID', 'SELF_MATCH_SKIP', 'SIM_SIM_SKIP', 'CROSSED_MARKET'].includes(e.code)) {
+      flow('reject', `${who(m.owner)}<span class="arrow">✖</span>${e.restingOrderId ? who(m.restingOwner) : ''}<span class="txt">${esc(t(CODE_TEXT[e.code]))} — ${esc(e.detail)}</span>`);
+    }
+    if (e.code === 'WAITING_FOR_MATCH') flow('wait', `${who(m.owner)}<span class="arrow">⏳</span><span class="txt">${esc(t(CODE_TEXT.WAITING_FOR_MATCH))} — ${esc(e.detail)}</span>`);
+  }
+
+  function onMatch(m) {
+    const x = m.match;
+    flow('internal', `${who(m.buyer)}<span class="arrow">⇄</span>${who(m.seller)}<span class="txt">${num(x.quantity)} @ ${num(x.mid, 5)} · ${lang === 'he' ? 'הצלבה פנימית באמצע' : 'internal cross at mid'} · ${lang === 'he' ? 'חיסכון' : 'saved'} $${money(Number(x.buyerImprovement) + Number(x.sellerImprovement))}</span>`);
+  }
+
+  function handle(m) {
+    switch (m.type) {
+      case 'hello':
+        scenarios = m.scenarios || [];
+        $('offline').style.display = m.offline ? 'block' : 'none';
+        $('sym').textContent = m.symbol;
+        renderChips();
+        break;
+      case 'state': renderState(m); break;
+      case 'scenario':
+        if (m.phase === 'start') {
+          current = m; status[m.id] = 'run';
+          $('sid').textContent = `${m.id} · ${m.actors}`;
+          $('stitle').textContent = t(m.title);
+          $('checks').innerHTML = '';
+          $('result').className = 'result';
+        } else {
+          status[m.id] = m.pass ? 'pass' : 'fail';
+        }
+        renderChips();
+        break;
+      case 'say': lastSay = m; $('say').textContent = m[lang] || m.en; break;
+      case 'check': {
+        const d = document.createElement('div');
+        d.innerHTML = `<span class="${m.pass ? 'ok' : 'no'}">${m.pass ? '✔' : '✘'}</span> ${esc(m.name)}${m.detail && !m.pass ? ` <span class="sub">— ${esc(m.detail)}</span>` : ''}`;
+        $('checks').appendChild(d);
+        break;
+      }
+      case 'order': {
+        const r = m.result || {};
+        const px = m.limit ? ` @ ${num(m.limit, 2)}` : (m.offsetBps !== undefined ? ` @ mid${m.offsetBps >= 0 ? '+' : ''}${m.offsetBps}bp` : '');
+        flow('order', `${who(m.who)}<span class="arrow">▸</span><span class="txt">${lang === 'he' ? 'שולח' : 'sends'} ${m.side} ${num(m.qty)} ${m.orderType}${px}${r.status ? ' → ' + r.status : ''}${r.routing ? ' / ' + r.routing : ''}</span>`);
+        break;
+      }
+      case 'engine': onEngine(m); break;
+      case 'match': onMatch(m); break;
+      case 'done':
+        $('result').className = `result ${m.allPass ? 'pass' : 'fail'}`;
+        $('result').textContent = m.allPass
+          ? (lang === 'he' ? `כל ${m.total} התרחישים עברו ✔ — כל האינווריאנטים תקינים` : `All ${m.total} scenarios PASS ✔ — all invariants hold`)
+          : (lang === 'he' ? `${m.passed}/${m.total} עברו — ראה כשלים` : `${m.passed}/${m.total} passed — see failures`);
+        break;
+      case 'log': console.warn(m.text); break;
+      default: break;
+    }
+  }
+
+  const post = (body) => fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  $('play').onclick = () => post({ action: 'play' });
+  $('pause').onclick = () => post({ action: 'pause' });
+  $('step').onclick = () => post({ action: 'step' });
+  $('speed').onchange = (e) => post({ action: 'speed', value: Number(e.target.value) });
+  $('lang').onclick = () => { lang = lang === 'en' ? 'he' : 'en'; applyLang(); };
+
+  const es = new EventSource('/events');
+  es.onmessage = (ev) => { try { handle(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
+  applyLang();
+})();
+</script>
+</body>
+</html>

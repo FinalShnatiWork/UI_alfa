@@ -75,6 +75,10 @@ public class TradingAccount {
   @Column(name = "commission_paid_total", nullable = false, precision = 18, scale = 8)
   private BigDecimal commissionPaidTotal = BigDecimal.ZERO;
 
+  /** Simulated "computer" counterparty account (House Liquidity Simulator), V32. */
+  @Column(name = "is_simulated", nullable = false)
+  private boolean simulated = false;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
@@ -218,4 +222,7 @@ public class TradingAccount {
   public void setDailyInterestRate(BigDecimal dailyInterestRate) {
     this.dailyInterestRate = dailyInterestRate;
   }
+
+  public boolean isSimulated() { return simulated; }
+  public void setSimulated(boolean simulated) { this.simulated = simulated; }
 }

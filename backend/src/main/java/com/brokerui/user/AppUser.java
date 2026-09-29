@@ -46,6 +46,10 @@ public class AppUser {
   @Column(name = "banned_reason", length = 500)
   private String bannedReason;
 
+  /** Simulated "computer" counterparty (never logs in), V32. */
+  @Column(name = "is_simulated", nullable = false)
+  private boolean simulated = false;
+
   public Long getId() {
     return id;
   }
@@ -113,5 +117,7 @@ public class AppUser {
   public void setBannedReason(String bannedReason) {
     this.bannedReason = bannedReason;
   }
-}
 
+  public boolean isSimulated() { return simulated; }
+  public void setSimulated(boolean simulated) { this.simulated = simulated; }
+}

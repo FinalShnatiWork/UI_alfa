@@ -366,11 +366,14 @@
           <div class="stat-card"><div class="sc-label">Open Positions</div><div class="sc-value" id="ov-positions">–</div><div class="sc-sub">active trades</div></div>
           <div class="stat-card"><div class="sc-label">Deposits Today</div><div class="sc-value" id="ov-deposits" style="color:var(--success)">–</div><div class="sc-sub" id="ov-deposits-sub">transactions</div></div>
           <div class="stat-card"><div class="sc-label">Login Failures</div><div class="sc-value" id="ov-failures" style="color:var(--danger)">–</div><div class="sc-sub">in audit log</div></div>
-          <div class="stat-card"><div class="sc-label">Internal Cross Rate</div><div class="sc-value" id="ov-internal-rate" style="color:#a78bfa">–</div><div class="sc-sub">AI Local Crossing %</div></div>
-          <div class="stat-card"><div class="sc-label">Commission Collected</div><div class="sc-value" id="ov-total-commission" style="color:var(--primary)">–</div><div class="sc-sub">Real, charged to client balances</div></div>
-          <div class="stat-card"><div class="sc-label">Fees Saved (Internal)</div><div class="sc-value" id="ov-total-saved" style="color:var(--success)">–</div><div class="sc-sub">Commission on AI-matched trades</div></div>
-          <div class="stat-card"><div class="sc-label">B-Book Client Losses</div><div class="sc-value" id="ov-bbook-profit" style="color:var(--success)">–</div><div class="sc-sub">−sum of client closed net P/L (fees already inside)</div></div>
-          <div class="stat-card"><div class="sc-label">Total Broker Profit</div><div class="sc-value" id="ov-total-profit" style="color:var(--success)">–</div><div class="sc-sub">Same as B-Book: local book, no double-counted fees</div></div>
+          <div class="stat-card"><div class="sc-label">Internal Cross Rate</div><div class="sc-value" id="ov-internal-rate" style="color:#a78bfa">–</div><div class="sc-sub" id="ov-internal-rate-sub">share of quantity netted client-vs-client / computer</div></div>
+          <div class="stat-card"><div class="sc-label">Commission Collected</div><div class="sc-value" id="ov-total-commission" style="color:var(--primary)">–</div><div class="sc-sub" id="ov-total-commission-sub">real clients only, charged to their balances</div></div>
+          <div class="stat-card"><div class="sc-label">External Fees Saved</div><div class="sc-value" id="ov-total-saved" style="color:var(--success)">–</div><div class="sc-sub">both legs stayed in-house on every internal cross</div></div>
+          <div class="stat-card"><div class="sc-label">Client Price Improvement</div><div class="sc-value" id="ov-improvement" style="color:var(--success)">–</div><div class="sc-sub">clients got the mid instead of bid/ask</div></div>
+          <div class="stat-card"><div class="sc-label">Broker Revenue (Netting)</div><div class="sc-value" id="ov-total-profit" style="color:var(--success)">–</div><div class="sc-sub">commission + fees saved − external fees paid (real clients)</div></div>
+          <div class="stat-card"><div class="sc-label">House Net Exposure</div><div class="sc-value" id="ov-exposure" style="color:var(--success)">–</div><div class="sc-sub">must be 0 — the broker never keeps a side</div></div>
+          <div class="stat-card"><div class="sc-label">Computer P/L (demo)</div><div class="sc-value" id="ov-sim-pnl" style="color:var(--text-muted)">–</div><div class="sc-sub">the simulated clients' own result — not broker money, not part of Broker Revenue</div></div>
+          <div class="stat-card"><div class="sc-label">Legacy Orders</div><div class="sc-value" id="ov-legacy" style="color:var(--text-muted)">–</div><div class="sc-sub">pre-netting history, excluded from the numbers above</div></div>
         </div>
         
         <div class="card" style="border-color: rgba(0,200,255,0.3);">
@@ -443,7 +446,10 @@
             <select id="trades-filter-routing" onchange="renderTradesTable()" style="background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 8px;">
               <option value="">All Routing</option>
               <option value="INTERNAL">Internal Match</option>
+              <option value="SPLIT">Split (internal + external)</option>
               <option value="EXTERNAL">External (MT5)</option>
+              <option value="LEGACY">Legacy (pre-netting)</option>
+              <option value="CLOSE">Position close</option>
             </select>
           </div>
           <div class="table-scroll">
@@ -829,40 +835,41 @@
       const failures = _auditData.filter(a => a.action === 'LOGIN_FAILURE').length;
       document.getElementById('ov-failures').innerText = failures;
 
-      // Calculate AI Crossing rate & real vs. modeled economics.
-      // Commission is REAL money debited from client balances on every fill (see TradingFees.COMMISSION_PER_TRADE
-      // in the backend). Whether the platform actually pays an exchange fee on top depends on the AI routing
-      // decision (executionRouting): INTERNAL matches cost nothing, EXTERNAL ones are modeled as costing the
-      // platform the same $1.50/trade it would pay a real liquidity provider (that side stays illustrative,
-      // since this demo has no real external exchange settlement).
-      const allOrders = _tradesRaw.filter(t => t.type !== 'POSITION');
-      const internalOrders = allOrders.filter(t => t.executionRouting === 'INTERNAL');
-      const externalCount = allOrders.filter(t => t.executionRouting !== 'INTERNAL').length;
-      const totalOrders = allOrders.length;
-      const internalRate = totalOrders > 0 ? ((internalOrders.length / totalOrders) * 100).toFixed(0) + '%' : '0%';
+      // Commission collected is set in renderNettingStats(): real clients only. The computer's
+      // (simulated accounts') commission is demo money and must not inflate this card.
+      // Netting economics come from the backend (real clients only, LEGACY excluded).
+      // Under netting the broker is NOT the counterparty, so client P/L is not broker P/L.
+      renderNettingStats();
+    }
 
-      const totalCommission = allOrders.reduce((s, t) => s + Number(t.commission || 0), 0);
-      const feesSaved = internalOrders.reduce((s, t) => s + Number(t.commission || 0), 0);
-      
-      // Every fill is still booked on this platform (EXTERNAL only notifies MT5), so
-      // broker book P/L = -sum(client realizedPnl). That number already includes the
-      // open+close commissions of those closed trades. Adding commissions from FILLED
-      // opening legs (realizedPnl === 0) on top double-counted the open fee.
-      const closedOrders = allOrders.filter(t => t.realizedPnl != null && Number(t.realizedPnl) !== 0);
-      const bBookProfit = -1 * closedOrders.reduce((s, t) => s + Number(t.realizedPnl || 0), 0);
-      const totalBrokerProfit = bBookProfit;
-
-      document.getElementById('ov-internal-rate').innerText = internalRate;
-      document.getElementById('ov-total-commission').innerText = '$' + totalCommission.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      document.getElementById('ov-total-saved').innerText = '$' + feesSaved.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      
-      const bBookEl = document.getElementById('ov-bbook-profit');
-      bBookEl.innerText = (bBookProfit >= 0 ? '+$' : '-$') + Math.abs(bBookProfit).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      bBookEl.style.color = bBookProfit >= 0 ? 'var(--success)' : 'var(--danger)';
-      
-      const totalEl = document.getElementById('ov-total-profit');
-      totalEl.innerText = (totalBrokerProfit >= 0 ? '+$' : '-$') + Math.abs(totalBrokerProfit).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      totalEl.style.color = totalBrokerProfit >= 0 ? 'var(--success)' : 'var(--danger)';
+    async function renderNettingStats() {
+      const s = await fetchData('/netting/summary');
+      if (!s) return;
+      const fmt = (v) => Number(v || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      const signed = (v) => (Number(v) >= 0 ? '+$' : '-$') + fmt(Math.abs(Number(v || 0)));
+      document.getElementById('ov-internal-rate').innerText = (Number(s.internalRateByQty || 0) * 100).toFixed(1) + '%';
+      document.getElementById('ov-internal-rate-sub').innerText = `${s.matches || 0} internal crosses · ${s.orders || 0} netting-era orders`;
+      const simCommission = Number(s.simulatedCommissionDemoMoney || 0);
+      let realCommission = s.commissionCollectedRealClients;
+      if (realCommission == null) { // older backend: derive it from the trades list
+        realCommission = _tradesRaw.filter(t => t.type !== 'POSITION').reduce((a, t) => a + Number(t.commission || 0), 0) - simCommission;
+      }
+      document.getElementById('ov-total-commission').innerText = '$' + fmt(realCommission);
+      document.getElementById('ov-total-commission-sub').innerText =
+        `real clients only · computer's demo commission ($${fmt(simCommission)}) excluded`;
+      document.getElementById('ov-total-saved').innerText = '$' + fmt(s.externalFeesSaved);
+      document.getElementById('ov-improvement').innerText = '$' + fmt(s.clientPriceImprovement);
+      const rev = document.getElementById('ov-total-profit');
+      rev.innerText = signed(s.brokerRevenue);
+      rev.style.color = Number(s.brokerRevenue) >= 0 ? 'var(--success)' : 'var(--danger)';
+      const exp = s.houseNetExposure || {};
+      const bad = Object.entries(exp).filter(([, v]) => Number(v) !== 0);
+      const expEl = document.getElementById('ov-exposure');
+      expEl.innerText = bad.length ? bad.map(([k, v]) => `${k} ${v}`).join(', ') : '0 ✔';
+      expEl.style.color = bad.length ? 'var(--danger)' : 'var(--success)';
+      const simPnl = Number(s.simulatedRealizedPnl || 0) + Number(s.simulatedUnrealizedPnl || 0);
+      document.getElementById('ov-sim-pnl').innerText = signed(simPnl);
+      document.getElementById('ov-legacy').innerText = s.legacyOrders ?? '–';
     }
 
     // ─── Users Table ─────────────────────────────────────────────────────────
@@ -927,9 +934,15 @@
         const date = t.date ? formatAuditTime(t.date) : '–';
         const fullDate = t.date ? String(t.date).replace('T',' ').replace(/\.\d+Z?$/,'') : '';
         const typeBadge = t.type === 'POSITION' ? 'badge-orange' : 'badge-info';
-        const routeBadge = t.executionRouting === 'INTERNAL' 
-          ? `<span class="badge badge-purple">Internal</span>` 
-          : `<span class="badge badge-info">External</span>`;
+        const routeBadge = t.executionRouting === 'INTERNAL'
+          ? `<span class="badge badge-purple">Internal</span>`
+          : t.executionRouting === 'SPLIT'
+          ? `<span class="badge badge-orange">Split</span>`
+          : t.executionRouting === 'LEGACY'
+          ? `<span class="badge" style="opacity:.6">Legacy</span>`
+          : t.executionRouting === 'EXTERNAL'
+          ? `<span class="badge badge-info">External</span>`
+          : `<span class="badge" style="opacity:.6">${t.executionRouting || '–'}</span>`;
         const commission = Number(t.commission || 0);
         const commissionCell = commission > 0
           ? `<span style="color:var(--danger)">−$${commission.toFixed(2)}</span>`

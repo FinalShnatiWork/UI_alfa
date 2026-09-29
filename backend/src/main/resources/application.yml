@@ -11,7 +11,7 @@ spring:
     username: sa
     password:
   jpa:
-    open-in-view: false
+    open-in-view: true
     hibernate:
       ddl-auto: validate
     properties:
@@ -25,6 +25,24 @@ spring:
     validate-on-migrate: false
 
 broker:
+  # Real netting (client vs client / client vs computer) — see buysellmodel/NETTING_IMPLEMENTATION_PLAN.md
+  netting:
+    external-fee-per-trade: 1.50   # broker's cost per leg routed to the external market
+    nn-shadow: true                # NN advisor is called after commit and only recorded, never decides
+    limit-wait-ms: 8000            # a marketable LIMIT waits this long for an internal counterparty (0 = never)
+    test-endpoints:
+      enabled: true                # demo only: /api/admin/netting/test/** (localhost-only anyway)
+      freeze-ttl-minutes: 10       # frozen test prices expire on their own
+    sim:                           # "the computer": simulated clients that quote and trade
+      enabled: true
+      symbols: BTCUSD,EURUSD,XAUUSD
+      tick-ms: 3000
+      orders-per-side: 3
+      quote-offset-min-bps: -2
+      quote-offset-max-bps: 2
+      ttl-seconds: 30
+      market-rate-per-min: 6
+      position-ttl-minutes: 10
   market:
     finnhub-api-key: ${FINNHUB_API_KEY:}
     rapidapi-key: ${RAPIDAPI_KEY:}

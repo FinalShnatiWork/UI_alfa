@@ -68,8 +68,14 @@ export interface BrokerOrder {
   id: number;
   symbolCode: string;
   side: 'BUY' | 'SELL';
-  orderType: 'MARKET' | 'LIMIT' | 'STOP';
-  status: 'NEW' | 'FILLED' | 'CANCELLED' | 'CANCELED' | 'REJECTED';
+  orderType: 'MARKET' | 'LIMIT' | 'STOP' | 'LIQUIDITY';
+  /** PARTIALLY_FILLED / PENDING_NET come from netting (a LIMIT waiting for an internal counterparty). */
+  status: 'NEW' | 'PARTIALLY_FILLED' | 'PENDING_NET' | 'FILLED' | 'CANCELLED' | 'CANCELED' | 'REJECTED';
+  /** Netting: how much filled, how much crossed internally at the mid vs. on the external market. */
+  filledQty?: string;
+  internalQty?: string;
+  externalQty?: string;
+  routing?: 'INTERNAL' | 'EXTERNAL' | 'SPLIT' | 'LEGACY' | null;
   quantity: string;
   limitPrice?: string;
   stopPrice?: string;

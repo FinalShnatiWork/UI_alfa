@@ -1,0 +1,1028 @@
+{
+  "version": 1,
+  "description": "Shared netting scenarios. Used by NettingEngineScenarioTest (Java), scripts/lib/netting_engine.js (JS port) and buysellmodel/tests/model_check.js. Prices: mid 100, spread 1.5bp per side, 1bp = 0.01.",
+  "scenarios": [
+    {
+      "id": "S01",
+      "title": {
+        "en": "Empty book: buy goes external",
+        "he": "ספר ריק: הקנייה יוצאת לשוק"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [],
+      "expected": {
+        "fills": [],
+        "remainder": "10",
+        "rejectReason": null,
+        "decisionCodes": [
+          "REMAINDER"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 0,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 0,
+        "historicalMatchRate": 0
+      },
+      "expectedFeatures": [
+        0.1,
+        0,
+        0.030000000000001137,
+        1,
+        0.5,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "S02",
+      "title": {
+        "en": "Computer sells 1bp below mid, client buys at market",
+        "he": "המחשב מוכר 1bp מתחת לאמצע, לקוח קונה בשוק"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "10",
+            "price": "100"
+          }
+        ],
+        "remainder": "0",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 10,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0.1,
+        0.030000000000001137,
+        0.5,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S03",
+      "title": {
+        "en": "Seller asks above mid: NBBO reject",
+        "he": "המוכר דורש מעל האמצע: דחיית NBBO"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "100.01",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [],
+        "remainder": "10",
+        "rejectReason": null,
+        "decisionCodes": [
+          "SELL_LIMIT_ABOVE_MID",
+          "REMAINDER"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 0,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0,
+        0.030000000000001137,
+        1,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S04",
+      "title": {
+        "en": "Partial: 4 internal, 6 remainder",
+        "he": "חלקי: 4 בפנים, 6 שארית"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 2,
+          "simulated": false,
+          "side": "SELL",
+          "qty": "4",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "4",
+            "price": "100"
+          }
+        ],
+        "remainder": "6",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL",
+          "REMAINDER"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 4,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.4
+      },
+      "expectedFeatures": [
+        0.1,
+        0.04,
+        0.030000000000001137,
+        0.7142857142857143,
+        0.5,
+        0,
+        0.1,
+        0.4
+      ]
+    },
+    {
+      "id": "S05",
+      "title": {
+        "en": "Sell side works: resting buy above mid, client sells",
+        "he": "צד המכירה עובד: קנייה ממתינה מעל האמצע, לקוח מוכר"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "SELL",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "BUY",
+          "qty": "10",
+          "limit": "100.01",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "10",
+            "price": "100"
+          }
+        ],
+        "remainder": "0",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 10,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0.1,
+        0.030000000000001137,
+        0.5,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S06",
+      "title": {
+        "en": "Price-time priority",
+        "he": "עדיפות מחיר ואז זמן"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "5",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 11,
+          "accountId": 2,
+          "simulated": false,
+          "side": "SELL",
+          "qty": "3",
+          "limit": "99.98",
+          "createdAtMs": 2000
+        },
+        {
+          "orderId": 12,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "3",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        },
+        {
+          "orderId": 13,
+          "accountId": 901,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "3",
+          "limit": "99.98",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 13,
+            "qty": "3",
+            "price": "100"
+          },
+          {
+            "restingOrderId": 11,
+            "qty": "2",
+            "price": "100"
+          }
+        ],
+        "remainder": "0",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL",
+          "NBBO_OK",
+          "FILL"
+        ]
+      },
+      "features": {
+        "ownQty": 5,
+        "oppositeQty": 9,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 3,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.05,
+        0.09,
+        0.030000000000001137,
+        0.35714285714285715,
+        0.5,
+        0,
+        0.3,
+        0.5
+      ]
+    },
+    {
+      "id": "S07",
+      "title": {
+        "en": "Self-match prevention",
+        "he": "מניעת מסחר מול עצמך"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 1,
+          "simulated": false,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [],
+        "remainder": "10",
+        "rejectReason": null,
+        "decisionCodes": [
+          "SELF_MATCH_SKIP",
+          "REMAINDER"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 0,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0,
+        0.030000000000001137,
+        1,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S08",
+      "title": {
+        "en": "Computer never trades with computer",
+        "he": "מחשב לא סוחר מול מחשב"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 901,
+        "simulated": true,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [],
+        "remainder": "10",
+        "rejectReason": null,
+        "decisionCodes": [
+          "SIM_SIM_SKIP",
+          "REMAINDER"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 0,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0,
+        0.030000000000001137,
+        1,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S09",
+      "title": {
+        "en": "Crossed market: nothing crosses",
+        "he": "שוק שבור: אין התאמה"
+      },
+      "quote": {
+        "bid": "100.015",
+        "mid": "100",
+        "ask": "99.985"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [],
+        "remainder": "10",
+        "rejectReason": "CROSSED_MARKET",
+        "decisionCodes": [
+          "CROSSED_MARKET"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 0,
+        "bid": 100.015,
+        "ask": 99.985,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0,
+        -0.030000000000001137,
+        1,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S10",
+      "title": {
+        "en": "Buy limit below mid is not marketable",
+        "he": "קנייה במחיר מתחת לאמצע לא ניתנת לביצוע"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": "99.95"
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [],
+        "remainder": "10",
+        "rejectReason": "BUY_LIMIT_BELOW_MID",
+        "decisionCodes": [
+          "BUY_LIMIT_BELOW_MID"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 0,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0,
+        0.030000000000001137,
+        1,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S11",
+      "title": {
+        "en": "Tiny buy against a big resting sell",
+        "he": "קנייה קטנה מול מכירה גדולה"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "0.01",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "500",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "0.01",
+            "price": "100"
+          }
+        ],
+        "remainder": "0",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL"
+        ]
+      },
+      "features": {
+        "ownQty": 0.01,
+        "oppositeQty": 500,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.0001,
+        1,
+        0.030000000000001137,
+        0.00001999960000798051,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S12",
+      "title": {
+        "en": "Client vs client",
+        "he": "לקוח מול לקוח"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 2,
+          "simulated": false,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "10",
+            "price": "100"
+          }
+        ],
+        "remainder": "0",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 10,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0.1,
+        0.030000000000001137,
+        0.5,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S13",
+      "title": {
+        "en": "Mixed book: one fill, one NBBO reject, remainder",
+        "he": "ספר מעורב: מילוי אחד, דחייה אחת, שארית"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 2,
+          "simulated": false,
+          "side": "SELL",
+          "qty": "4",
+          "limit": "99.99",
+          "createdAtMs": 1000
+        },
+        {
+          "orderId": 11,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "2",
+          "limit": "100.02",
+          "createdAtMs": 500
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "4",
+            "price": "100"
+          }
+        ],
+        "remainder": "6",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL",
+          "SELL_LIMIT_ABOVE_MID",
+          "REMAINDER"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 4,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 2,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0.04,
+        0.030000000000001137,
+        0.7142857142857143,
+        0.5,
+        0,
+        0.2,
+        0.5
+      ]
+    },
+    {
+      "id": "S14",
+      "title": {
+        "en": "Sell limit above mid is not marketable",
+        "he": "מכירה במחיר מעל האמצע לא ניתנת לביצוע"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "SELL",
+        "qty": "10",
+        "limit": "100.05"
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "BUY",
+          "qty": "10",
+          "limit": "100.01",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [],
+        "remainder": "10",
+        "rejectReason": "SELL_LIMIT_ABOVE_MID",
+        "decisionCodes": [
+          "SELL_LIMIT_ABOVE_MID"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 0,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0,
+        0.030000000000001137,
+        1,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S15",
+      "title": {
+        "en": "Limits exactly at mid are allowed",
+        "he": "מחיר בדיוק באמצע מותר"
+      },
+      "quote": {
+        "bid": "99.985",
+        "mid": "100",
+        "ask": "100.015"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "10",
+        "limit": "100"
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 2,
+          "simulated": false,
+          "side": "SELL",
+          "qty": "10",
+          "limit": "100",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "10",
+            "price": "100"
+          }
+        ],
+        "remainder": "0",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL"
+        ]
+      },
+      "features": {
+        "ownQty": 10,
+        "oppositeQty": 10,
+        "bid": 99.985,
+        "ask": 100.015,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.5
+      },
+      "expectedFeatures": [
+        0.1,
+        0.1,
+        0.030000000000001137,
+        0.5,
+        0.5,
+        0,
+        0.1,
+        0.5
+      ]
+    },
+    {
+      "id": "S16",
+      "title": {
+        "en": "Realistic BTC quote, computer quote 1bp under mid",
+        "he": "ציטוט ביטקוין אמיתי, המחשב 1bp מתחת לאמצע"
+      },
+      "quote": {
+        "bid": "64990.25",
+        "mid": "65000",
+        "ask": "65009.75"
+      },
+      "incoming": {
+        "orderId": 100,
+        "accountId": 1,
+        "simulated": false,
+        "side": "BUY",
+        "qty": "0.01",
+        "limit": null
+      },
+      "resting": [
+        {
+          "orderId": 10,
+          "accountId": 900,
+          "simulated": true,
+          "side": "SELL",
+          "qty": "0.004",
+          "limit": "64993.5",
+          "createdAtMs": 1000
+        }
+      ],
+      "expected": {
+        "fills": [
+          {
+            "restingOrderId": 10,
+            "qty": "0.004",
+            "price": "65000"
+          }
+        ],
+        "remainder": "0.006",
+        "rejectReason": null,
+        "decisionCodes": [
+          "NBBO_OK",
+          "FILL",
+          "REMAINDER"
+        ]
+      },
+      "features": {
+        "ownQty": 0.01,
+        "oppositeQty": 0.004,
+        "bid": 64990.25,
+        "ask": 65009.75,
+        "ownDepth": 0,
+        "oppositeDepth": 1,
+        "historicalMatchRate": 0.25
+      },
+      "expectedFeatures": [
+        0.0001,
+        0.00004,
+        1,
+        0.7142857142857143,
+        1,
+        0,
+        0.1,
+        0.25
+      ]
+    }
+  ]
+}
