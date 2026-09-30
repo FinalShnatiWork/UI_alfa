@@ -94,6 +94,43 @@ public class MarketController {
     }
 
     /**
+     * Crypto candles (BTCUSD, ETHUSD, …). Same lookup chain as the other categories.
+     */
+    @GetMapping("/api/market/crypto/candles")
+    public ResponseEntity<?> cryptoCandles(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "1h") String interval) {
+        return candlesResponse(symbol, interval);
+    }
+
+    /**
+     * Loads historical bars for a symbol. Used by chart endpoints and the in-process analyzer.
+     */
+    public List<CandleBar> listCandles(String symbol, String interval) {
+        String sym = symbol == null ? "" : symbol.trim().toUpperCase();
+        String iv = interval == null || interval.isBlank() ? "1h" : interval;
+        if (isCrypto(sym)) {
+            try {
+                List<CandleBar> data = binance.getCandles(sym, iv);
+                if (data != null && !data.isEmpty()) return data;
+            } catch (Exception ignored) {}
+        }
+        if (mt5.isConfigured()) {
+            try {
+                List<CandleBar> data = mt5.getCandlesForUi(sym, 100, iv);
+                if (data != null && !data.isEmpty()) return data;
+            } catch (Exception ignored) {}
+        }
+        if (yahoo.isConfigured()) {
+            try {
+                List<CandleBar> data = yahoo.getCandles(sym, iv);
+                if (data != null && !data.isEmpty()) return data;
+            } catch (Exception ignored) {}
+        }
+        return List.of();
+    }
+
+    /**
      * Helper mapping method to check and query candle endpoints sequentially (Binance -> MT5 -> Yahoo -> fallback).
      *
      * @param symbol target market symbol
@@ -101,32 +138,7 @@ public class MarketController {
      * @return HTTP entity containing bars list
      */
     private ResponseEntity<?> candlesResponse(String symbol, String interval) {
-        // 0. Try Binance for crypto
-        if (isCrypto(symbol)) {
-            try {
-                List<CandleBar> data = binance.getCandles(symbol, interval);
-                if (data != null && !data.isEmpty()) return ResponseEntity.ok(data);
-            } catch (Exception ignored) {}
-        }
-
-        // 1. Try MT5
-        if (mt5.isConfigured()) {
-            try {
-                List<CandleBar> data = mt5.getCandlesForUi(symbol, 100, interval);
-                if (data != null && !data.isEmpty()) return ResponseEntity.ok(data);
-            } catch (Exception ignored) {}
-        }
-
-        // 2. Try Yahoo Finance
-        if (yahoo.isConfigured()) {
-            try {
-                List<CandleBar> data = yahoo.getCandles(symbol, interval);
-                if (data != null && !data.isEmpty()) return ResponseEntity.ok(data);
-            } catch (Exception ignored) {}
-        }
-
-        // 3. Return empty — frontend will use synthetic candles
-        return ResponseEntity.ok(List.of());
+        return ResponseEntity.ok(listCandles(symbol, interval));
     }
 
     /**

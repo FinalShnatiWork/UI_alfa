@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiPostJson } from '@/lib/api';
 
 interface NNAdvisorPanelProps {
   symbol: string;
@@ -8,7 +9,7 @@ interface NNAdvisorPanelProps {
 
 /**
  * AI Neural Network Smart Routing Advisor panel.
- * Posts normalized book/market parameters to the python predictor service (port 3005)
+ * Posts book/market features to Spring (`/api/nn/predict`). Optional Node trainer on 3005 is used only if Spring can reach it.
  * and displays recommended routing (Internal Crossing vs. External MT5) with estimated savings.
  *
  * @param props symbol, active input volume quantity, and current price quote
@@ -44,16 +45,12 @@ export function NNAdvisorPanel({ symbol, volume, currentPrice }: NNAdvisorPanelP
         const bookDepthSell = 0.5;
         const historicalMatchRate = 0.72;
 
-        const response = await fetch('http://localhost:3005/predict', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const response = await apiPostJson('/api/nn/predict', {
             features: [
               buyQtyNorm, sellQtyNorm, spreadNorm, imbalance,
               midPriceNorm, bookDepthBuy, bookDepthSell, historicalMatchRate
             ]
-          })
-        });
+          });
 
         if (response.ok) {
           const data = await response.json();
@@ -109,7 +106,7 @@ export function NNAdvisorPanel({ symbol, volume, currentPrice }: NNAdvisorPanelP
         fontSize: '0.8rem',
         textAlign: 'center'
       }}>
-        ⚠️ {error} (Port 3005)
+        ⚠️ {error}
       </div>
     );
   }

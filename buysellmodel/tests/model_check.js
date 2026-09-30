@@ -21,7 +21,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SCEN_PATH = path.join(__dirname, 'netting_scenarios.json');
-const engine = require(path.join(ROOT, 'scripts', 'lib', 'netting_engine.js'));
+const engine = require(path.join(ROOT, 'scripts', 'lib', 'netting_engine'));
 const { NeuralNetwork, extractFeatures } = require(path.join(ROOT, 'buysellmodel', 'nn_core.js'));
 
 const WRITE_GOLDEN = process.argv.includes('--write-golden');

@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class NettingProperties {
 
-  /** What the broker would pay an external venue per routed leg (same as TradingFees.COMMISSION_PER_TRADE). */
-  @Value("${broker.netting.external-fee-per-trade:1.50}")
-  private BigDecimal externalFeePerTrade;
+  /** Venue cost as a fraction of notional on the quantity that actually goes external. Default 0.10%. */
+  @Value("${broker.netting.external-fee-rate:0.001}")
+  private BigDecimal externalFeeRate;
 
   /** Call the NN after commit and store its opinion. It never decides. */
   @Value("${broker.netting.nn-shadow:true}")
@@ -31,7 +31,7 @@ public class NettingProperties {
   /** Runtime switch used by the V13 scenario: behave as if the NN server were down. */
   private final AtomicBoolean nnOffline = new AtomicBoolean(false);
 
-  public BigDecimal getExternalFeePerTrade() { return externalFeePerTrade; }
+  public BigDecimal getExternalFeeRate() { return externalFeeRate; }
   public boolean isNnShadow() { return nnShadow; }
   public long getLimitWaitMs() { return limitWaitMs; }
   public void setLimitWaitMs(long ms) { this.limitWaitMs = Math.max(0, ms); }

@@ -10,7 +10,8 @@ public record UserDto(
     Instant createdAt,
     boolean banned,
     Instant bannedAt,
-    String bannedReason) {
+    String bannedReason,
+    boolean simulated) {
   public static UserDto from(AppUser u) {
     return new UserDto(
         u.getId(),
@@ -20,7 +21,8 @@ public record UserDto(
         u.getCreatedAt(),
         u.isBanned(),
         u.getBannedAt(),
-        u.getBannedReason());
+        u.getBannedReason(),
+        u.isSimulated());
   }
 }
 

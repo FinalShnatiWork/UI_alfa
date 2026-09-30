@@ -222,7 +222,6 @@ public class NettingService {
 
     // 4. Book each internal cross (both sides at the mid).
     int matches = 0;
-    BigDecimal fee = props.getExternalFeePerTrade();
     BigDecimal cs = ContractSpecs.getContractSize(symbol);
     for (Fill f : plan.fills()) {
       BrokerOrder r = lockedResting.get(f.restingOrderId());
@@ -261,7 +260,8 @@ public class NettingService {
       m.setAsk(q.ask());
       m.setBuyerImprovement(q.ask().subtract(q.mid()).multiply(qty).multiply(cs));
       m.setSellerImprovement(q.mid().subtract(q.bid()).multiply(qty).multiply(cs));
-      m.setExternalFeeSaved(fee.multiply(BigDecimal.valueOf(2)));
+      // Both sides stayed in-house, so the venue fee is not paid on either one.
+      m.setExternalFeeSaved(TradingFees.exchangeFee(symbol, qty, q.mid()).multiply(BigDecimal.valueOf(2)));
       m.setBuyerSimulated(isBuy ? inSim : f.restingSimulated());
       m.setSellerSimulated(isBuy ? f.restingSimulated() : inSim);
       m = matchRepo.save(m);

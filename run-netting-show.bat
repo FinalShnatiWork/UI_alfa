@@ -29,7 +29,7 @@ goto wait_backend
 echo  Backend is up. Giving Spring Boot a few seconds to finish...
 timeout /t 8 /nobreak >nul
 for /f "tokens=5" %%p in ('netstat -aon ^| findstr ":4010 " ^| findstr "LISTENING"') do taskkill /PID %%p /T /F >nul 2>&1
-start "Netting Show" cmd /k node scripts\netting_visual_demo.js --no-open --autoplay --speed 0.7
+npx --yes tsx scripts\netting_visual_demo.ts --no-open --autoplay --speed 0.7
 timeout /t 3 /nobreak >nul
 start "" http://localhost:4010
 exit /b 0

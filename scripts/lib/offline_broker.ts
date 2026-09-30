@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use strict';
 /**
  * In-memory broker for `netting_visual_demo.js --offline` (presentations without the backend).
@@ -72,8 +73,10 @@ class OfflineBroker {
   }
 
   _commission(sym, qty, price) {
-    const fee = r2(price * qty * contractSize(sym) * 0.000025);
-    return Math.min(50, Math.max(0.1, fee));
+    if (sym.includes('BTC') || sym.includes('ETH') || sym.includes('SOL') || sym.includes('XRP')) {
+      return r2(price * qty * contractSize(sym) * 0.002);
+    }
+    return r2(qty * 7);
   }
 
   _margin(sym, qty, price) { return r4(price * qty * contractSize(sym) / 100); }
@@ -166,7 +169,8 @@ class OfflineBroker {
       const m = {
         id: ++this.ids.match, symbolCode: sym, buyOrderId: buy.id, sellOrderId: sell.id, buyAccountId: buy.accountId, sellAccountId: sell.accountId,
         quantity: qty, bid: q.bid, mid: q.mid, ask: q.ask, buyerImprovement: (q.ask - q.mid) * qty * cs, sellerImprovement: (q.mid - q.bid) * qty * cs,
-        externalFeeSaved: 3, buyerSimulated: this.accounts.get(buy.accountId).simulated, sellerSimulated: this.accounts.get(sell.accountId).simulated, createdAt: new Date().toISOString(),
+        externalFeeSaved: (sym.includes('BTC') || sym.includes('ETH') || sym.includes('SOL') || sym.includes('XRP')
+          ? r2(q.mid * qty * cs * 0.001) : r2(qty * 3.5)) * 2, buyerSimulated: this.accounts.get(buy.accountId).simulated, sellerSimulated: this.accounts.get(sell.accountId).simulated, createdAt: new Date().toISOString(),
       };
       this.matches.push(m);
       this._event(sym, o.id, r.id, 'MATCHED', `${qty} @ ${q.mid}`, m.id);
@@ -408,14 +412,17 @@ class OfflineBroker {
         const real = [...b.orders.values()].filter((o) => o.routing && !b.accounts.get(o.accountId).simulated);
         const filled = real.reduce((s, o) => s + o.filledQty, 0);
         const internal = real.reduce((s, o) => s + o.internalQty, 0);
-        const extLegs = real.filter((o) => o.externalQty > 0).length;
+        const extPaid = real.reduce((s, o) => {
+          const crypto = /BTC|ETH|SOL|XRP/.test(o.symbolCode);
+          return s + (crypto ? (o.entryPrice || 0) * o.externalQty * contractSize(o.symbolCode) * 0.001 : o.externalQty * 3.5);
+        }, 0);
         const comm = real.reduce((s, o) => s + o.commission, 0);
-        const saved = b.matches.length * 3;
+        const saved = b.matches.reduce((s, m) => s + m.externalFeeSaved, 0);
         return {
           orders: real.length, filledQty: filled, internalQty: internal, externalQty: filled - internal, internalRateByQty: filled > 0 ? internal / filled : 0,
           matches: b.matches.length, matchesWithComputer: b.matches.filter((m) => m.buyerSimulated || m.sellerSimulated).length,
           clientPriceImprovement: b.matches.reduce((s, m) => s + (m.buyerSimulated ? 0 : m.buyerImprovement) + (m.sellerSimulated ? 0 : m.sellerImprovement), 0),
-          externalFeesSaved: saved, externalFeesPaid: extLegs * 1.5, commissionRealClients: comm, brokerRevenue: comm + saved - extLegs * 1.5,
+          externalFeesSaved: saved, externalFeesPaid: extPaid, commissionRealClients: comm, brokerRevenue: comm - extPaid,
           houseNetExposure: b._exposure(), simulatorEnabled: b.simEnabled, limitWaitMs: b.limitWait, nnOffline: b.nnOffline,
         };
       },

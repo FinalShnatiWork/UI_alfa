@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env npx tsx
+// @ts-nocheck
 'use strict';
 /**
  * Two-Client Live Visualizer (plan section 9.5).

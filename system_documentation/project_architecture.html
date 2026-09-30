@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Broker UI — full architecture / полная архитектура</title>
+  <style>
+    :root {
+      --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3;
+      --muted: #8b949e; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+    html[lang="en"] .ru { display: none !important; }
+    html[lang="ru"] .en { display: none !important; }
+    header {
+      position: sticky; top: 0; z-index: 10; background: var(--bg);
+      border-bottom: 1px solid var(--line); padding: 12px 22px;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    header h1 { font-size: 18px; margin: 0; }
+    nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    nav a, .langbtn {
+      color: var(--text); text-decoration: none; border: 1px solid var(--line);
+      padding: 5px 10px; border-radius: 6px; font-size: 12px; background: transparent; cursor: pointer;
+    }
+    nav a:hover, .langbtn:hover, .langbtn.on { border-color: var(--accent); color: var(--accent); }
+    main { max-width: 1280px; margin: 0 auto; padding: 28px 22px 80px; }
+    section { margin: 0 0 52px; }
+    h2 { font-size: 22px; margin: 0 0 10px; }
+    h3 { font-size: 16px; margin: 22px 0 8px; }
+    .lead, p { color: var(--text); }
+    .muted { color: var(--muted); }
+    .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 10px 0; }
+    .band { display: flex; gap: 14px; align-items: flex-start; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 12px 14px; margin: 8px 0; }
+    .band b { min-width: 150px; color: var(--accent); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { border: 1px solid var(--line); padding: 3px 9px; border-radius: 999px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0 16px; }
+    th, td { border-bottom: 1px solid var(--line); text-align: left; padding: 7px 8px; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    code { font-size: 12px; color: #c9d1d9; }
+    .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .cols2 { grid-template-columns: 1fr; } }
+    .ok { color: var(--ok); } .warn { color: var(--warn); }
+    svg.diagram { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+    .toc { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+    .toc a { display: block; border: 1px solid var(--line); padding: 10px 12px; border-radius: 8px; color: var(--text); text-decoration: none; }
+    .toc a:hover { border-color: var(--accent); }
+    .simple { border-left: 3px solid var(--ok); padding-left: 12px; }
+    .tech { border-left: 3px solid var(--accent); padding-left: 12px; }
+    ul { margin: 6px 0 10px 18px; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+<header>
+  <h1 class="ru">Broker UI — полная архитектура</h1>
+  <h1 class="en">Broker UI — full architecture</h1>
+  <nav>
+    <a href="#map" class="ru">Карта</a><a href="#map" class="en">Map</a>
+    <a href="#simple" class="ru">Для людей</a><a href="#simple" class="en">Plain English</a>
+    <a href="#tables" class="ru">Все таблицы</a><a href="#tables" class="en">All tables</a>
+    <a href="#rels" class="ru">Связи</a><a href="#rels" class="en">Relations</a>
+    <a href="#money" class="ru">Деньги</a><a href="#money" class="en">Money</a>
+    <a href="#trade" class="ru">Сделка</a><a href="#trade" class="en">Trade</a>
+    <a href="#api">API</a>
+    <a href="#classes" class="ru">Классы</a><a href="#classes" class="en">Classes</a>
+    <a href="#ui" class="ru">Экраны</a><a href="#ui" class="en">Screens</a>
+    <a href="#mig">Flyway</a>
+    <button type="button" class="langbtn on" id="btn-ru" onclick="setLang('ru')">RU</button>
+    <button type="button" class="langbtn" id="btn-en" onclick="setLang('en')">EN</button>
+  </nav>
+</header>
+<main>
+
+<section id="map">
+  <h2 class="ru">0. Что это за система, одним абзацем</h2>
+  <h2 class="en">0. What this system is, in one paragraph</h2>
+  <p class="ru">Это учебный / демо-брокер. Клиент открывает демо-счёт и торгует валютой, криптой, металлами и акциями. Встречные заявки сводятся внутри, по средней цене. Наружу уходит только остаток, на симулированную площадку (или MT5, если он подключён). Дом сторону не держит и зарабатывает комиссию. Нейросеть только записывает совет и маршрут не выбирает. Денег настоящих нет: Postgres на порту 5433, UI на React (:3001), API на Spring Boot :8080. Админка — <code>/admin</code>, только с localhost.</p>
+  <p class="en">This is a teaching / demo broker. A client opens a demo account and trades FX, crypto, metals, and stocks. Opposite orders cross inside at the mid. Only the remainder goes outside, to a simulated venue (or MT5 if it is connected). The house keeps no side and earns the commission. The neural net records advice and does not choose the route. No real money: Postgres on 5433, React on :3001, Spring Boot on :8080. Admin is <code>/admin</code>, localhost only.</p>
+
+  <div class="toc">
+    <a href="#simple" class="ru">Сначала простыми словами</a>
+    <a href="#simple" class="en">Start in plain language</a>
+    <a href="#tables" class="ru">Живые таблицы</a>
+    <a href="#tables" class="en">Live tables</a>
+    <a href="#rels" class="ru">Все внешние ключи</a>
+    <a href="#rels" class="en">Every foreign key</a>
+    <a href="#api" class="ru">Все HTTP-ручки</a>
+    <a href="#api" class="en">Every HTTP endpoint</a>
+  </div>
+</section>
+
+<section id="layers">
+  <h2 class="ru">1. Слои — широко</h2>
+  <h2 class="en">1. Layers — wide view</h2>
+  <div class="band"><b class="ru">Браузер</b><b class="en">Browser</b><div class="chips"><span class="chip">React SPA</span><span class="chip">/admin localhost only</span></div></div>
+  <div class="band"><b>HTTP :8080</b><div class="chips"><span class="chip">/api/auth</span><span class="chip">/api/broker</span><span class="chip">/api/market</span><span class="chip">/api/admin</span><span class="chip">/api/health</span></div></div>
+  <div class="band"><b class="ru">Мозг</b><b class="en">Domain</b><div class="chips"><span class="chip">OrderExecutionService</span><span class="chip">MarginLoanService</span><span class="chip">TradingFees</span><span class="chip">PositionCloseMath</span><span class="chip">MarketPriceService</span></div></div>
+  <div class="band"><b class="ru">Снаружи</b><b class="en">Outside</b><div class="chips"><span class="chip">Binance</span><span class="chip">Yahoo / Finnhub</span><span class="chip">NN Predictor</span><span class="chip">MT5 bridge</span></div></div>
+  <div class="band"><b class="ru">Память</b><b class="en">Storage</b><div class="chips"><span class="chip">PostgreSQL broker_ui</span><span class="chip">Flyway V1–V33</span><span class="chip">JPA entities</span></div></div>
+</section>
+
+<section id="simple">
+  <h2 class="ru">2. Для дурачков (это не оскорбление — это перевод с технического)</h2>
+  <h2 class="en">2. For humans (technical → kitchen table)</h2>
+  <div class="simple box">
+    <p class="ru"><b>Человек</b> заходит на сайт. Ему заводят <b>счёт</b> — как кошелёк в банке. В кошельке лежат «доллары» (на самом деле цифра в таблице <code>trading_account.balance</code>).</p>
+    <p class="en"><b>A person</b> logs in. We open an <b>account</b> — a wallet. The dollars are just a number in <code>trading_account.balance</code>.</p>
+    <p class="ru">Он нажимает BUY EURUSD. Система: 1) смотрит цену на рынке; 2) считает, сколько залога заморозить; 3) если своих денег мало —<b> одалживает</b> (кредитная линия); 4) берёт <b>комиссию</b>; 5) пишет <b>ордер</b> («я купил») и <b>позицию</b> («у меня сейчас открыто»).</p>
+    <p class="en">He clicks BUY EURUSD. The system: 1) reads a live price; 2) computes locked margin; 3) if cash is short it <b>lends</b> from a credit line; 4) takes a <b>commission</b>; 5) writes an <b>order</b> (“I bought”) and a <b>position</b> (“I am still in the market”).</p>
+    <p class="ru">Пока позиция открыта, прибыль на экране <b>плавающая</b> — её ещё нет в кармане. Когда жмёт Close, плавающая прибыль становится <b>настоящей</b>, ордер закрытия пишется в ту же таблицу <code>broker_order</code>, позиция удаляется. История = закрытые ордера, не отдельная таблица.</p>
+    <p class="en">While open, P/L on screen is <b>unrealized</b> — not in the pocket yet. On Close it becomes <b>realized</b>, a closing order is written into the same <code>broker_order</code> table, the position row is deleted. History = filled close orders, not a separate table.</p>
+    <p class="ru">Депозит и вывод — это не сделки, а <b>кассовые ордера</b> в <code>account_transaction</code>. Кредит — отдельные строчки в <code>margin_loan_ledger</code>: занял / вернул / проценты / ликвидация.</p>
+    <p class="en">Deposit and withdrawal are not trades. They are cash tickets in <code>account_transaction</code>. Credit is a separate diary in <code>margin_loan_ledger</code>: borrow / repay / interest / liquidation.</p>
+    <p class="ru"><b>Почему нет many-to-many?</b> Потому что ничего не «делят поровну двое со многими». Один человек — много счетов. Один счёт — много ордеров. Один инструмент — много ордеров. Это всегда дерево, не паутина.</p>
+    <p class="en"><b>Why no many-to-many?</b> Nothing is shared both ways by two crowds. One person → many accounts. One account → many orders. One symbol → many orders. It is always a tree, not a web.</p>
+  </div>
+</section>
+
+<section id="erd">
+  <h2 class="ru">3. Карта всех живых таблиц</h2>
+  <h2 class="en">3. Map of every live table</h2>
+  <p class="muted ru">Синие стрелки — настоящий FOREIGN KEY. Пунктир — связь по тикеру <code>symbol_code</code>, без JPA @ManyToOne. Зелёное — денежное ядро. С V32 есть ещё <code>internal_match</code>: одна строка на внутреннее сведение двух ордеров.</p>
+  <p class="muted en">Solid blue = real FOREIGN KEY. Dashed = link by ticker <code>symbol_code</code>, no JPA @ManyToOne. Green = money core. Since V32 there is also <code>internal_match</code>: one row per internal cross of two orders.</p>
+  <svg class="diagram" viewBox="0 0 1320 780" role="img">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#58a6ff"/></marker>
+      <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#3fb950"/></marker>
+    </defs>
+    <rect x="30" y="340" width="190" height="78" rx="8" fill="#243044" stroke="#58a6ff"/>
+    <text x="125" y="372" text-anchor="middle" fill="#e6edf3" font-weight="700">app_user</text>
+    <text x="125" y="392" text-anchor="middle" fill="#8b949e" font-size="11">login / role / ban</text>
+
+    <rect x="30" y="40" width="190" height="78" rx="8" fill="#243044" stroke="#58a6ff"/>
+    <text x="125" y="72" text-anchor="middle" fill="#e6edf3" font-weight="700">symbol</text>
+    <text x="125" y="92" text-anchor="middle" fill="#8b949e" font-size="11">EURUSD, BTCUSD…</text>
+
+    <rect x="340" y="340" width="210" height="78" rx="8" fill="#1a3328" stroke="#3fb950"/>
+    <text x="445" y="372" text-anchor="middle" fill="#e6edf3" font-weight="700">trading_account</text>
+    <text x="445" y="392" text-anchor="middle" fill="#8b949e" font-size="11">balance, debt, margin</text>
+
+    <rect x="340" y="40" width="210" height="58" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="445" y="75" text-anchor="middle" fill="#e6edf3">kyc_case  1:1</text>
+    <rect x="340" y="110" width="210" height="58" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="445" y="145" text-anchor="middle" fill="#e6edf3">notification  1:N</text>
+    <rect x="340" y="180" width="210" height="58" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="445" y="215" text-anchor="middle" fill="#e6edf3">user_preference  1:N</text>
+    <rect x="340" y="460" width="210" height="58" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="445" y="495" text-anchor="middle" fill="#e6edf3">audit_log  1:N</text>
+
+    <rect x="700" y="80" width="230" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="815" y="108" text-anchor="middle" fill="#e6edf3" font-weight="650">broker_order  1:N</text>
+    <text x="815" y="128" text-anchor="middle" fill="#8b949e" font-size="11">opens + closes + pending</text>
+    <rect x="700" y="180" width="230" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="815" y="208" text-anchor="middle" fill="#e6edf3" font-weight="650">position  1:N</text>
+    <text x="815" y="228" text-anchor="middle" fill="#8b949e" font-size="11">open only</text>
+    <rect x="700" y="320" width="230" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="815" y="348" text-anchor="middle" fill="#e6edf3" font-weight="650">account_transaction</text>
+    <text x="815" y="368" text-anchor="middle" fill="#8b949e" font-size="11">deposit / withdrawal</text>
+    <rect x="700" y="430" width="230" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="815" y="458" text-anchor="middle" fill="#e6edf3" font-weight="650">margin_loan_ledger</text>
+    <text x="815" y="478" text-anchor="middle" fill="#8b949e" font-size="11">BORROW REPAY INTEREST</text>
+
+    <rect x="1040" y="640" width="240" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="1160" y="668" text-anchor="middle" fill="#8b949e">flyway_schema_history</text>
+    <text x="1160" y="688" text-anchor="middle" fill="#8b949e" font-size="11">not domain — installer log</text>
+
+    <rect x="30" y="640" width="400" height="70" rx="8" fill="#2a1f14" stroke="#d29922"/>
+    <text x="230" y="668" text-anchor="middle" fill="#d29922">DROPPED: sim_trade (V25), trade_fill (V28)</text>
+    <text x="230" y="688" text-anchor="middle" fill="#8b949e" font-size="11">fills now live on broker_order itself</text>
+
+    <line x1="220" y1="379" x2="340" y2="379" stroke="#3fb950" stroke-width="1.8" marker-end="url(#g)"/>
+    <line x1="220" y1="350" x2="340" y2="69" stroke="#58a6ff" marker-end="url(#a)"/>
+    <line x1="220" y1="350" x2="340" y2="139" stroke="#58a6ff" marker-end="url(#a)"/>
+    <line x1="220" y1="350" x2="340" y2="209" stroke="#58a6ff" marker-end="url(#a)"/>
+    <line x1="220" y1="400" x2="340" y2="489" stroke="#58a6ff" marker-end="url(#a)"/>
+    <line x1="550" y1="360" x2="700" y2="115" stroke="#3fb950" marker-end="url(#g)"/>
+    <line x1="550" y1="379" x2="700" y2="215" stroke="#3fb950" marker-end="url(#g)"/>
+    <line x1="550" y1="390" x2="700" y2="355" stroke="#3fb950" marker-end="url(#g)"/>
+    <line x1="550" y1="400" x2="700" y2="465" stroke="#3fb950" marker-end="url(#g)"/>
+    <path d="M220 70 C 500 10 640 20 700 105" fill="none" stroke="#8b949e" stroke-dasharray="5 4" marker-end="url(#a)"/>
+    <path d="M220 85 C 520 150 640 175 700 205" fill="none" stroke="#8b949e" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  </svg>
+</section>
+
+<section id="tables">
+  <h2 class="ru">4. Каждая таблица, каждое поле</h2>
+  <h2 class="en">4. Every table, every column</h2>
+  <p class="muted ru">Снято с JPA-сущностей + миграций V1–V21. Это текущая схема, не PDF 2024 года.</p>
+  <p class="muted en">Taken from JPA entities + migrations V1–V21. Current schema, not the 2024 PDF.</p>
+
+  <h3>4.1 app_user</h3>
+  <p class="ru tech">Человек в системе. Не счёт. Счетов у него может быть несколько, на практике создаём один DEMO.</p>
+  <p class="en tech">A person in the system. Not the wallet. They may have several accounts; in practice we create one DEMO.</p>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>BIGSERIAL PK</td><td class="ru">номер человека</td><td class="en">person id</td></tr>
+    <tr><td><code>email</code></td><td>TEXT UNIQUE</td><td class="ru">логин, например 12@gmail.com</td><td class="en">login, e.g. 12@gmail.com</td></tr>
+    <tr><td><code>display_name</code></td><td>TEXT</td><td class="ru">как зовут на экране</td><td class="en">name on screen</td></tr>
+    <tr><td><code>password_hash</code></td><td>VARCHAR(255)</td><td class="ru">BCrypt, не пароль открытым текстом</td><td class="en">BCrypt, never plaintext</td></tr>
+    <tr><td><code>role</code></td><td>VARCHAR(32)</td><td class="ru">USER или ADMIN</td><td class="en">USER or ADMIN</td></tr>
+    <tr><td><code>banned</code></td><td>BOOLEAN</td><td class="ru">заблокирован ли вход</td><td class="en">login blocked</td></tr>
+    <tr><td><code>banned_at</code> / <code>banned_reason</code></td><td>ts / varchar</td><td class="ru">когда и почему бан</td><td class="en">when/why banned</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td class="ru">когда зарегистрировали</td><td class="en">registered at</td></tr>
+  </table>
+  <p class="simple ru">Просто: паспорт посетителя клуба. Сам по себе денег не держит.</p>
+  <p class="simple en">Plain: the visitor’s ID card. It holds no money.</p>
+
+  <h3>4.2 trading_account — ядро денег</h3>
+  <p class="ru tech">Один кошелёк. <code>user_id → app_user.id</code> ON DELETE CASCADE. Модель маржи предоплаченная: при открытии сделки кэш уже уменьшили, поэтому <code>free_margin</code> в overview = оставшийся <code>balance</code>, а не equity − marginUsed.</p>
+  <p class="en tech">One wallet. <code>user_id → app_user.id</code> ON DELETE CASCADE. Prepaid-margin model: cash is already reduced on open, so overview <code>free_margin</code> = leftover <code>balance</code>, not equity − marginUsed.</p>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>BIGSERIAL PK</td><td class="ru">номер счёта (его показывают как UID)</td><td class="en">account number (shown as UID)</td></tr>
+    <tr><td><code>user_id</code></td><td>FK app_user</td><td class="ru">чей кошелёк</td><td class="en">who owns it</td></tr>
+    <tr><td><code>account_type</code></td><td>DEMO / REAL</td><td class="ru">у нас почти всегда DEMO</td><td class="en">almost always DEMO here</td></tr>
+    <tr><td><code>currency</code></td><td>USD</td><td class="ru">валюта кошелька</td><td class="en">wallet currency</td></tr>
+    <tr><td><code>leverage</code></td><td>INT default 100</td><td class="ru">плечо 1:100 — залог в 100 раз меньше номинала</td><td class="en">1:100 — margin is notional/100</td></tr>
+    <tr><td><code>status</code></td><td>ACTIVE / DISABLED</td><td class="ru">можно ли торговать</td><td class="en">can it trade</td></tr>
+    <tr><td><code>balance</code></td><td>NUMERIC(18,8)</td><td class="ru">кэш в кармане после всех списаний</td><td class="en">cash after every debit</td></tr>
+    <tr><td><code>equity</code></td><td>NUMERIC(18,8)</td><td class="ru">живой капитал = кэш + плавающий P/L (пересчитывается)</td><td class="en">live worth = cash + floating P/L</td></tr>
+    <tr><td><code>margin_used</code></td><td>NUMERIC(18,8)</td><td class="ru">сколько залога занято открытыми позициями</td><td class="en">margin locked in open positions</td></tr>
+    <tr><td><code>free_margin</code></td><td>NUMERIC(18,8)</td><td class="ru">колонка в БД; API отдаёт balance как free cash</td><td class="en">DB column; API returns balance as free cash</td></tr>
+    <tr><td><code>borrowed_balance</code></td><td>NUMERIC(18,8)</td><td class="ru">сколько должны брокеру по кредитке</td><td class="en">current credit-line debt</td></tr>
+    <tr><td><code>interest_accrued_total</code></td><td>NUMERIC(18,8)</td><td class="ru">сколько процентов начислили за всю жизнь</td><td class="en">lifetime interest charged</td></tr>
+    <tr><td><code>last_interest_at</code></td><td>TIMESTAMP</td><td class="ru">чтобы не драть процент чаще раза в сутки</td><td class="en">so interest is at most daily</td></tr>
+    <tr><td><code>credit_limit</code></td><td>NUMERIC default 10000</td><td class="ru">потолок кредита, админ может поднять</td><td class="en">credit cap, admin can raise</td></tr>
+    <tr><td><code>daily_interest_rate</code></td><td>NUMERIC default 0.005</td><td class="ru">0.5% в день на долг</td><td class="en">0.5%/day on debt</td></tr>
+    <tr><td><code>commission_paid_total</code></td><td>NUMERIC</td><td class="ru">все комиссии за жизнь счёта</td><td class="en">lifetime commissions</td></tr>
+    <tr><td><code>created_at</code> / <code>updated_at</code></td><td>ts</td><td class="ru">когда создали / последний write</td><td class="en">created / last write</td></tr>
+  </table>
+  <p class="simple ru">Просто: расчётный счёт + кредитка в одном. <code>balance</code> — наличка. <code>borrowed_balance</code> — сколько должен. <code>equity</code> — «если сейчас всё закрыть, сколько останется».</p>
+  <p class="simple en">Plain: checking account + credit card in one row. <code>balance</code> is cash. <code>borrowed_balance</code> is what you owe. <code>equity</code> is “if I flatten everything right now, what is left”.</p>
+
+  <h3>4.3 symbol</h3>
+  <p class="ru">Справочник инструментов. Ордера и позиции ссылаются на <code>code</code>, не на <code>id</code>.</p>
+  <p class="en">Instrument catalog. Orders and positions point at <code>code</code>, not <code>id</code>.</p>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">внутренний номер</td><td class="en">internal id</td></tr>
+    <tr><td><code>code</code></td><td>UNIQUE EURUSD…</td><td class="ru">тикер, который видит трейдер</td><td class="en">ticker the trader sees</td></tr>
+    <tr><td><code>kind</code></td><td>CRYPTO / FX / STOCK</td><td class="ru">какой фид цены брать</td><td class="en">which price feed</td></tr>
+    <tr><td><code>base_currency</code> / <code>quote_currency</code></td><td>EUR / USD</td><td class="ru">что покупаем / чем платим</td><td class="en">what we buy / what we pay with</td></tr>
+    <tr><td><code>price_decimals</code></td><td>INT</td><td class="ru">сколько знаков после запятой</td><td class="en">price precision</td></tr>
+    <tr><td><code>enabled</code></td><td>BOOL</td><td class="ru">можно ли торговать</td><td class="en">tradable flag</td></tr>
+    <tr><td><code>created_at</code></td><td>ts</td><td class="ru">когда добавили в справочник</td><td class="en">added to catalog</td></tr>
+  </table>
+
+  <h3>4.4 broker_order — и стакан, и история</h3>
+  <p class="ru tech">Одна таблица на всё: рыночные/лимитные/стоп заявки, исполнения, закрытия. Закрытая сделка = ордер со <code>status=FILLED</code> и заполненным <code>realized_pnl</code>. Отдельной таблицы history нет. <code>trade_fill</code> убили в V28 — цена и комиссия живут здесь.</p>
+  <p class="en tech">One table for everything: market/limit/stop, fills, closes. A closed trade = a FILLED order with <code>realized_pnl</code> set. There is no history table. <code>trade_fill</code> died in V28 — price and fee live here.</p>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">тикет</td><td class="en">ticket</td></tr>
+    <tr><td><code>trading_account_id</code></td><td>FK CASCADE</td><td class="ru">чей ордер</td><td class="en">whose order</td></tr>
+    <tr><td><code>symbol_code</code></td><td>→ symbol.code</td><td class="ru">чем торговали</td><td class="en">what was traded</td></tr>
+    <tr><td><code>side</code></td><td>BUY / SELL</td><td class="ru">направление заявки (не LONG/SHORT позиции)</td><td class="en">order side (not position LONG/SHORT)</td></tr>
+    <tr><td><code>order_type</code></td><td>MARKET LIMIT STOP</td><td class="ru">как должна сработать</td><td class="en">how it should trigger</td></tr>
+    <tr><td><code>status</code></td><td>NEW FILLED CANCELLED REJECTED</td><td class="ru">живёт / исполнен / отменён</td><td class="en">live / filled / dead</td></tr>
+    <tr><td><code>quantity</code></td><td>NUMERIC lots</td><td class="ru">объём</td><td class="en">size</td></tr>
+    <tr><td><code>limit_price</code> / <code>stop_price</code></td><td>NUMERIC</td><td class="ru">для отложенных</td><td class="en">for pending orders</td></tr>
+    <tr><td><code>take_profit</code> / <code>stop_loss</code></td><td>NUMERIC</td><td class="ru">цели, копируются в position</td><td class="en">targets, copied onto position</td></tr>
+    <tr><td><code>entry_price</code></td><td>NUMERIC</td><td class="ru">цена этого исполнения</td><td class="en">this fill’s price</td></tr>
+    <tr><td><code>open_price</code> / <code>opened_at</code></td><td>NUMERIC / ts</td><td class="ru">на закрытии: цена и время входа</td><td class="en">on close: entry price/time</td></tr>
+    <tr><td><code>realized_pnl</code></td><td>NUMERIC</td><td class="ru">прибыль после закрытия (уже после комиссии в логике close)</td><td class="en">P/L after close (close math includes fees)</td></tr>
+    <tr><td><code>commission</code></td><td>NUMERIC</td><td class="ru">сколько сняли за этот fill</td><td class="en">fee charged on this fill</td></tr>
+    <tr><td><code>nn_route_recommendation</code></td><td>VARCHAR</td><td class="ru">INTERNAL / EXTERNAL / LEGACY</td><td class="en">INTERNAL / EXTERNAL / LEGACY</td></tr>
+    <tr><td><code>nn_match_prob</code> / <code>nn_expected_savings</code></td><td>float / num</td><td class="ru">цифры от модели маршрутизации</td><td class="en">routing-model scores</td></tr>
+    <tr><td><code>client_tag</code></td><td>VARCHAR</td><td class="ru">метка клиента, почти не используется</td><td class="en">client tag, barely used</td></tr>
+    <tr><td><code>created_at</code> / <code>updated_at</code> / <code>filled_at</code></td><td>ts</td><td class="ru">создали / трогали / исполнили</td><td class="en">created / touched / filled</td></tr>
+  </table>
+  <p class="simple ru">Просто: чек из магазина. Один чек на покупку, другой на продажу. История покупок = стопка этих чеков, а не отдельный журнал.</p>
+  <p class="simple en">Plain: a shop receipt. One receipt for the buy, another for the sell. History is the pile of receipts, not a second ledger.</p>
+
+  <h3>4.5 position — только то, что сейчас открыто</h3>
+  <p class="ru">Когда закрыли — строку <b>удаляют</b>. Закрытое живёт в <code>broker_order</code>. <code>side</code> тут LONG/SHORT, не BUY/SELL.</p>
+  <p class="en">On close the row is <b>deleted</b>. The closed trade lives on <code>broker_order</code>. <code>side</code> here is LONG/SHORT, not BUY/SELL.</p>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">номер открытой позиции</td><td class="en">open position id</td></tr>
+    <tr><td><code>trading_account_id</code></td><td>FK CASCADE</td><td class="ru">чей риск</td><td class="en">whose risk</td></tr>
+    <tr><td><code>symbol_code</code></td><td>тикер</td><td class="ru">инструмент</td><td class="en">instrument</td></tr>
+    <tr><td><code>side</code></td><td>LONG / SHORT</td><td class="ru">купили вверх или продали вниз</td><td class="en">long or short</td></tr>
+    <tr><td><code>quantity</code></td><td>NUMERIC</td><td class="ru">сколько лотов открыто</td><td class="en">open lots</td></tr>
+    <tr><td><code>avg_price</code></td><td>NUMERIC</td><td class="ru">средняя цена входа</td><td class="en">average entry</td></tr>
+    <tr><td><code>realized_pnl</code></td><td>NUMERIC</td><td class="ru">обычно 0 пока открыта</td><td class="en">usually 0 while open</td></tr>
+    <tr><td><code>unrealized_pnl</code></td><td>NUMERIC</td><td class="ru">кэш плавающего P/L (экран чаще считает live)</td><td class="en">cached float; UI usually recomputes live</td></tr>
+    <tr><td><code>stop_loss</code> / <code>take_profit</code></td><td>NUMERIC</td><td class="ru">автозакрытие по цене</td><td class="en">price auto-close</td></tr>
+    <tr><td><code>opened_at</code> / <code>updated_at</code></td><td>ts</td><td class="ru">когда открыли / тик</td><td class="en">opened / last tick</td></tr>
+  </table>
+  <p class="ru muted">UNIQUE(account, symbol, side) сняли в V22 — можно несколько позиций по одному символу.</p>
+  <p class="en muted">UNIQUE(account, symbol, side) dropped in V22 — several positions per symbol allowed.</p>
+
+  <h3>4.6 account_transaction — касса, не рынок</h3>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">номер кассового ордера</td><td class="en">cash ticket id</td></tr>
+    <tr><td><code>trading_account_id</code></td><td>FK</td><td class="ru">на какой счёт</td><td class="en">which wallet</td></tr>
+    <tr><td><code>tx_type</code></td><td>DEPOSIT / WITHDRAWAL / …</td><td class="ru">положили или сняли</td><td class="en">in or out</td></tr>
+    <tr><td><code>status</code></td><td>PENDING / APPROVED / REJECTED</td><td class="ru">вывод ждёт админа, депозит в демо сразу APPROVED</td><td class="en">withdrawals wait for admin; demo deposit is instant APPROVED</td></tr>
+    <tr><td><code>amount</code> / <code>currency</code></td><td>NUMERIC / USD</td><td class="ru">сколько</td><td class="en">how much</td></tr>
+    <tr><td><code>method</code></td><td>card / wire / …</td><td class="ru">как платили (демо)</td><td class="en">how they paid (demo)</td></tr>
+    <tr><td><code>note</code></td><td>TEXT</td><td class="ru">комментарий</td><td class="en">comment</td></tr>
+    <tr><td><code>created_at</code> / <code>processed_at</code></td><td>ts</td><td class="ru">создали / провели</td><td class="en">created / processed</td></tr>
+  </table>
+  <p class="simple ru">Просто: приходный и расходный ордер кассира. Не путать с BUY/SELL.</p>
+  <p class="simple en">Plain: cashier in/out slips. Not BUY/SELL.</p>
+
+  <h3>4.7 margin_loan_ledger — дневник кредитки</h3>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">номер записи</td><td class="en">entry id</td></tr>
+    <tr><td><code>trading_account_id</code></td><td>FK</td><td class="ru">чей долг</td><td class="en">whose debt</td></tr>
+    <tr><td><code>entry_type</code></td><td>BORROW REPAY INTEREST LIQUIDATION</td><td class="ru">занял / вернул / процент / снос</td><td class="en">borrowed / repaid / interest / wipeout</td></tr>
+    <tr><td><code>amount</code></td><td>NUMERIC</td><td class="ru">сумма события</td><td class="en">event amount</td></tr>
+    <tr><td><code>borrowed_after</code></td><td>NUMERIC</td><td class="ru">долг после этой строки</td><td class="en">debt after this line</td></tr>
+    <tr><td><code>balance_after</code></td><td>NUMERIC</td><td class="ru">кэш после этой строки</td><td class="en">cash after this line</td></tr>
+    <tr><td><code>note</code></td><td>VARCHAR(255)</td><td class="ru">человекочитаемо</td><td class="en">human note</td></tr>
+    <tr><td><code>created_at</code></td><td>ts</td><td class="ru">когда случилось</td><td class="en">when it happened</td></tr>
+  </table>
+  <p class="simple ru">Просто: выписка по кредитке. Сам долг хранится на счёте (<code>borrowed_balance</code>), здесь — история почему цифра такая.</p>
+  <p class="simple en">Plain: credit-card statement. The debt itself sits on the account (<code>borrowed_balance</code>); this table is the “why”.</p>
+
+  <h3>4.8 kyc_case — 1:1 с человеком</h3>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">номер дела</td><td class="en">case id</td></tr>
+    <tr><td><code>user_id</code></td><td>UNIQUE FK</td><td class="ru">ровно одно дело на юзера</td><td class="en">exactly one case per user</td></tr>
+    <tr><td><code>status</code></td><td>NOT_STARTED / SUBMITTED / VERIFIED / REJECTED</td><td class="ru">на какой стадии паспорт</td><td class="en">passport stage</td></tr>
+    <tr><td><code>submitted_at</code> / <code>reviewed_at</code></td><td>ts</td><td class="ru">сдал / проверили</td><td class="en">submitted / reviewed</td></tr>
+    <tr><td><code>note</code></td><td>TEXT</td><td class="ru">заметка ревьюера</td><td class="en">reviewer note</td></tr>
+  </table>
+
+  <h3>4.9 notification</h3>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">номер письма</td><td class="en">message id</td></tr>
+    <tr><td><code>user_id</code></td><td>FK CASCADE</td><td class="ru">кому</td><td class="en">to whom</td></tr>
+    <tr><td><code>notif_type</code></td><td>SYSTEM / TRADE / KYC / PRICE_ALERT</td><td class="ru">тип</td><td class="en">kind</td></tr>
+    <tr><td><code>title</code> / <code>body</code></td><td>varchar / text</td><td class="ru">заголовок и текст</td><td class="en">title and body</td></tr>
+    <tr><td><code>read_at</code></td><td>ts nullable</td><td class="ru">NULL = ещё не читал</td><td class="en">NULL = unread</td></tr>
+    <tr><td><code>created_at</code></td><td>ts</td><td class="ru">когда пришло</td><td class="en">arrived at</td></tr>
+  </table>
+
+  <h3>4.10 audit_log</h3>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">номер события</td><td class="en">event id</td></tr>
+    <tr><td><code>user_id</code></td><td>FK SET NULL</td><td class="ru">кто, можно оставить пустым если юзера стёрли</td><td class="en">who; survives user delete</td></tr>
+    <tr><td><code>action</code></td><td>LOGIN / CREATE_ORDER / …</td><td class="ru">что сделали</td><td class="en">what they did</td></tr>
+    <tr><td><code>detail</code> / <code>ip</code> / <code>user_agent</code></td><td>text</td><td class="ru">подробности и откуда зашли</td><td class="en">details and origin</td></tr>
+    <tr><td><code>created_at</code></td><td>ts</td><td class="ru">когда</td><td class="en">when</td></tr>
+  </table>
+
+  <h3>4.11 user_preference</h3>
+  <table>
+    <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
+    <tr><td><code>id</code></td><td>PK</td><td class="ru">номер строки</td><td class="en">row id</td></tr>
+    <tr><td><code>user_id</code></td><td>FK</td><td class="ru">чьи настройки</td><td class="en">whose settings</td></tr>
+    <tr><td><code>pref_key</code></td><td>theme, lang, pushNotif…</td><td class="ru">имя настройки</td><td class="en">setting name</td></tr>
+    <tr><td><code>pref_value</code></td><td>TEXT</td><td class="ru">значение строкой</td><td class="en">value as string</td></tr>
+    <tr><td><code>updated_at</code></td><td>ts</td><td class="ru">когда меняли</td><td class="en">last change</td></tr>
+  </table>
+  <p class="muted ru">UNIQUE(user_id, pref_key) — одна тема на человека, не две.</p>
+  <p class="muted en">UNIQUE(user_id, pref_key) — one theme per person, not two.</p>
+
+  <h3>4.12 flyway_schema_history <span class="muted">(не домен)</span></h3>
+  <p class="ru">Журнал установщика. «V29 уже прогнали». Сами сделки тут не живут.</p>
+  <p class="en">Installer diary. “V29 already ran.” Trades do not live here.</p>
+
+  <h3 class="warn">4.13 Мёртвые таблицы</h3>
+  <table>
+    <tr><th>table</th><th>умерла</th><th class="ru">что было</th><th class="en">what it was</th></tr>
+    <tr><td><code>sim_trade</code></td><td>V25</td><td class="ru">старый симулятор сделок, не брокер</td><td class="en">old simulator, not the broker</td></tr>
+    <tr><td><code>trade_fill</code></td><td>V28</td><td class="ru">частичные исполнения; таблица не писалась, логику перенесли в broker_order</td><td class="en">partial fills; never written; logic moved onto broker_order</td></tr>
+  </table>
+</section>
+
+<section id="rels">
+  <h2 class="ru">5. Все связи без сказок</h2>
+  <h2 class="en">5. Every relation, no folklore</h2>
+  <table>
+    <tr><th>from</th><th>to</th><th>card.</th><th>SQL</th><th class="ru">JPA</th><th class="en">JPA</th></tr>
+    <tr><td>app_user</td><td>trading_account</td><td>1:N</td><td>user_id CASCADE</td><td>@ManyToOne на счёте</td><td>@ManyToOne on account</td></tr>
+    <tr><td>app_user</td><td>kyc_case</td><td>1:1</td><td>user_id UNIQUE CASCADE</td><td>@ManyToOne unique</td><td>@ManyToOne unique</td></tr>
+    <tr><td>app_user</td><td>notification</td><td>1:N</td><td>user_id CASCADE</td><td>@ManyToOne</td><td>@ManyToOne</td></tr>
+    <tr><td>app_user</td><td>user_preference</td><td>1:N</td><td>UNIQUE(user_id, pref_key)</td><td>@ManyToOne</td><td>@ManyToOne</td></tr>
+    <tr><td>app_user</td><td>audit_log</td><td>1:N</td><td>user_id SET NULL</td><td>@ManyToOne optional</td><td>@ManyToOne optional</td></tr>
+    <tr><td>trading_account</td><td>broker_order</td><td>1:N</td><td>trading_account_id CASCADE</td><td>@ManyToOne</td><td>@ManyToOne</td></tr>
+    <tr><td>trading_account</td><td>position</td><td>1:N</td><td>trading_account_id CASCADE</td><td>@ManyToOne</td><td>@ManyToOne</td></tr>
+    <tr><td>trading_account</td><td>account_transaction</td><td>1:N</td><td>trading_account_id CASCADE</td><td>@ManyToOne</td><td>@ManyToOne</td></tr>
+    <tr><td>trading_account</td><td>margin_loan_ledger</td><td>1:N</td><td>trading_account_id CASCADE</td><td>@ManyToOne</td><td>@ManyToOne</td></tr>
+    <tr><td>symbol</td><td>broker_order</td><td>1:N</td><td>symbol_code → code</td><td class="ru">нет @ManyToOne, строка</td><td class="en">no @ManyToOne, string</td></tr>
+    <tr><td>symbol</td><td>position</td><td>1:N</td><td>symbol_code → code</td><td class="ru">нет @ManyToOne, строка</td><td class="en">no @ManyToOne, string</td></tr>
+  </table>
+  <p class="ru"><b>0 таблиц many-to-many. 0 join-таблиц.</b> Обратные <code>@OneToMany</code> коллекции на родителе не заведены — ходим с ребёнка на родителя.</p>
+  <p class="en"><b>Zero many-to-many tables. Zero join tables.</b> Parents have no <code>@OneToMany</code> bags — we always walk child → parent.</p>
+</section>
+
+<section id="money">
+  <h2 class="ru">6. Как движутся деньги (сухо, потом на пальцах)</h2>
+  <h2 class="en">6. How money moves (dry, then fingers)</h2>
+  <div class="tech box">
+    <p class="ru"><b>Открыть:</b> notional = price × qty × contractSize. margin ≈ notional / leverage. commission = TradingFees. С кэша снимают margin + commission. Если кэша мало — <code>tryCoverShortfall</code> пишет BORROW и увеличивает <code>borrowed_balance</code>. Появляется <code>position</code> + FILLED <code>broker_order</code> (открытие).</p>
+    <p class="en"><b>Open:</b> notional = price × qty × contractSize. margin ≈ notional / leverage. commission = TradingFees. Cash loses margin + commission. If cash is short, <code>tryCoverShortfall</code> writes BORROW and raises <code>borrowed_balance</code>. A <code>position</code> + FILLED open <code>broker_order</code> appear.</p>
+    <p class="ru"><b>Закрыть:</b> PositionCloseMath считает gross P/L по стороне. Возвращают залог. Режут комиссию закрытия. Если в плюсе и есть долг — REPAY. Чистый результат садится в <code>balance</code> и в <code>broker_order.realized_pnl</code>. Позицию удаляют.</p>
+    <p class="en"><b>Close:</b> PositionCloseMath computes gross P/L by side. Margin is returned. Close commission is cut. If profitable and in debt — REPAY. Net hits <code>balance</code> and <code>broker_order.realized_pnl</code>. Position row is deleted.</p>
+    <p class="ru"><b>Ликвидация:</b> если equity / долг слишком плохой, планировщик закрывает позиции сам и пишет LIQUIDATION.</p>
+    <p class="en"><b>Liquidation:</b> if equity vs debt is too ugly, the scheduler closes positions and writes LIQUIDATION.</p>
+  </div>
+  <div class="simple box">
+    <p class="ru"><b>Пример.</b> На счёте $1000. Покупаешь золото, залог $200, комиссия $3. После открытия: кэш $797, открытая позиция висит. Цена выросла, на экране +$50 — это ещё не кэш. Закрыл: вернули $200 залога, сняли ещё комиссию, +$50 прибыли. Если должен брокеру — часть прибыли сразу уйдёт в погашение. История покажет один закрытый тикет.</p>
+    <p class="en"><b>Example.</b> Wallet $1000. Buy gold, margin $200, fee $3. After open: cash $797, a position hangs. Price up, screen shows +$50 — not cash yet. Close: $200 margin returns, another fee, +$50 profit. If you owe the broker, part of the profit pays the loan first. History shows one closed ticket.</p>
+  </div>
+</section>
+
+<section id="trade">
+  <h2 class="ru">7. Жизнь одной сделки</h2>
+  <h2 class="en">7. Life of one trade</h2>
+  <ol class="ru">
+    <li>UI (Charts / Positions) шлёт POST /api/broker/orders.</li>
+    <li>BrokerApiController проверяет логин и счёт.</li>
+    <li>MarketPriceService даёт цену (кэш / Binance / Yahoo).</li>
+    <li>NNPredictorClient может сказать INTERNAL или EXTERNAL.</li>
+    <li>Если EXTERNAL — MT5IntegrationService; иначе брокер сам вторая сторона.</li>
+    <li>OrderExecutionService + TradingFees + MarginLoanService меняют цифры.</li>
+    <li>Пишутся broker_order + position.</li>
+    <li>Пока открыто: планировщик смотрит SL/TP и ликвидацию.</li>
+    <li>Close: POST /positions/{id}/close → PositionCloseMath → ордер закрытия, delete position.</li>
+    <li>GET /history читает закрытые ордера, не positions.</li>
+  </ol>
+  <ol class="en">
+    <li>UI (Charts / Positions) POSTs /api/broker/orders.</li>
+    <li>BrokerApiController checks login and account.</li>
+    <li>MarketPriceService supplies a price (cache / Binance / Yahoo).</li>
+    <li>NNPredictorClient may say INTERNAL or EXTERNAL.</li>
+    <li>EXTERNAL → MT5IntegrationService; else the broker is the other side.</li>
+    <li>OrderExecutionService + TradingFees + MarginLoanService mutate numbers.</li>
+    <li>broker_order + position are written.</li>
+    <li>While open the scheduler watches SL/TP and liquidation.</li>
+    <li>Close: POST /positions/{id}/close → PositionCloseMath → close order, delete position.</li>
+    <li>GET /history reads closed orders, not positions.</li>
+  </ol>
+</section>
+
+<section id="api">
+  <h2>8. HTTP API</h2>
+  <h3>/api/auth</h3>
+  <table>
+    <tr><th>method</th><th>path</th><th class="ru">что делает</th><th class="en">does</th></tr>
+    <tr><td>GET</td><td>/api/auth/csrf</td><td class="ru">токен формы</td><td class="en">form token</td></tr>
+    <tr><td>GET</td><td>/api/auth/me</td><td class="ru">кто я</td><td class="en">who am I</td></tr>
+    <tr><td>POST</td><td>/api/auth/register</td><td class="ru">новый юзер + демо-счёт</td><td class="en">new user + demo account</td></tr>
+  </table>
+  <p class="muted ru">Логин/логаут — Spring Security form login / logout, не отдельный JSON в этом контроллере.</p>
+  <p class="muted en">Login/logout are Spring Security form endpoints, not extra JSON in this controller.</p>
+  <h3>/api/broker</h3>
+  <table>
+    <tr><th>method</th><th>path</th><th class="ru">таблицы</th><th class="en">tables</th></tr>
+    <tr><td>GET</td><td>/overview</td><td colspan="2">trading_account + live equity</td></tr>
+    <tr><td>GET</td><td>/symbols</td><td colspan="2">symbol</td></tr>
+    <tr><td>GET</td><td>/positions</td><td colspan="2">position</td></tr>
+    <tr><td>GET</td><td>/orders , /orders/pending</td><td colspan="2">broker_order</td></tr>
+    <tr><td>POST</td><td>/orders</td><td colspan="2">broker_order, position, trading_account, ledger</td></tr>
+    <tr><td>POST</td><td>/orders/{id}/cancel</td><td colspan="2">broker_order</td></tr>
+    <tr><td>POST</td><td>/positions/{id}/close</td><td colspan="2">position delete + broker_order + account + ledger</td></tr>
+    <tr><td>GET/POST</td><td>/transactions</td><td colspan="2">account_transaction</td></tr>
+    <tr><td>GET</td><td>/history</td><td colspan="2">broker_order (closed)</td></tr>
+    <tr><td>GET</td><td>/credit-ledger</td><td colspan="2">margin_loan_ledger</td></tr>
+    <tr><td>GET</td><td>/notifications</td><td colspan="2">notification</td></tr>
+    <tr><td>GET/POST</td><td>/preferences</td><td colspan="2">user_preference</td></tr>
+  </table>
+  <h3>/api/market</h3>
+  <table>
+    <tr><th>GET</th><th>/api/market/price/{symbol}</th><th class="ru">живая цена, БД не пишет</th><th class="en">live quote, no DB write</th></tr>
+    <tr><td>GET</td><td>/forex/candles , /metals/candles , /stock/candles</td><td class="ru">свечи с фидов</td><td class="en">candles from feeds</td></tr>
+    <tr><td>GET</td><td>/api/market/analysis</td><td class="ru">теханализ, считает Java</td><td class="en">technical analysis, computed in Java</td></tr>
+  </table>
+  <h3>/api/admin (только localhost)</h3>
+  <p class="ru">users CRUD/ban, trades, accounts, balance/loan patch, margin-loans + ручной interest/liquidation, transactions, kyc, notifications, audit, mt5 connect, netting summary/book/invariants.</p>
+  <p class="en">users CRUD/ban, trades, accounts, balance/loan patch, margin-loans + manual interest/liquidation, transactions, kyc, notifications, audit, mt5 connect, netting summary/book/invariants.</p>
+  <p>GET /api/health — liveness.</p>
+</section>
+
+<section id="classes">
+  <h2 class="ru">9. Классы Java — кто за что отвечает</h2>
+  <h2 class="en">9. Java classes — who owns what</h2>
+  <div class="cols2">
+    <div class="box">
+      <h3 class="ru">Сущности = таблицы</h3>
+      <h3 class="en">Entities = tables</h3>
+      <p>AppUser, TradingAccount, Symbol, BrokerOrder, Position, AccountTransaction, MarginLoanLedger, KycCase, Notification, AuditLog, UserPreference</p>
+    </div>
+    <div class="box">
+      <h3 class="ru">Вход с улицы</h3>
+      <h3 class="en">HTTP front door</h3>
+      <p>AuthApiController, BrokerApiController, MarketController, AdminTradeController, AdminUserController, HealthController</p>
+    </div>
+    <div class="box">
+      <h3 class="ru">Домен</h3>
+      <h3 class="en">Domain</h3>
+      <p>OrderExecutionService — открыть/закрыть/отменить. MarginLoanService — долг и ликвидация. TradingFees — комиссия. PositionCloseMath — чистый P/L закрытия. AuditLogService — журнал. SchedulingConfig — 4 потока тиков.</p>
+    </div>
+    <div class="box">
+      <h3 class="ru">Рынок и MT5</h3>
+      <h3 class="en">Market and MT5</h3>
+      <p>MarketPriceService (кэш), BinancePriceService, BinanceService, YahooFinanceService, FinnhubMarketService, NNPredictorClient, MT5IntegrationService, MT5ConnectionManager, MT5PositionSyncService</p>
+    </div>
+  </div>
+  <p class="ru muted">Репозитории — тонкие Spring Data интерфейсы, по одному на сущность. DTO: BrokerOverviewDto, ClosedTradeDto, UserDto, RegisterRequest.</p>
+  <p class="en muted">Repositories are thin Spring Data interfaces, one per entity. DTOs: BrokerOverviewDto, ClosedTradeDto, UserDto, RegisterRequest.</p>
+</section>
+
+<section id="ui">
+  <h2 class="ru">10. Экраны React и что они едят</h2>
+  <h2 class="en">10. React screens and what they eat</h2>
+  <table>
+    <tr><th>route</th><th>page</th><th>API</th><th>SQL</th></tr>
+    <tr><td>/landing</td><td>LandingPage</td><td>—</td><td>—</td></tr>
+    <tr><td>/login /register /demo-register</td><td>auth pages</td><td>/api/auth/*</td><td>app_user, trading_account</td></tr>
+    <tr><td>/dashboard</td><td>DashboardPage</td><td>overview, positions, history</td><td>trading_account, position, broker_order</td></tr>
+    <tr><td>/positions</td><td>PositionsPage</td><td>positions, pending, history, close/cancel</td><td>position, broker_order, ledger</td></tr>
+    <tr><td>/charts</td><td>ChartsPage</td><td>market + placeOrder</td><td>symbol, broker_order, position, account</td></tr>
+    <tr><td>/finance</td><td>FinancePage</td><td>transactions, credit-ledger</td><td>account_transaction, margin_loan_ledger</td></tr>
+    <tr><td>/history</td><td>HistoryPage</td><td>/history</td><td>broker_order</td></tr>
+    <tr><td>/analyzer</td><td>AnalyzerPage</td><td>/api/market/analysis</td><td><span class="ru">свечи, без своей таблицы</span><span class="en">candles, no table of its own</span></td></tr>
+    <tr><td>/account</td><td>AccountPage</td><td>/me, overview</td><td>app_user, trading_account</td></tr>
+    <tr><td>/settings</td><td>SettingsPage</td><td>/preferences</td><td>user_preference</td></tr>
+    <tr><td>/admin</td><td>AdminPage</td><td>/api/admin/*</td><td><span class="ru">все таблицы, только localhost</span><span class="en">all tables, localhost only</span></td></tr>
+    <tr><td>/admin/netting</td><td>AdminPage</td><td>/api/admin/netting/*</td><td>broker_order, internal_match</td></tr>
+  </table>
+</section>
+
+<section id="mig">
+  <h2 class="ru">11. Зачем 33 миграции, коротко</h2>
+  <h2 class="en">11. Why 33 migrations, short</h2>
+  <table>
+    <tr><th>#</th><th class="ru">суть</th><th class="en">point</th></tr>
+    <tr><td>V1</td><td class="ru">app_user</td><td class="en">app_user</td></tr>
+    <tr><td>V2</td><td class="ru">пароль и роль</td><td class="en">password + role</td></tr>
+    <tr><td>V3 / V25</td><td class="ru">sim_trade родился и умер</td><td class="en">sim_trade born and died</td></tr>
+    <tr><td>V4</td><td class="ru">все брокерские таблицы</td><td class="en">all broker tables</td></tr>
+    <tr><td>V5</td><td class="ru">балансы на счёте</td><td class="en">account balances</td></tr>
+    <tr><td>V6</td><td class="ru">бан</td><td class="en">ban</td></tr>
+    <tr><td>V8</td><td class="ru">цена и P/L на ордере</td><td class="en">fill price + P/L on order</td></tr>
+    <tr><td>V10</td><td class="ru">настройки</td><td class="en">preferences</td></tr>
+    <tr><td>V11–V14</td><td class="ru">демо-данные</td><td class="en">demo data</td></tr>
+    <tr><td>V15–V18</td><td class="ru">NN, open_price, side, SL/TP</td><td class="en">NN, open_price, side, SL/TP</td></tr>
+    <tr><td>V19–V21</td><td class="ru">кредитная линия</td><td class="en">credit line</td></tr>
+    <tr><td>V22</td><td class="ru">можно много позиций на символ</td><td class="en">many positions per symbol</td></tr>
+    <tr><td>V23–V24</td><td class="ru">починить старые цифры комиссий</td><td class="en">backfill old fee numbers</td></tr>
+    <tr><td>V26–V27</td><td class="ru">тексты процентов</td><td class="en">interest note text</td></tr>
+    <tr><td>V28</td><td class="ru">drop trade_fill</td><td class="en">drop trade_fill</td></tr>
+    <tr><td>V29–V31</td><td class="ru">снимок живой базы для друга + sequences</td><td class="en">live DB snapshot for teammate + sequences</td></tr>
+    <tr><td>V32</td><td class="ru">неттинг: internal_match, компьютер, routing, старые сделки помечены LEGACY</td><td class="en">netting: internal_match, the computer, routing, older fills marked LEGACY</td></tr>
+    <tr><td>V33</td><td class="ru">сохранённая комиссия площадки пересчитана: крипта 0,10% с каждой стороны, форекс $3,50 за лот</td><td class="en">stored venue fee restated: crypto 0.10% per side, forex $3.50 per lot</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2 class="ru">12. Иерархия, если забыть всё остальное</h2>
+  <h2 class="en">12. Hierarchy if you forget the rest</h2>
+  <p class="ru" style="font-size:18px"><b>человек → счёт → (ордера, открытые позиции, касса, кредит)</b>. Инструмент только подписывает ордер и позицию тикером. История — это ордера, не позиции. Долг — поле на счёте, а ledger объясняет почему.</p>
+  <p class="en" style="font-size:18px"><b>person → account → (orders, open positions, cashier, credit)</b>. A symbol only stamps ticker on order and position. History is orders, not positions. Debt is a field on the account; the ledger explains why.</p>
+</section>
+
+</main>
+<script>
+function setLang(l) {
+  document.documentElement.lang = l;
+  document.getElementById('btn-ru').classList.toggle('on', l === 'ru');
+  document.getElementById('btn-en').classList.toggle('on', l === 'en');
+  try { localStorage.setItem('arch-lang', l); } catch (e) {}
+}
+setLang(localStorage.getItem('arch-lang') || 'ru');
+</script>
+</body>
+</html>

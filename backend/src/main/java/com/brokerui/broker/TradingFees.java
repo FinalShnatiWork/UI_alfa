@@ -3,56 +3,58 @@ package com.brokerui.broker;
 import java.math.BigDecimal;
 
 /**
- * Central place for trading fee constants charged to the client on every trade fill.
- * <p>
- * This is intentionally the same flat amount used by the netting-broker AI routing model
- * (see {@code buysellmodel/simulation.js}, {@code EXCHANGE_FEE_PER_TRADE}) as the assumed
- * cost of routing an order to the external exchange/liquidity provider. That symmetry keeps
- * the economics consistent: the client always pays this commission regardless of how the
- * order was routed, while the platform only incurs the matching exchange-fee cost when the
- * AI advisor ({@code NNPredictorClient}) recommends {@code EXTERNAL} routing. Orders matched
- * {@code INTERNAL}ly cost the platform nothing, so the whole commission becomes pure profit —
- * which is exactly the netting-broker business model this app demonstrates.
+ * Two schedules, both with the client paying twice what the venue charges.
+ * Crypto is a percent of notional (Binance-like). Forex and metals are dollars per lot,
+ * because a percent of a 100,000-unit contract is far above a retail FX commission.
+ * An internal cross keeps both client commissions and pays the venue nothing.
  */
 public final class TradingFees {
   private TradingFees() {}
 
-  /** Default fallback commission charged when trade parameters are not fully specified. */
-  public static final BigDecimal COMMISSION_PER_TRADE = new BigDecimal("1.50");
+  /** Crypto: 0.20% of notional. */
+  public static final BigDecimal CLIENT_RATE = new BigDecimal("0.002");
+
+  /** Crypto: 0.10% of notional sent to the venue. */
+  public static final BigDecimal EXCHANGE_RATE = new BigDecimal("0.001");
+
+  /** Forex and metals: client commission per 1.0 lot, per fill. */
+  public static final BigDecimal CLIENT_PER_LOT = new BigDecimal("7.00");
+
+  /** Forex and metals: venue cost per 1.0 lot on the quantity that leaves. */
+  public static final BigDecimal EXCHANGE_PER_LOT = new BigDecimal("3.50");
+
+  public static boolean isCrypto(String symbolCode) {
+    if (symbolCode == null) return false;
+    String sym = symbolCode.toUpperCase();
+    return sym.contains("BTC") || sym.contains("ETH") || sym.contains("SOL") || sym.contains("XRP");
+  }
+
+  public static BigDecimal notional(String symbolCode, BigDecimal quantity, BigDecimal price) {
+    if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0
+        || price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+      return BigDecimal.ZERO;
+    }
+    return price.multiply(quantity).multiply(ContractSpecs.getContractSize(symbolCode));
+  }
 
   /**
-   * Dynamically calculates commission for a trade as 0.0025% (2.5 bps) of notional value
-   * ({@code price × quantity × contractSize}), floored at $0.10 and capped at $50.00.
-   * Falls back to {@link #COMMISSION_PER_TRADE} when quantity or price is missing/non-positive.
-   *
-   * @param symbolCode the asset symbol code
-   * @param quantity trade volume / quantity
-   * @param fillPrice execution price
-   * @return calculated commission amount
+   * Crypto: {@link #CLIENT_RATE} of notional. Forex and metals: {@link #CLIENT_PER_LOT} times lots.
    */
   public static BigDecimal calculateCommission(String symbolCode, BigDecimal quantity, BigDecimal fillPrice) {
-    if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0 || fillPrice == null || fillPrice.compareTo(BigDecimal.ZERO) <= 0) {
-      return COMMISSION_PER_TRADE;
+    if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) return BigDecimal.ZERO.setScale(2);
+    if (!isCrypto(symbolCode)) {
+      return quantity.multiply(CLIENT_PER_LOT).setScale(2, java.math.RoundingMode.HALF_UP);
     }
+    return notional(symbolCode, quantity, fillPrice).multiply(CLIENT_RATE).setScale(2, java.math.RoundingMode.HALF_UP);
+  }
 
-    BigDecimal contractSize = ContractSpecs.getContractSize(symbolCode);
-    BigDecimal notional = fillPrice.multiply(quantity).multiply(contractSize);
-
-    // Fixed commission rate of 0.0025% (2.5 bps) of notional value
-    BigDecimal rate = new BigDecimal("0.000025");
-    BigDecimal totalFee = notional.multiply(rate).setScale(2, java.math.RoundingMode.HALF_UP);
-
-    // Minimum $0.10, Maximum $50.00 per trade to stay logical and avoid eating all profit or losing profitability
-    BigDecimal minFee = new BigDecimal("0.10");
-    BigDecimal maxFee = new BigDecimal("50.00");
-
-    if (totalFee.compareTo(minFee) < 0) {
-      return minFee;
+  /** Venue cost for this quantity. Zero when the quantity never leaves the building. */
+  public static BigDecimal exchangeFee(String symbolCode, BigDecimal quantity, BigDecimal price) {
+    if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) return BigDecimal.ZERO.setScale(2);
+    if (!isCrypto(symbolCode)) {
+      return quantity.multiply(EXCHANGE_PER_LOT).setScale(2, java.math.RoundingMode.HALF_UP);
     }
-    if (totalFee.compareTo(maxFee) > 0) {
-      return maxFee;
-    }
-    return totalFee;
+    return notional(symbolCode, quantity, price).multiply(EXCHANGE_RATE).setScale(2, java.math.RoundingMode.HALF_UP);
   }
 
   /**

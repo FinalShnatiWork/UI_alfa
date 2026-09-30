@@ -11,7 +11,7 @@
 //  Market & State
 // =====================
 
-const EXCHANGE_FEE_PER_TRADE = 1.50;  // flat fee per external trade
+const EXCHANGE_FEE_RATE = 0.001;  // 0.10% of notional the venue would have charged per side
 
 const state = {
     market: {
@@ -437,12 +437,13 @@ function matchOrdersInternal() {
                 state.clientA.internalTrades++;
                 state.clientA.totalSpent  += cost;
                 state.clientA.sharesBought += matchQty;
-                state.clientA.feeSaved    += EXCHANGE_FEE_PER_TRADE / 2;
+                const venueFee = matchQty * midPrice * EXCHANGE_FEE_RATE;
+                state.clientA.feeSaved    += venueFee;
 
                 state.clientB.internalTrades++;
                 state.clientB.totalReceived += cost;
                 state.clientB.sharesSold    += matchQty;
-                state.clientB.feeSaved      += EXCHANGE_FEE_PER_TRADE / 2;
+                state.clientB.feeSaved      += venueFee;
 
                 buy.remaining  -= matchQty;
                 sell.remaining -= matchQty;
@@ -450,7 +451,7 @@ function matchOrdersInternal() {
                 if (sell.remaining === 0) sell.filled = true;
 
                 state.stats.internalTrades++;
-                state.stats.feesSaved += EXCHANGE_FEE_PER_TRADE;
+                state.stats.feesSaved += venueFee * 2;
                 state.stats.totalVolume += matchQty;
 
                 internals.push({ qty: matchQty, price: midPrice });

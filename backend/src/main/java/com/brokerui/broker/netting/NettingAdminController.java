@@ -2,11 +2,14 @@ package com.brokerui.broker.netting;
 
 import com.brokerui.broker.BrokerOrder;
 import com.brokerui.broker.BrokerOrderRepository;
+import com.brokerui.broker.ContractSpecs;
 import com.brokerui.broker.TradingAccount;
 import com.brokerui.broker.TradingAccountRepository;
+import com.brokerui.broker.TradingFees;
 import com.brokerui.market.MarketPriceService;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -66,7 +69,6 @@ public class NettingAdminController {
   @Transactional(readOnly = true)
   public Map<String, Object> summary() {
     Map<String, Object> out = new LinkedHashMap<>();
-    BigDecimal fee = props.getExternalFeePerTrade();
     // Real clients only (simulated accounts excluded), netting-era opening orders only.
     Object[] real = (Object[]) em.createNativeQuery(
         "SELECT COUNT(*), COALESCE(SUM(o.filled_qty),0), COALESCE(SUM(o.internal_qty),0), COALESCE(SUM(o.external_qty),0), "
@@ -77,7 +79,6 @@ public class NettingAdminController {
             + "WHERE o.routing IN ('INTERNAL','EXTERNAL','SPLIT') AND t.is_simulated = FALSE").getSingleResult();
     BigDecimal filled = dec(real[1]);
     BigDecimal internal = dec(real[2]);
-    BigDecimal externalLegs = dec(real[5]);
     out.put("orders", num(real[0]));
     out.put("ordersInternal", num(real[6]));
     out.put("ordersExternal", num(real[7]));
@@ -93,7 +94,8 @@ public class NettingAdminController {
             + "COALESCE(SUM(CASE WHEN buyer_simulated OR seller_simulated THEN 1 ELSE 0 END),0) "
             + "FROM internal_match").getSingleResult();
     BigDecimal feesSaved = dec(m[1]);
-    BigDecimal externalFeesPaid = fee.multiply(externalLegs);
+    ScheduleMoney schedule = scheduleMoney();
+    BigDecimal externalFeesPaid = schedule.nettingExternal;
     BigDecimal realCommission = dec(real[4]);
     out.put("matches", num(m[0]));
     out.put("matchesWithComputer", num(m[3]));
@@ -110,14 +112,26 @@ public class NettingAdminController {
     Object simUnrealized = em.createNativeQuery(
         "SELECT COALESCE(SUM(p.unrealized_pnl),0) FROM position p JOIN trading_account t ON t.id = p.trading_account_id WHERE t.is_simulated = TRUE").getSingleResult();
     out.put("simulatedCommissionDemoMoney", dec(sim[0]));
-    // "Commission Collected" card: real clients only, every era (LEGACY included). The computer's
-    // commission is demo money moving between simulated accounts and is shown separately.
-    out.put("commissionCollectedRealClients", dec(em.createNativeQuery(
+    // All-time commission from real clients (LEGACY included). Computer commission is demo money.
+    BigDecimal allRealCommission = dec(em.createNativeQuery(
         "SELECT COALESCE(SUM(o.commission),0) FROM broker_order o JOIN trading_account t ON t.id = o.trading_account_id "
-            + "WHERE t.is_simulated = FALSE").getSingleResult()));
+            + "WHERE t.is_simulated = FALSE").getSingleResult());
+    out.put("commissionCollectedRealClients", allRealCommission);
+    out.put("scheduleCommission", schedule.commission);
+    out.put("legacyFilledOrders", schedule.legacyFilled);
+    out.put("legacyExternalFees", schedule.legacyExternal);
+    out.put("allTimeExternalFeesPaid", schedule.exchange);
+    out.put("internalFeesAvoided", schedule.internalAvoided);
+    out.put("brokerCashResult", schedule.commission.subtract(schedule.exchange));
+    out.put("brokerCashResultFormula",
+        "crypto 0.20% / forex $7 per lot, minus venue cost on what went outside (legacy counts as fully external)");
     out.put("simulatedRealizedPnl", dec(sim[1]));
     out.put("simulatedUnrealizedPnl", dec(simUnrealized));
 
+    Map<String, Object> venue = venueBook();
+    out.put("venueHoldings", venue.get("rows"));
+    out.put("venueValueUsd", venue.get("valueUsd"));
+    out.put("venueLegacyValueUsd", venue.get("legacyValueUsd"));
     out.put("houseNetExposure", netExposure());
     out.put("legacyOrders", num(em.createNativeQuery("SELECT COUNT(*) FROM broker_order WHERE routing = 'LEGACY'").getSingleResult()));
     out.put("simulatorEnabled", hls.isEnabled());
@@ -126,6 +140,57 @@ public class NettingAdminController {
     out.put("nnShadow", nnShadowStats());
     return out;
   }
+
+  /**
+   * Applies the live schedule to stored fills: client 0.20% of each fill, venue 0.10% of the
+   * quantity that went outside. Legacy fills had no book, so the whole order counts as external.
+   * Does not rewrite order rows or the saved-fee amounts already stored on internal matches.
+   */
+  @SuppressWarnings("unchecked")
+  private ScheduleMoney scheduleMoney() {
+    List<Object[]> rows = em.createNativeQuery(
+        "SELECT o.symbol_code, o.routing, o.quantity, o.filled_qty, o.external_qty, o.internal_qty, "
+            + "COALESCE(o.entry_price, o.open_price, o.limit_price, 0) "
+            + "FROM broker_order o JOIN trading_account t ON t.id = o.trading_account_id "
+            + "WHERE t.is_simulated = FALSE AND UPPER(COALESCE(o.status,'')) IN ('FILLED','PARTIALLY_FILLED')")
+        .getResultList();
+    BigDecimal commission = BigDecimal.ZERO;
+    BigDecimal legacyExternal = BigDecimal.ZERO;
+    BigDecimal nettingExternal = BigDecimal.ZERO;
+    BigDecimal internalAvoided = BigDecimal.ZERO;
+    long legacyFilled = 0;
+    for (Object[] row : rows) {
+      String symbol = row[0] == null ? "" : row[0].toString();
+      String routing = row[1] == null ? "" : row[1].toString();
+      BigDecimal quantity = dec(row[2]);
+      BigDecimal filledQty = dec(row[3]);
+      BigDecimal externalQty = dec(row[4]);
+      BigDecimal internalQty = dec(row[5]);
+      BigDecimal price = dec(row[6]);
+      BigDecimal qty = filledQty.signum() > 0 ? filledQty : quantity;
+      if (price.signum() <= 0 || qty.signum() <= 0) continue;
+      commission = commission.add(TradingFees.calculateCommission(symbol, qty, price));
+      if (externalQty.signum() > 0) {
+        nettingExternal = nettingExternal.add(TradingFees.exchangeFee(symbol, externalQty, price));
+      } else if ("LEGACY".equals(routing)) {
+        legacyFilled++;
+        legacyExternal = legacyExternal.add(TradingFees.exchangeFee(symbol, qty, price));
+      }
+      if (internalQty.signum() > 0) {
+        // One venue fee per side. The match row stores both sides together; here each order is one side.
+        internalAvoided = internalAvoided.add(TradingFees.exchangeFee(symbol, internalQty, price));
+      }
+    }
+    return new ScheduleMoney(commission, legacyExternal.add(nettingExternal), legacyExternal, nettingExternal, internalAvoided, legacyFilled);
+  }
+
+  private record ScheduleMoney(
+      BigDecimal commission,
+      BigDecimal exchange,
+      BigDecimal legacyExternal,
+      BigDecimal nettingExternal,
+      BigDecimal internalAvoided,
+      long legacyFilled) {}
 
   private Map<String, Object> nnShadowStats() {
     Object[] r = (Object[]) em.createNativeQuery(
@@ -138,6 +203,94 @@ public class NettingAdminController {
     o.put("correct", correct);
     o.put("accuracy", total > 0 ? (double) correct / total : null);
     return o;
+  }
+
+  /**
+   * What still sits in the broker's name at the venue: buys that left minus sells that left.
+   * An internal transfer does not reduce it. Legacy fills had no book, so the whole order counts as external.
+   * Real clients only. Dollar value uses the live price; a USD-base pair (USDJPY) is worth its contract size in dollars.
+   */
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> venueBook() {
+    List<Object[]> rows = em.createNativeQuery(
+        "SELECT o.symbol_code, o.side, o.routing, o.quantity, o.filled_qty, o.external_qty "
+            + "FROM broker_order o JOIN trading_account t ON t.id = o.trading_account_id "
+            + "WHERE t.is_simulated = FALSE AND UPPER(COALESCE(o.status,'')) IN ('FILLED','PARTIALLY_FILLED')")
+        .getResultList();
+    Map<String, BigDecimal> net = new LinkedHashMap<>();
+    Map<String, BigDecimal> legacy = new LinkedHashMap<>();
+    for (Object[] row : rows) {
+      String symbol = row[0] == null ? "" : row[0].toString();
+      String side = row[1] == null ? "" : row[1].toString();
+      String routing = row[2] == null ? "" : row[2].toString();
+      if (symbol.isBlank() || (!"BUY".equals(side) && !"SELL".equals(side))) continue;
+      BigDecimal quantity = dec(row[3]);
+      BigDecimal filledQty = dec(row[4]);
+      BigDecimal externalQty = dec(row[5]);
+      BigDecimal outside;
+      boolean old;
+      if (externalQty.signum() > 0) {
+        outside = externalQty;
+        old = false;
+      } else if ("LEGACY".equals(routing)) {
+        outside = filledQty.signum() > 0 ? filledQty : quantity;
+        old = true;
+      } else {
+        continue;
+      }
+      if (outside.signum() <= 0) continue;
+      BigDecimal signed = "SELL".equals(side) ? outside.negate() : outside;
+      net.merge(symbol, signed, BigDecimal::add);
+      if (old) legacy.merge(symbol, signed, BigDecimal::add);
+    }
+
+    List<Map<String, Object>> holdings = new ArrayList<>();
+    BigDecimal total = BigDecimal.ZERO;
+    BigDecimal legacyTotal = BigDecimal.ZERO;
+    for (Map.Entry<String, BigDecimal> e : net.entrySet()) {
+      BigDecimal qty = e.getValue();
+      if (qty.abs().compareTo(new BigDecimal("0.0000001")) < 0) continue;
+      BigDecimal oldQty = legacy.getOrDefault(e.getKey(), BigDecimal.ZERO);
+      BigDecimal price = BigDecimal.valueOf(priceService.getLivePrice(e.getKey()));
+      BigDecimal value = venueValueUsd(e.getKey(), qty, price);
+      BigDecimal oldValue = venueValueUsd(e.getKey(), oldQty, price);
+      Map<String, Object> line = new LinkedHashMap<>();
+      line.put("symbol", e.getKey());
+      line.put("quantity", qty.setScale(8, RoundingMode.HALF_UP));
+      line.put("legacyQuantity", oldQty.setScale(8, RoundingMode.HALF_UP));
+      line.put("valueUsd", value);
+      holdings.add(line);
+      if (value != null) total = total.add(value);
+      if (oldValue != null) legacyTotal = legacyTotal.add(oldValue);
+    }
+    holdings.sort((a, b) -> {
+      BigDecimal av = a.get("valueUsd") instanceof BigDecimal v ? v.abs() : BigDecimal.ZERO;
+      BigDecimal bv = b.get("valueUsd") instanceof BigDecimal v ? v.abs() : BigDecimal.ZERO;
+      int byValue = bv.compareTo(av);
+      if (byValue != 0) return byValue;
+      return String.valueOf(a.get("symbol")).compareTo(String.valueOf(b.get("symbol")));
+    });
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("rows", holdings);
+    out.put("valueUsd", total.setScale(2, RoundingMode.HALF_UP));
+    out.put("legacyValueUsd", legacyTotal.setScale(2, RoundingMode.HALF_UP));
+    return out;
+  }
+
+  /** Dollar size of a venue residual. USD-base forex is the contract itself (100,000 USD per lot). */
+  private static BigDecimal venueValueUsd(String symbol, BigDecimal qty, BigDecimal price) {
+    if (qty.signum() == 0) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    String sym = symbol.toUpperCase(Locale.ROOT);
+    BigDecimal contract = ContractSpecs.getContractSize(sym);
+    BigDecimal raw;
+    if (sym.startsWith("USD") && contract.compareTo(BigDecimal.valueOf(100000)) == 0) {
+      raw = qty.multiply(contract);
+    } else if (price == null || price.signum() <= 0) {
+      return null;
+    } else {
+      raw = qty.multiply(contract).multiply(price);
+    }
+    return raw.setScale(2, RoundingMode.HALF_UP);
   }
 
   /** Per symbol: Σ BUY internal qty − Σ SELL internal qty. Must be 0 — the house never keeps a side. */

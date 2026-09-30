@@ -158,7 +158,7 @@ public class AdminTradeController {
   public record AccountDto(Long id, Long userId, String accountType, String currency, int leverage, String status,
       BigDecimal balance, BigDecimal equity, BigDecimal marginUsed, BigDecimal freeMargin,
       BigDecimal borrowedBalance, BigDecimal marginLevelPct, BigDecimal interestAccruedTotal,
-      BigDecimal commissionPaidTotal) {}
+      BigDecimal commissionPaidTotal, boolean simulated) {}
 
   /**
    * Retrieves all trading accounts in the system.
@@ -175,7 +175,7 @@ public class AdminTradeController {
         return new AccountDto(a.getId(), a.getUser().getId(), a.getAccountType(), a.getCurrency(), a.getLeverage(),
             a.getStatus(), a.getBalance(), a.getEquity(), a.getMarginUsed(), a.getFreeMargin(),
             a.getBorrowedBalance(), level == null ? null : level.multiply(BigDecimal.valueOf(100)),
-            a.getInterestAccruedTotal(), a.getCommissionPaidTotal());
+            a.getInterestAccruedTotal(), a.getCommissionPaidTotal(), a.isSimulated());
       })
       .collect(Collectors.toList());
   }

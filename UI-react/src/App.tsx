@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // ReactQueryDevtools intentionally excluded from production build
 import { I18nProvider } from '@/hooks/useI18n';
@@ -19,6 +19,7 @@ import { HistoryPage } from '@/pages/HistoryPage';
 import { FinancePage } from '@/pages/FinancePage';
 import { ChartsPage } from '@/pages/ChartsPage';
 import { AnalyzerPage } from '@/pages/AnalyzerPage';
+import { AdminPage } from '@/pages/admin/AdminPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
 
 const queryClient = new QueryClient({
@@ -43,7 +44,7 @@ export function App() {
       <ErrorBoundary>
         <I18nProvider>
           <ToastProvider>
-            <HashRouter>
+            <BrowserRouter>
               <AuthProvider>
                 <PreferenceSync>
                 <Routes>
@@ -61,12 +62,14 @@ export function App() {
                   <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
                   <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
                   <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                  <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/admin/netting" element={<AdminPage />} />
 
                   <Route path="*" element={<PlaceholderPage title="Not Found" />} />
                 </Routes>
                 </PreferenceSync>
               </AuthProvider>
-            </HashRouter>
+            </BrowserRouter>
           </ToastProvider>
         </I18nProvider>
       </ErrorBoundary>

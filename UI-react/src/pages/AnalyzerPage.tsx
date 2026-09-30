@@ -56,7 +56,7 @@ export function AnalyzerPage() {
         
         const fetchOverview = async () => {
             try {
-                const res = await fetch('http://localhost:3008/api/analysis/all');
+                const res = await fetch('/api/market/analysis/all');
                 if (res.ok && active) {
                     const data = await res.json();
                     setAssets(Array.isArray(data) ? data : []);
@@ -84,7 +84,7 @@ export function AnalyzerPage() {
         
         const fetchAnalysis = async () => {
             try {
-                const res = await fetch(`http://localhost:3008/api/analysis?symbol=${selectedSymbol}&category=${selectedCategory}`);
+                const res = await fetch(`/api/market/analysis?symbol=${selectedSymbol}&category=${selectedCategory}`);
                 if (res.ok && active) {
                     const data = await res.json();
                     setAnalysis(data);

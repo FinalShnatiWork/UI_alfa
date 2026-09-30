@@ -36,15 +36,8 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3005" ^| findstr "LISTENING
 )
 echo       Done.
 
-:: Kill Coin Analyzer Bot (runs on port 3008)
-echo [4/5] Stopping AI Coin Analyzer (port 3008)...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3008" ^| findstr "LISTENING"') do (
-    taskkill /PID %%a /T /F >nul 2>&1
-)
-echo       Done.
-
 :: Stop Docker containers
-echo [5/5] Stopping Docker (PostgreSQL)...
+echo [4/4] Stopping Docker (PostgreSQL)...
 cd /d "%~dp0backend"
 docker compose down
 echo       Done.

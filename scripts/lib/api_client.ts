@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use strict';
 /**
  * Zero-dependency client for the UI_alfa backend (Node 18+ built-in fetch).

@@ -32,8 +32,8 @@ if %ERRORLEVEL% NEQ 0 (
     if errorlevel 2 exit /b 1
 )
 
-echo [1/3] Opening Admin Dashboard...
-start "" "%~dp0AdminDashboard_Local.html"
+echo [1/3] Opening Admin Hub...
+start "" "http://localhost:3001/admin"
 timeout /t 2 >nul
 
 echo [2/3] Opening User 1 (Trader A) - Normal Mode...

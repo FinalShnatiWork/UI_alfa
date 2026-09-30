@@ -27,7 +27,7 @@ spring:
 broker:
   # Real netting (client vs client / client vs computer) — see buysellmodel/NETTING_IMPLEMENTATION_PLAN.md
   netting:
-    external-fee-per-trade: 1.50   # broker's cost per leg routed to the external market
+    external-fee-rate: 0.001      # 0.10% of notional on the quantity routed to the external market
     nn-shadow: true                # NN advisor is called after commit and only recorded, never decides
     limit-wait-ms: 8000            # a marketable LIMIT waits this long for an internal counterparty (0 = never)
     test-endpoints:

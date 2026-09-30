@@ -21,13 +21,13 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo [1/3] Model + feature vectors + JS engine parity...
-node buysellmodel\tests\model_check.js
+npx --yes tsx buysellmodel\tests\model_check.js
 if %ERRORLEVEL% NEQ 0 goto :fail
 echo.
 
 echo [2/3] Java netting engine unit tests (Maven)...
 pushd backend
-call mvnw.cmd -q "-Dtest=Netting*,Nbbo*,FeatureBuilder*,CancelFillRaceGuardTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
+call mvnw.cmd -q "-Dtest=Netting*,Nbbo*,FeatureBuilder*,CancelFillRaceGuardTest,TechnicalAnalysisServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
 set "MVN_RESULT=%ERRORLEVEL%"
 popd
 if not "%MVN_RESULT%"=="0" goto :fail
@@ -41,7 +41,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo       Run start-project.bat first, then run this file again for the full check.
     goto :ok
 )
-node scripts\netting_e2e.js
+npx --yes tsx scripts\netting_e2e.ts
 if %ERRORLEVEL% NEQ 0 goto :fail
 
 :ok

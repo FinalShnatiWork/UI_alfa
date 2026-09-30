@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use strict';
 /**
  * V01–V16: every situation the netting model can hit, played by two real client sessions
@@ -234,7 +235,7 @@ const scenarios = [
       const after = Number((await ctx.A.overview()).balance);
       const cs = ctx.contractSize;
       const margin = Math.round(ctx.mid * Number(ctx.q(0.4)) * cs / 100 * 1e4) / 1e4;
-      const commission = Math.min(50, Math.max(0.1, Math.round(ctx.mid * Number(ctx.q(0.4)) * cs * 0.000025 * 100) / 100));
+      const commission = Math.round(ctx.mid * Number(ctx.q(0.4)) * cs * 0.002 * 100) / 100;
       const expected = before - margin - commission;
       ctx.check('cancel accepted', c.ok, JSON.stringify(c.data));
       ctx.check('balance = before − (margin + commission of the 0.4 filled)', Math.abs(after - expected) < 0.001, `before=${before} after=${after} expected=${expected.toFixed(4)}`);

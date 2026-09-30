@@ -40,7 +40,6 @@ echo Cleaning up leftover processes from previous runs...
 call :free_port 8080 "Backend"
 call :free_port 3001 "Frontend"
 call :free_port 3005 "NN Server"
-call :free_port 3008 "Coin Analyzer"
 echo.
 
 :: ─── Step 1: Start Docker (PostgreSQL) ───────────────────────────────────────
@@ -75,24 +74,17 @@ echo       (Wait ~15 seconds for Spring Boot to boot fully)
 echo.
 
 :: ─── Step 4: Start React Frontend ────────────────────────────────────────────
-echo [4/6] Starting React Frontend (Vite)...
+echo [4/5] Starting React Frontend (Vite)...
 cd /d "%~dp0UI-react"
 start "Frontend - React+Vite" cmd /k "npm run dev & pause"
 echo       Frontend will open at http://localhost:3001
 echo.
 
-:: ─── Step 5: Start Neural Network Server ──────────────────────────────────────
-echo [5/6] Starting Neural Network Server...
+:: ─── Step 5: Optional Neural Network trainer (shadow advisor) ─────────────────
+echo [5/5] Starting Neural Network trainer (optional, port 3005)...
 cd /d "%~dp0buysellmodel"
 start "AI - Neural Network Server" cmd /k "node nn_server.js & pause"
-echo       NN Server is up on port 3005.
-echo.
-
-:: ─── Step 6: Start Coin Analyzer Bot ──────────────────────────────────────────
-echo [6/6] Starting Coin Analyzer Bot...
-cd /d "%~dp0coin-analyzer"
-start "AI - Coin Analyzer Bot" cmd /k "npm start & pause"
-echo       Coin Analyzer is up on port 3008.
+echo       NN trainer is up on port 3005. The React app talks to Spring, not this port.
 echo.
 
 echo  ============================================
@@ -100,9 +92,8 @@ echo   All services started!
 echo   - PostgreSQL    : localhost:5433
 echo   - Backend       : http://localhost:8080
 echo   - Frontend      : http://localhost:3001
-echo   - AI Advisor    : http://localhost:3005
-echo   - Coin Analyzer : http://localhost:3008
-echo   - Admin page    : open-admin.bat
+echo   - Admin Hub     : http://localhost:3001/admin
+echo   - NN trainer    : localhost:3005 (optional)
 echo  ============================================
 echo.
 echo  To STOP everything, run: kill-server.bat
