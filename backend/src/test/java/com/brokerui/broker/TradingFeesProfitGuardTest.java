@@ -32,6 +32,23 @@ class TradingFeesProfitGuardTest {
   }
 
   @Test
+  void doesNotCutCloseBelowVenueFee() {
+    // open 2 + close 2, profit 10, the 20% cap would zero the close; the venue still costs 1
+    BigDecimal close = TradingFees.applyProfitSafetyGuard(
+        new BigDecimal("2.00"), new BigDecimal("2.00"), new BigDecimal("10.00"),
+        new BigDecimal("1.00"));
+    assertEquals(0, close.compareTo(new BigDecimal("1.00")));
+  }
+
+  @Test
+  void venueFloorCannotExceedTheTariff() {
+    BigDecimal close = TradingFees.applyProfitSafetyGuard(
+        new BigDecimal("2.00"), new BigDecimal("2.00"), new BigDecimal("10.00"),
+        new BigDecimal("9.00"));
+    assertEquals(0, close.compareTo(new BigDecimal("2.00")));
+  }
+
+  @Test
   void leavesCloseUnchangedWhenUnderCap() {
     BigDecimal close = TradingFees.applyProfitSafetyGuard(
         new BigDecimal("0.50"), new BigDecimal("0.50"), new BigDecimal("10.00"));

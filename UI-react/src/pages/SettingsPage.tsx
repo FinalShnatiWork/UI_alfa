@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { usePreferences, useSavePreferences } from '@/hooks/useApi';
 import { Skeleton } from '@/components/Skeleton';
+import { apiPostJson } from '@/lib/api';
 import type { Lang } from '@/types/api';
 
 type Theme = 'dark' | 'light' | 'system';
@@ -85,6 +86,11 @@ export function SettingsPage() {
   const [pushNotif, setPushNotif] = useState(true);
   const [emailReports, setEmailReports] = useState(true);
   const [theme, setThemeState] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
+  const [pwOpen, setPwOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
 
   // Hydrate from DB once loaded
   useEffect(() => {
@@ -131,8 +137,31 @@ export function SettingsPage() {
     );
   }
 
-  function handleChangePassword() {
-    toast.show(t('alerts.comingSoon'), { variant: 'info' });
+  async function handleChangePassword() {
+    if (newPassword.length < 8) {
+      toast.show(t('settings.passwordShort'), { variant: 'error' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.show(t('settings.passwordMismatch'), { variant: 'error' });
+      return;
+    }
+    setPwBusy(true);
+    const res = await apiPostJson('/api/auth/password', { currentPassword, newPassword });
+    setPwBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({} as { error?: string }));
+      toast.show(
+        data.error === 'wrong_password' ? t('settings.wrongPassword') : t('settings.passwordFailed'),
+        { variant: 'error' },
+      );
+      return;
+    }
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPwOpen(false);
+    toast.show(t('settings.passwordSaved'), { variant: 'success' });
   }
 
   return (
@@ -176,14 +205,31 @@ export function SettingsPage() {
           )}
 
           <div className="mt-20">
-            <button
-              type="button"
-              className="btn btn-outline"
-              style={{ width: '100%', marginTop: 10 }}
-              onClick={handleChangePassword}
-            >
-              {t('settings.changePassword')}
-            </button>
+            {pwOpen ? (
+              <div className="flex-gap flex-col">
+                <label className="font-bold" htmlFor="currentPassword">{t('settings.currentPassword')}</label>
+                <input id="currentPassword" type="password" className="form-control" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                <label className="font-bold" htmlFor="newPassword">{t('settings.newPassword')}</label>
+                <input id="newPassword" type="password" className="form-control" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                <label className="font-bold" htmlFor="confirmPassword">{t('settings.confirmPassword')}</label>
+                <input id="confirmPassword" type="password" className="form-control" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                <button type="button" className="btn btn-primary" disabled={pwBusy} onClick={() => void handleChangePassword()}>
+                  {pwBusy ? '...' : t('settings.savePassword')}
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => setPwOpen(false)}>
+                  {t('account.cancel')}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ width: '100%', marginTop: 10 }}
+                onClick={() => setPwOpen(true)}
+              >
+                {t('settings.changePassword')}
+              </button>
+            )}
           </div>
         </div>
 

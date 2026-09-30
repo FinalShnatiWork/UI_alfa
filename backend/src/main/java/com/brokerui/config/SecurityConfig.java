@@ -167,11 +167,15 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers("/api/broker/**")
                     .authenticated()
-                    // Admin APIs: LocalhostOnlyFilter restricts this to 127.0.0.1.
-                    // We permitAll here so the admin doesn't need to log in when on localhost.
+                    // LocalhostOnlyFilter still drops remote callers.
+                    // On this machine the caller must also be a logged-in ADMIN.
                     .requestMatchers("/api/admin/**")
-                    .permitAll()
+                    .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/auth/me")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/profile")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/password")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/api/auth/logout")
                     .authenticated()

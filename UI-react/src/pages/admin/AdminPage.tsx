@@ -121,7 +121,7 @@ export function AdminPage() {
           {tab === 'users' ? <UsersTab users={users} accounts={accounts} onChanged={load} /> : null}
           {tab === 'trades' ? <TradesTab trades={trades} usersById={usersById} /> : null}
           {tab === 'finance' ? <AccountsTab accounts={accounts} usersById={usersById} onChanged={load} /> : null}
-          {tab === 'transactions' ? <TxTab txs={txs} accounts={accounts} usersById={usersById} /> : null}
+          {tab === 'transactions' ? <TxTab txs={txs} accounts={accounts} usersById={usersById} onChanged={() => void load()} /> : null}
           {tab === 'credit' ? <CreditTab accounts={accounts} loans={loans} usersById={usersById} onChanged={load} /> : null}
           {tab === 'audit' ? <AuditTab audit={audit} usersById={usersById} /> : null}
           {tab === 'netting' ? <AdminNettingTab /> : null}
@@ -501,6 +501,9 @@ function TradesTab({ trades, usersById }: { trades: AdminTrade[]; usersById: Rec
         </select>
         <span className="text-muted">{sorted.length} records</span>
       </div>
+      <p className="text-muted admin-help">
+        A new fill writes this same amount on the order, on the account, and as a commission posting. Older rows are the archive and can differ.
+      </p>
       <div className="table-scroll">
         <table>
           <thead>
@@ -536,6 +539,9 @@ function AccountsTab({ accounts, usersById, onChanged }: { accounts: AdminAccoun
   return (
     <div className="card admin-card">
       <h3>Accounts</h3>
+      <p className="text-muted admin-help">
+        On the account is the lifetime counter. New charges match the order and the commission posting. Older rows are the archive and can differ.
+      </p>
       <div className="table-scroll">
         <table>
           <thead>
@@ -587,32 +593,63 @@ function BalanceForm({ account, onDone }: { account: AdminAccount; onDone: () =>
   );
 }
 
-function TxTab({ txs, accounts, usersById }: { txs: AdminTx[]; accounts: AdminAccount[]; usersById: Record<number, AdminUser> }) {
+function TxTab({ txs, accounts, usersById, onChanged }: { txs: AdminTx[]; accounts: AdminAccount[]; usersById: Record<number, AdminUser>; onChanged: () => void }) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const [decideError, setDecideError] = useState('');
   const accUser: Record<number, number> = {};
   accounts.forEach((a) => { accUser[a.id] = a.userId; });
-  const dep = txs.filter((t) => t.txType === 'DEPOSIT').reduce((s, t) => s + num(t.amount), 0);
-  const wit = txs.filter((t) => t.txType === 'WITHDRAWAL').reduce((s, t) => s + num(t.amount), 0);
+  const approved = (t: AdminTx) => (t.status || '').toUpperCase() === 'APPROVED';
+  const dep = txs.filter((t) => t.txType === 'DEPOSIT' && approved(t)).reduce((s, t) => s + num(t.amount), 0);
+  const wit = txs.filter((t) => t.txType === 'WITHDRAWAL' && approved(t)).reduce((s, t) => s + num(t.amount), 0);
   const comm = txs.filter((t) => t.txType === 'COMMISSION').reduce((s, t) => s + num(t.amount), 0);
+  const pending = txs.filter((t) => t.txType === 'WITHDRAWAL' && (t.status || '').toUpperCase() === 'PENDING');
   const sorted = [...txs].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+  async function decide(id: number, decision: 'APPROVED' | 'REJECTED') {
+    setBusy(id);
+    setDecideError('');
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}/decide`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      if (!res.ok) {
+        setDecideError('This payout does not fit the cash on the account anymore.');
+        return;
+      }
+      onChanged();
+    } catch {
+      setDecideError('This payout does not fit the cash on the account anymore.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="card admin-card">
       <div className="admin-stat-grid">
         <Kpi label="Deposits" value={money(dep)} />
-        <Kpi label="Withdrawals" value={money(wit)} />
+        <Kpi label="Withdrawals" value={money(wit)} sub={pending.length ? `${pending.length} waiting` : undefined} />
         <Kpi label="Posted commissions" value={money(comm)} />
         <Kpi label="Net flow" value={money(dep - wit)} />
       </div>
       <p className="text-muted admin-help">
-        Posted commissions are the cash that was actually taken. From clients on Overview is the current tariff on the same sizes.
+        A withdrawal stays pending until you approve it. The cash leaves the account only then. Posted commissions are the cash that was actually taken. Older commission rows are the archive and can differ.
       </p>
+      {decideError ? <p className="text-muted admin-help">{decideError}</p> : null}
       <div className="table-scroll">
         <table>
           <thead>
-            <tr><th>#</th><th>User</th><th>Type</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th></tr>
+            <tr><th>#</th><th>User</th><th>Type</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th><th></th></tr>
           </thead>
           <tbody>
             {sorted.map((tx, i) => {
               const u = usersById[accUser[tx.accountId]];
+              const status = (tx.status || '').toUpperCase();
+              const badge = status === 'PENDING' ? 'badge-warning' : status === 'REJECTED' ? 'badge-danger' : 'badge-success';
+              const waiting = tx.txType === 'WITHDRAWAL' && status === 'PENDING';
               return (
                 <tr key={tx.id}>
                   <td className="text-muted">{sorted.length - i}</td>
@@ -620,8 +657,16 @@ function TxTab({ txs, accounts, usersById }: { txs: AdminTx[]; accounts: AdminAc
                   <td>{tx.txType}</td>
                   <td>{money(tx.amount)}</td>
                   <td className="text-muted">{tx.method || tx.currency || '–'}</td>
-                  <td><span className="badge badge-success">{tx.status}</span></td>
+                  <td><span className={`badge ${badge}`}>{tx.status}</span></td>
                   <td className="text-muted">{isoDate(tx.createdAt)}</td>
+                  <td>
+                    {waiting ? (
+                      <span className="admin-actions">
+                        <button type="button" className="btn btn-primary btn-sm" disabled={busy === tx.id} onClick={() => void decide(tx.id, 'APPROVED')}>Approve</button>
+                        <button type="button" className="btn btn-outline btn-sm" disabled={busy === tx.id} onClick={() => void decide(tx.id, 'REJECTED')}>Reject</button>
+                      </span>
+                    ) : null}
+                  </td>
                 </tr>
               );
             })}

@@ -1,6 +1,6 @@
 export async function adminGet<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`/api/admin${path}`, { headers: { Accept: 'application/json' } });
+    const res = await fetch(`/api/admin${path}`, { credentials: 'include', headers: { Accept: 'application/json' } });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -12,6 +12,7 @@ export async function adminPost<T = { ok?: boolean }>(path: string, body: unknow
   try {
     const res = await fetch(`/api/admin${path}`, {
       method: 'POST',
+      credentials: 'include',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });

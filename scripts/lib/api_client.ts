@@ -4,7 +4,7 @@
  * Zero-dependency client for the UI_alfa backend (Node 18+ built-in fetch).
  *
  *  - Session: one logged-in user with its OWN cookie jar and CSRF token (= one browser).
- *  - Admin:   /api/admin/** calls (localhost-only on the backend, no login, no CSRF).
+ *  - Admin:   /api/admin/** calls. Localhost-only on the backend, and only after an ADMIN login.
  *
  * Every call has a timeout, one retry on network errors, and errors that say method/url/status/body.
  */
@@ -135,17 +135,16 @@ class Session {
 }
 
 class Admin {
-  constructor(base = DEFAULT_BASE) { this.base = base; }
+  constructor(base = DEFAULT_BASE, email = 'admin@gmail.com', password = '1234') {
+    this.session = new Session('admin', email, password, base);
+    this.ready = null;
+  }
 
   async call(method, path, body) {
-    const url = this.base + path;
-    const headers = { Accept: 'application/json' };
-    let payload;
-    if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
-    const res = await rawFetch(url, { method, headers, body: payload });
-    const data = await parse(res);
-    if (!res.ok) throw new HttpError(method, url, res.status, data);
-    return data;
+    if (!this.ready) this.ready = this.session.ensureLoggedIn('Admin');
+    await this.ready;
+    const r = await this.session.request(method, path, body);
+    return r.data;
   }
 
   health() { return this.call('GET', '/api/health'); }

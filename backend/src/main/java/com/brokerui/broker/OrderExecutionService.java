@@ -30,7 +30,7 @@ public class OrderExecutionService {
   /** Kept for constructor compatibility; the NN is now called by NettingService in shadow mode. */
   private final NNPredictorClient nnPredictorClient;
   private final MarginLoanService marginLoanService;
-  private final AccountTransactionRepository txRepo;
+  private final CommissionLedger commissionLedger;
 
   @Autowired @Lazy
   private OrderExecutionService self;
@@ -62,9 +62,9 @@ public class OrderExecutionService {
       com.brokerui.market.MarketPriceService priceService,
       NNPredictorClient nnPredictorClient,
       MarginLoanService marginLoanService,
-      AccountTransactionRepository txRepo) {
+      CommissionLedger commissionLedger) {
     this.accountRepo = accountRepo;
-    this.txRepo = txRepo;
+    this.commissionLedger = commissionLedger;
     this.positionRepo = positionRepo;
     this.orderRepo = orderRepo;
     this.notificationRepo = notificationRepo;
@@ -333,16 +333,7 @@ public class OrderExecutionService {
     order.setRealizedPnl(netPnl);
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
-    TradingFees.charge(ta, order, close.closeCommission());
-
-    AccountTransaction closeFeeTx = new AccountTransaction();
-    closeFeeTx.setTradingAccount(ta);
-    closeFeeTx.setTxType("COMMISSION");
-    closeFeeTx.setAmount(close.closeCommission());
-    closeFeeTx.setCurrency(ta.getCurrency());
-    closeFeeTx.setStatus("APPROVED");
-    closeFeeTx.setProcessedAt(Instant.now());
-    txRepo.save(closeFeeTx);
+    commissionLedger.record(ta, order, close.closeCommission());
 
     marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
     positionRepo.delete(pos);

@@ -53,7 +53,7 @@ class MarginLoanServiceLiquidationTest {
     auditLogService = mock(AuditLogService.class);
     AccountTransactionRepository txRepo = mock(AccountTransactionRepository.class);
     service = new MarginLoanService(accountRepo, positionRepo, orderRepo, ledgerRepo,
-        notificationRepo, txRepo, priceService, auditLogService);
+        notificationRepo, new CommissionLedger(txRepo), priceService, auditLogService);
 
     livePositions = new ArrayList<>(initialPositions);
     livePrices = new HashMap<>();

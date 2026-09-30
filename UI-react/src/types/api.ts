@@ -41,6 +41,7 @@ export interface BrokerOverview {
   creditLimit?: number | string;
   marginLevelPct?: number | string | null;
   interestAccruedTotal?: number | string;
+  interestOnOpenDebt?: number | string;
   commissionPaidTotal?: number | string;
   dailyInterestRate?: number | string;
 }

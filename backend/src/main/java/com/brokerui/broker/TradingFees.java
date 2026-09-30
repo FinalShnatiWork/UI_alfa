@@ -58,33 +58,36 @@ public final class TradingFees {
   }
 
   /**
-   * Calculates dynamic commission with a client profit safety guard:
-   * On winning trades, total commission is capped so it never exceeds 20% of gross profit.
-   * This guarantees the client keeps at least 80% of their trading profit.
+   * Tariff for one fill, then the profit guard. The markup may be cut on a winning
+   * trade; the venue fee for this quantity is kept.
    */
   public static BigDecimal calculateCommission(String symbolCode, BigDecimal quantity, BigDecimal fillPrice, BigDecimal grossPnl) {
     BigDecimal fee = calculateCommission(symbolCode, quantity, fillPrice);
-    if (grossPnl != null && grossPnl.compareTo(BigDecimal.ZERO) > 0) {
-      BigDecimal maxProfitFee = grossPnl.multiply(new BigDecimal("0.20")).setScale(2, java.math.RoundingMode.HALF_UP);
-      if (maxProfitFee.compareTo(new BigDecimal("0.05")) >= 0 && fee.compareTo(maxProfitFee) > 0) {
-        return maxProfitFee;
-      }
-    }
-    return fee;
+    return applyProfitSafetyGuard(BigDecimal.ZERO, fee, grossPnl, exchangeFee(symbolCode, quantity, fillPrice));
   }
 
   /**
-   * Client Profit Safety Guard for the close leg.
-   * On winning trades, total commission (open + close) is capped to max 20% of gross
-   * profit so the client keeps at least 80% of gains. The open-leg fee was already
-   * charged and cannot be refunded, so only {@code closeCommission} may be reduced.
-   *
-   * @return the close-leg commission to actually charge (never negative)
+   * On a winning close, open + close commission is capped at 20% of gross profit.
+   * The open fee was already taken and is not refunded, so only the close leg shrinks.
+   * Pass {@code venueFloor} 0 when there is no venue cost to protect.
    */
   public static BigDecimal applyProfitSafetyGuard(
       BigDecimal openCommission, BigDecimal closeCommission, BigDecimal grossPnl) {
+    return applyProfitSafetyGuard(openCommission, closeCommission, grossPnl, BigDecimal.ZERO);
+  }
+
+  /**
+   * Same cap, except the close leg is never cut below {@code venueFloor}.
+   * The floor is itself capped at the tariff, so the client is not charged more
+   * than the schedule. A losing close is not reduced.
+   */
+  public static BigDecimal applyProfitSafetyGuard(
+      BigDecimal openCommission, BigDecimal closeCommission, BigDecimal grossPnl, BigDecimal venueFloor) {
     BigDecimal open = openCommission == null ? BigDecimal.ZERO : openCommission;
-    BigDecimal close = closeCommission == null ? BigDecimal.ZERO : closeCommission;
+    BigDecimal tariff = closeCommission == null ? BigDecimal.ZERO : closeCommission;
+    BigDecimal floor = venueFloor == null || venueFloor.signum() < 0 ? BigDecimal.ZERO : venueFloor;
+    if (floor.compareTo(tariff) > 0) floor = tariff;
+    BigDecimal close = tariff;
     if (grossPnl != null && grossPnl.compareTo(BigDecimal.ZERO) > 0) {
       BigDecimal maxFee = grossPnl.multiply(new BigDecimal("0.20")).setScale(2, java.math.RoundingMode.HALF_UP);
       if (maxFee.compareTo(new BigDecimal("0.05")) >= 0 && open.add(close).compareTo(maxFee) > 0) {
@@ -94,22 +97,8 @@ public final class TradingFees {
         }
       }
     }
+    if (close.compareTo(floor) < 0) close = floor;
     return close;
-  }
-
-  /**
-   * Records the commission on the given order and adds it to the account's lifetime total.
-   * Does not touch cash balance — callers are responsible for folding the commission into
-   * their own settlement math (margin required on open, or net proceeds on close).
-   *
-   * @param ta     the trading account being charged
-   * @param order  the order this commission applies to
-   * @param amount the commission amount
-   */
-  public static void charge(TradingAccount ta, BrokerOrder order, BigDecimal amount) {
-    order.setCommission(amount);
-    BigDecimal total = ta.getCommissionPaidTotal() == null ? BigDecimal.ZERO : ta.getCommissionPaidTotal();
-    ta.setCommissionPaidTotal(total.add(amount));
   }
 
   /**

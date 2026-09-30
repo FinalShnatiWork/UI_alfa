@@ -4,6 +4,8 @@ import { useAuth } from '@/hooks/useAuth';
 
 interface Props {
   children: ReactNode;
+  /** When set, a signed-in user with a different role is sent to the client dashboard. */
+  role?: string;
 }
 
 /**
@@ -13,8 +15,8 @@ interface Props {
  * @param props children layout elements to guard
  * @returns Guarded children layout or spinner loader
  */
-export function ProtectedRoute({ children }: Props) {
-  const { status } = useAuth();
+export function ProtectedRoute({ children, role }: Props) {
+  const { status, user } = useAuth();
   const location = useLocation();
 
   if (status === 'loading') {
@@ -46,6 +48,10 @@ export function ProtectedRoute({ children }: Props) {
 
   if (status === 'unauthenticated') {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (role && user?.role !== role) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

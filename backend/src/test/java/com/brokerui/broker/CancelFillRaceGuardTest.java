@@ -65,11 +65,13 @@ class CancelFillRaceGuardTest {
     controller = new BrokerApiController(
         userRepo, accountRepo, symbolRepo, positionRepo, orderRepo, txRepo,
         notificationRepo, preferenceRepo, mt5Service, priceService,
-        auditLogService, nnPredictorClient, marginLoanService, ledgerRepo);
+        auditLogService, nnPredictorClient, marginLoanService, ledgerRepo,
+        new CommissionLedger(txRepo));
 
     executionService = new OrderExecutionService(
         accountRepo, positionRepo, orderRepo, notificationRepo, symbolRepo,
-        mt5Service, priceService, nnPredictorClient, marginLoanService, txRepo);
+        mt5Service, priceService, nnPredictorClient, marginLoanService,
+        new CommissionLedger(txRepo));
 
     user = new AppUser();
     user.setId(1L);

@@ -1,11 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getUserProfile } from '@/lib/userProfile';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { Skeleton } from '@/components/Skeleton';
-import { useBrokerOverview, useAuthMe } from '@/hooks/useApi';
+import { QK, useBrokerOverview, useAuthMe, useQueryClient } from '@/hooks/useApi';
 import { useLogout } from '@/hooks/useLogout';
+import { apiPostJson } from '@/lib/api';
 
 /**
  * Formatting utility to return a dash symbol if string is null or empty.
@@ -30,6 +31,10 @@ export function AccountPage() {
   const { t } = useI18n();
   const toast = useToast();
   const { logout, loggingOut } = useLogout();
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const { data: me, isLoading: meLoading } = useAuthMe();
   const { data: overview, isLoading: overviewLoading } = useBrokerOverview();
@@ -53,8 +58,27 @@ export function AccountPage() {
       ? t('account.uidFormat', { uid: String(profile.uid) })
       : t('account.uid');
 
-  const handleEdit = () => {
-    toast.show(t('alerts.comingSoon'), { variant: 'info' });
+  const startEdit = () => {
+    setName(me?.displayName || '');
+    setEditing(true);
+  };
+
+  const saveName = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.show(t('account.nameBlank'), { variant: 'error' });
+      return;
+    }
+    setSavingName(true);
+    const res = await apiPostJson('/api/auth/profile', { displayName: trimmed });
+    setSavingName(false);
+    if (!res.ok) {
+      toast.show(t('account.nameFailed'), { variant: 'error' });
+      return;
+    }
+    await qc.invalidateQueries({ queryKey: QK.me });
+    setEditing(false);
+    toast.show(t('account.nameSaved'), { variant: 'success' });
   };
 
   const handleLogout = () => {
@@ -92,6 +116,16 @@ export function AccountPage() {
           <p className="text-secondary text-sm mb-5">{t('account.clientName')}</p>
           {isLoading ? (
             <Skeleton width={160} height={24} style={{ margin: '8px auto' }} />
+          ) : editing ? (
+            <input
+              className="form-control"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={160}
+              autoFocus
+              aria-label={t('account.clientName')}
+              style={{ maxWidth: 320, margin: '8px auto' }}
+            />
           ) : (
             <h2 className="font-bold">{displayName}</h2>
           )}
@@ -139,14 +173,36 @@ export function AccountPage() {
         </div>
 
         <div className="flex-gap flex-col" style={{ width: '100%' }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ width: '100%', padding: 15, fontSize: '1.1rem' }}
-            onClick={handleEdit}
-          >
-            {t('account.edit')}
-          </button>
+          {editing ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={savingName}
+                style={{ width: '100%', padding: 15, fontSize: '1.1rem' }}
+                onClick={() => void saveName()}
+              >
+                {savingName ? '...' : t('account.saveName')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-dark"
+                style={{ width: '100%', padding: 15, fontSize: '1.1rem' }}
+                onClick={() => setEditing(false)}
+              >
+                {t('account.cancel')}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: '100%', padding: 15, fontSize: '1.1rem' }}
+              onClick={startEdit}
+            >
+              {t('account.edit')}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-outline-dark"

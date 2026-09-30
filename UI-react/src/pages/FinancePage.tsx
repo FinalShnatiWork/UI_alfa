@@ -212,7 +212,7 @@ export function FinancePage() {
 
   const transactions = (Array.isArray(txData) ? txData : []).filter((r) => {
     const typ = (r.txType || '').toUpperCase();
-    return typ === 'DEPOSIT' || typ === 'WITHDRAWAL';
+    return typ === 'DEPOSIT' || typ === 'WITHDRAWAL' || typ === 'COMMISSION';
   }).slice(0, 50);
   const pendingSum = transactions
     .filter((r) => r.txType.toUpperCase() === 'WITHDRAWAL' && r.status.toUpperCase() === 'PENDING')
@@ -222,16 +222,21 @@ export function FinancePage() {
   async function handleConfirm(amount: number, method: string) {
     const isDeposit = modal === 'DEPOSIT';
     try {
-      await txMutation.mutateAsync({
+      const result = await txMutation.mutateAsync({
         txType: modal ?? 'DEPOSIT',
         amount,
         method,
         note: isDeposit ? 'Demo deposit' : 'Demo withdrawal request',
       });
-      toast.show(
-        isDeposit ? t('finance.toastDepositOk') : t('finance.toastWithdrawOk'),
-        { variant: isDeposit ? 'success' : 'info' },
-      );
+      const repaid = Number(result.debtRepaid ?? 0);
+      if (isDeposit && repaid > 0) {
+        toast.show(t('finance.toastDepositRepaid', { amount: repaid.toFixed(2) }), { variant: 'success' });
+      } else {
+        toast.show(
+          isDeposit ? t('finance.toastDepositOk') : t('finance.toastWithdrawOk'),
+          { variant: isDeposit ? 'success' : 'info' },
+        );
+      }
       setModal(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
@@ -304,6 +309,7 @@ export function FinancePage() {
 
         <div className="text-left" style={{ marginTop: 40 }}>
           <h3 className="mb-20 text-xl font-bold">{t('finance.ledger')}</h3>
+          <p className="text-sm text-secondary" style={{ marginTop: -8 }}>{t('finance.journalHint')}</p>
           <div className="table-scroll">
             <table className="table-compact">
               <thead>
@@ -326,16 +332,22 @@ export function FinancePage() {
                   </tr>
                 ) : (
                   transactions.map((r) => {
-                    const isDeposit = r.txType.toUpperCase() === 'DEPOSIT';
+                    const typ = r.txType.toUpperCase();
+                    const isDeposit = typ === 'DEPOSIT';
+                    const isCommission = typ === 'COMMISSION';
                     const amt = Number(r.amount ?? 0);
-                    const statusUpper = r.status.toUpperCase();
+                    const statusUpper = (r.status || '').toUpperCase();
                     const badgeClass =
                       statusUpper === 'APPROVED'
                         ? 'badge-success'
                         : statusUpper === 'PENDING'
                           ? 'badge-warning'
                           : 'badge-danger';
-                    const typeLabel = isDeposit ? t('finance.depositType') : t('finance.withdrawType');
+                    const typeLabel = isDeposit
+                      ? t('finance.depositType')
+                      : isCommission
+                        ? t('finance.commissionType')
+                        : t('finance.withdrawType');
 
                     return (
                       <tr key={r.id}>
@@ -346,7 +358,7 @@ export function FinancePage() {
                         <td className="font-bold">
                           {isDeposit ? '+' : '-'}{fmtMoney(amt, currency)}
                         </td>
-                        <td>{r.method ?? '—'}</td>
+                        <td>{r.method || (isCommission ? r.note : null) || '—'}</td>
                         <td>
                           <span
                             className={`badge ${badgeClass}`}

@@ -5,7 +5,9 @@ import com.brokerui.broker.BrokerOrderRepository;
 import com.brokerui.broker.Position;
 import com.brokerui.broker.PositionRepository;
 import com.brokerui.broker.TradingAccountRepository;
+import com.brokerui.broker.AccountTransaction;
 import com.brokerui.broker.AccountTransactionRepository;
+import com.brokerui.broker.TradingAccount;
 import com.brokerui.broker.KycCaseRepository;
 import com.brokerui.broker.NotificationRepository;
 import com.brokerui.broker.AuditLogRepository;
@@ -15,6 +17,8 @@ import com.brokerui.broker.MarginLoanLedgerRepository;
 import com.brokerui.broker.MarginLoanService;
 import org.springframework.context.ApplicationContext;
 import org.springframework.boot.SpringApplication;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -236,6 +240,61 @@ public class AdminTradeController {
     return transactionRepo.findAll().stream()
       .map(t -> new TransactionDto(t.getId(), t.getTradingAccount().getId(), t.getTxType(), t.getStatus(), t.getAmount(), t.getCurrency(), t.getMethod(), t.getCreatedAt()))
       .collect(Collectors.toList());
+  }
+
+  /**
+   * Pays or refuses a withdrawal that is still waiting. Cash leaves the account only
+   * on approval. A refusal leaves the balance as it is.
+   */
+  @PostMapping("/transactions/{id}/decide")
+  @Transactional
+  public ResponseEntity<?> decideTransaction(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    String decision = body == null || body.get("decision") == null
+        ? ""
+        : String.valueOf(body.get("decision")).trim().toUpperCase();
+    if (!"APPROVED".equals(decision) && !"REJECTED".equals(decision)) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_decision"));
+    }
+    AccountTransaction tx = transactionRepo.findById(id).orElse(null);
+    if (tx == null) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "not_found"));
+    }
+    if (!"WITHDRAWAL".equals(tx.getTxType()) || !"PENDING".equals(tx.getStatus())) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "not_pending"));
+    }
+    TradingAccount ta = accountRepo.findByIdForUpdate(tx.getTradingAccount().getId()).orElse(null);
+    if (ta == null) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "account_missing"));
+    }
+    if ("REJECTED".equals(decision)) {
+      tx.setStatus("REJECTED");
+      tx.setProcessedAt(Instant.now());
+      transactionRepo.save(tx);
+      return ResponseEntity.ok(Map.of("ok", true, "status", "REJECTED", "newBalance", ta.getBalance()));
+    }
+    if (ta.getBalance().compareTo(tx.getAmount()) < 0) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
+    }
+    BigDecimal levelAfter = marginLoanService.simulateMarginLevelAfterWithdrawal(ta, tx.getAmount());
+    if (levelAfter != null && levelAfter.compareTo(MarginLoanService.MARGIN_CALL_LEVEL) < 0) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "withdrawal_would_trigger_margin_call"));
+    }
+    ta.setBalance(ta.getBalance().subtract(tx.getAmount()));
+    ta.setEquity(storedEquity(ta));
+    ta.setFreeMargin(ta.getBalance());
+    accountRepo.save(ta);
+    tx.setStatus("APPROVED");
+    tx.setProcessedAt(Instant.now());
+    transactionRepo.save(tx);
+    return ResponseEntity.ok(Map.of("ok", true, "status", "APPROVED", "newBalance", ta.getBalance()));
+  }
+
+  /** Cash plus the last stored floating P/L. Live quotes are refreshed on the next trade. */
+  private BigDecimal storedEquity(TradingAccount ta) {
+    BigDecimal floating = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()).stream()
+        .map(p -> p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl())
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
+    return ta.getBalance().add(floating);
   }
 
   public record KycDto(Long id, Long userId, String status, Instant submittedAt, Instant reviewedAt, String note) {}

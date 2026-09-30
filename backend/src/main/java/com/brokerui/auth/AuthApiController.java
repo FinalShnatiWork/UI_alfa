@@ -89,4 +89,45 @@ public class AuthApiController {
     repo.save(u);
     return ResponseEntity.status(HttpStatus.CREATED).body(UserDto.from(u));
   }
+
+  /**
+   * Renames the signed-in user. Email stays as the login.
+   */
+  @PostMapping("/api/auth/profile")
+  @Transactional
+  public ResponseEntity<?> updateProfile(
+      @AuthenticationPrincipal User principal, @RequestBody Map<String, String> body) {
+    AppUser u = repo.findByEmailIgnoreCase(principal.getUsername()).orElseThrow();
+    String name = body == null || body.get("displayName") == null ? "" : body.get("displayName").trim();
+    if (name.isEmpty() || name.length() > 160) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_name"));
+    }
+    u.setDisplayName(name);
+    repo.save(u);
+    return ResponseEntity.ok(UserDto.from(u));
+  }
+
+  /**
+   * Replaces the password after the current one matches. The session stays signed in.
+   */
+  @PostMapping("/api/auth/password")
+  @Transactional
+  public ResponseEntity<?> changePassword(
+      @AuthenticationPrincipal User principal, @RequestBody Map<String, String> body) {
+    AppUser u = repo.findByEmailIgnoreCase(principal.getUsername()).orElseThrow();
+    String current = body == null ? null : body.get("currentPassword");
+    String next = body == null ? null : body.get("newPassword");
+    if (current == null || current.isEmpty() || next == null) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "missing_fields"));
+    }
+    if (next.length() < 8 || next.length() > 72) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "password_too_short"));
+    }
+    if (!encoder.matches(current, u.getPasswordHash())) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "wrong_password"));
+    }
+    u.setPasswordHash(encoder.encode(next));
+    repo.save(u);
+    return ResponseEntity.ok(Map.of("ok", true));
+  }
 }

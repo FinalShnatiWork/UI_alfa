@@ -314,11 +314,12 @@ export function useTransactionMutation() {
         const msg = (data as { error?: string }).error ?? `HTTP ${res.status}`;
         throw new Error(msg);
       }
-      return (await res.json()) as { ok: boolean; newBalance?: number };
+      return (await res.json()) as { ok: boolean; newBalance?: number; debtRepaid?: number; newDebt?: number };
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QK.overview });
       void queryClient.invalidateQueries({ queryKey: QK.transactions });
+      void queryClient.invalidateQueries({ queryKey: QK.creditLedger });
     },
   });
 }

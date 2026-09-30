@@ -43,7 +43,7 @@ public class MarginLoanService {
   private final BrokerOrderRepository orderRepo;
   private final MarginLoanLedgerRepository ledgerRepo;
   private final NotificationRepository notificationRepo;
-  private final AccountTransactionRepository txRepo;
+  private final CommissionLedger commissionLedger;
   private final MarketPriceService priceService;
   private final AuditLogService auditLogService;
 
@@ -56,7 +56,7 @@ public class MarginLoanService {
       BrokerOrderRepository orderRepo,
       MarginLoanLedgerRepository ledgerRepo,
       NotificationRepository notificationRepo,
-      AccountTransactionRepository txRepo,
+      CommissionLedger commissionLedger,
       MarketPriceService priceService,
       AuditLogService auditLogService) {
     this.accountRepo = accountRepo;
@@ -64,7 +64,7 @@ public class MarginLoanService {
     this.orderRepo = orderRepo;
     this.ledgerRepo = ledgerRepo;
     this.notificationRepo = notificationRepo;
-    this.txRepo = txRepo;
+    this.commissionLedger = commissionLedger;
     this.priceService = priceService;
     this.auditLogService = auditLogService;
   }
@@ -114,6 +114,35 @@ public class MarginLoanService {
   }
 
   /**
+   * Interest charged on the debt that is open now. A closed episode drops back to zero.
+   * The lifetime total stays on the account and in the credit ledger.
+   */
+  public BigDecimal interestOnOpenDebt(TradingAccount ta) {
+    BigDecimal debt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
+    if (debt.signum() <= 0 || ta.getId() == null) return BigDecimal.ZERO;
+    List<MarginLoanLedger> oldestFirst = new ArrayList<>(
+        ledgerRepo.findByTradingAccountIdOrderByCreatedAtDesc(ta.getId()));
+    java.util.Collections.reverse(oldestFirst);
+    return interestSinceDebtOpened(oldestFirst);
+  }
+
+  /** Oldest entry first. Interest counts only after the debt last returned to zero. */
+  static BigDecimal interestSinceDebtOpened(List<MarginLoanLedger> oldestFirst) {
+    BigDecimal accrued = BigDecimal.ZERO;
+    if (oldestFirst == null) return accrued;
+    for (MarginLoanLedger entry : oldestFirst) {
+      if (entry == null) continue;
+      if ("INTEREST".equals(entry.getEntryType()) && entry.getAmount() != null) {
+        accrued = accrued.add(entry.getAmount());
+      }
+      if (entry.getBorrowedAfter() != null && entry.getBorrowedAfter().signum() == 0) {
+        accrued = BigDecimal.ZERO;
+      }
+    }
+    return accrued;
+  }
+
+  /**
    * Applies the proceeds of a settlement (position close, order cancel refund, etc.) to
    * the account. A positive amount first repays outstanding debt, with any remainder
    * credited to cash. A negative amount (a net loss) is deducted from cash first and,
@@ -124,6 +153,15 @@ public class MarginLoanService {
    * @param amount signed settlement amount (margin returned + realized P/L)
    */
   public void repaySettlementOrBorrow(TradingAccount ta, BigDecimal amount) {
+    repaySettlementOrBorrow(ta, amount, "Auto-repay from trade settlement");
+  }
+
+  /**
+   * Same as {@link #repaySettlementOrBorrow(TradingAccount, BigDecimal)}.
+   * {@code repayNote} is stored on the credit ledger when part of a positive amount
+   * pays the debt down.
+   */
+  public void repaySettlementOrBorrow(TradingAccount ta, BigDecimal amount, String repayNote) {
     if (amount == null || amount.compareTo(BigDecimal.ZERO) == 0) return;
 
     if (amount.compareTo(BigDecimal.ZERO) > 0) {
@@ -134,7 +172,10 @@ public class MarginLoanService {
         BigDecimal remainder = amount.subtract(repay);
         ta.setBalance(ta.getBalance().add(remainder));
         if (repay.compareTo(BigDecimal.ZERO) > 0) {
-          writeLedger(ta, "REPAY", repay, "Auto-repay from trade settlement");
+          String note = repayNote == null || repayNote.isBlank()
+              ? "Auto-repay from trade settlement"
+              : repayNote;
+          writeLedger(ta, "REPAY", repay, note);
         }
       } else {
         ta.setBalance(ta.getBalance().add(amount));
@@ -400,17 +441,8 @@ public class MarginLoanService {
       order.setOpenPrice(close.avgPrice());
       order.setOpenedAt(pos.getOpenedAt());
       order.setRealizedPnl(close.netPnl());
-      TradingFees.charge(ta, order, close.closeCommission());
+      commissionLedger.record(ta, order, close.closeCommission());
       orderRepo.save(order);
-
-      AccountTransaction closeFeeTx = new AccountTransaction();
-      closeFeeTx.setTradingAccount(ta);
-      closeFeeTx.setTxType("COMMISSION");
-      closeFeeTx.setAmount(close.closeCommission());
-      closeFeeTx.setCurrency(ta.getCurrency() == null ? "USD" : ta.getCurrency());
-      closeFeeTx.setStatus("APPROVED");
-      closeFeeTx.setProcessedAt(Instant.now());
-      txRepo.save(closeFeeTx);
 
       positionRepo.delete(pos);
       repaySettlementOrBorrow(ta, close.settlement());

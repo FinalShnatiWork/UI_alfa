@@ -1,9 +1,8 @@
 package com.brokerui.broker.netting;
 
-import com.brokerui.broker.AccountTransaction;
-import com.brokerui.broker.AccountTransactionRepository;
 import com.brokerui.broker.BrokerApiController;
 import com.brokerui.broker.BrokerOrder;
+import com.brokerui.broker.CommissionLedger;
 import com.brokerui.broker.ContractSpecs;
 import com.brokerui.broker.MarginLoanService;
 import com.brokerui.broker.Notification;
@@ -34,15 +33,15 @@ public class FillBooking {
   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FillBooking.class);
 
   private final MarginLoanService marginLoanService;
-  private final AccountTransactionRepository txRepo;
+  private final CommissionLedger commissionLedger;
   private final PositionRepository positionRepo;
   private final NotificationRepository notificationRepo;
   private final MarketPriceService priceService;
 
-  public FillBooking(MarginLoanService marginLoanService, AccountTransactionRepository txRepo,
+  public FillBooking(MarginLoanService marginLoanService, CommissionLedger commissionLedger,
       PositionRepository positionRepo, NotificationRepository notificationRepo, MarketPriceService priceService) {
     this.marginLoanService = marginLoanService;
-    this.txRepo = txRepo;
+    this.commissionLedger = commissionLedger;
     this.positionRepo = positionRepo;
     this.notificationRepo = notificationRepo;
     this.priceService = priceService;
@@ -119,18 +118,8 @@ public class FillBooking {
     }
     o.setReserveRemaining(outstandingReserve(o, ta).subtract(c.reservePortion()).max(BigDecimal.ZERO));
 
-    // 2. Commission (accumulates across partial fills; TradingFees.charge sets, so add back the previous).
-    BigDecimal previousCommission = o.getCommission() == null ? BigDecimal.ZERO : o.getCommission();
-    TradingFees.charge(ta, o, c.commission());
-    o.setCommission(previousCommission.add(c.commission()));
-    AccountTransaction feeTx = new AccountTransaction();
-    feeTx.setTradingAccount(ta);
-    feeTx.setTxType("COMMISSION");
-    feeTx.setAmount(c.commission());
-    feeTx.setCurrency(ta.getCurrency());
-    feeTx.setStatus("APPROVED");
-    feeTx.setProcessedAt(Instant.now());
-    txRepo.save(feeTx);
+    // 2. Commission: order, account counter, and COMMISSION posting are the same amount.
+    commissionLedger.record(ta, o, c.commission(), true);
 
     // 3. Position (hedging model: every fill is its own position).
     boolean isBuy = "BUY".equalsIgnoreCase(o.getSide());

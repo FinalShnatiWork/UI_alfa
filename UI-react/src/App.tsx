@@ -62,8 +62,8 @@ export function App() {
                   <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
                   <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
                   <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-                  <Route path="/admin" element={<AdminPage />} />
-                  <Route path="/admin/netting" element={<AdminPage />} />
+                  <Route path="/admin" element={<ProtectedRoute role="ADMIN"><AdminPage /></ProtectedRoute>} />
+                  <Route path="/admin/netting" element={<ProtectedRoute role="ADMIN"><AdminPage /></ProtectedRoute>} />
 
                   <Route path="*" element={<PlaceholderPage title="Not Found" />} />
                 </Routes>

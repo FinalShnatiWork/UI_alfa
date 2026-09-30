@@ -829,38 +829,77 @@ async function mockPost(path: string, body: any): Promise<Response> {
     return new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
+  if (path.includes('/api/auth/profile')) {
+    const name = String(body?.displayName || '').trim();
+    if (!name) {
+      return new Response(JSON.stringify({ ok: false, error: 'invalid_name' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    localStorage.setItem('mock_user_name', name);
+    return new Response(JSON.stringify({ ok: true, displayName: name }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/auth/password')) {
+    const next = String(body?.newPassword || '');
+    if (!body?.currentPassword || next.length < 8) {
+      return new Response(JSON.stringify({ ok: false, error: next.length < 8 ? 'password_too_short' : 'wrong_password' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
   if (path.includes('/api/broker/transactions')) {
     const txReq = body;
     const amount = parseFloat(txReq.amount || '0');
     const txType = txReq.txType || 'DEPOSIT';
     const method = txReq.method || 'MOCK';
-    
+
     const overview = getStorage('mock_overview', defaultOverview);
     const balance = parseOverviewValue(overview.balance);
-    
-    if (txType === 'WITHDRAW' && balance < amount) {
-      return new Response(JSON.stringify({ ok: false, error: 'יתרה לא מספקת' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-    }
-    
-    const newBalance = txType === 'DEPOSIT' ? (balance + amount) : (balance - amount);
-    overview.balance = newBalance;
-    setStorage('mock_overview', overview);
-    
     const transactions = getStorage<any[]>('mock_transactions', []);
-    const newTx = {
+
+    if (txType === 'WITHDRAWAL') {
+      const reserved = transactions
+        .filter((t) => String(t.txType).toUpperCase() === 'WITHDRAWAL' && String(t.status).toUpperCase() === 'PENDING')
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
+      if (balance - reserved < amount) {
+        return new Response(JSON.stringify({ ok: false, error: 'insufficient_funds' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      transactions.unshift({
+        id: Date.now(),
+        txType,
+        amount: amount.toString(),
+        method,
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+        note: txReq.note || 'Mock withdrawal request',
+      });
+      setStorage('mock_transactions', transactions);
+      return new Response(JSON.stringify({ ok: true, status: 'PENDING', newBalance: balance.toFixed(2) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    let debtRepaid = 0;
+    if (txType === 'DEPOSIT') {
+      const debt = Number(overview.borrowedBalance || 0);
+      if (debt > 0) {
+        debtRepaid = Math.min(debt, amount);
+        overview.borrowedBalance = debt - debtRepaid;
+      }
+    }
+    overview.balance = balance + (amount - debtRepaid);
+    setStorage('mock_overview', overview);
+
+    transactions.unshift({
       id: Date.now(),
       txType,
       amount: amount.toString(),
       method,
-      status: 'COMPLETED',
+      status: 'APPROVED',
       createdAt: new Date().toISOString(),
-      note: txReq.note || `Mock transaction ${txType.toLowerCase()}`
-    };
-    transactions.unshift(newTx);
+      note: txReq.note || `Mock transaction ${txType.toLowerCase()}`,
+    });
     setStorage('mock_transactions', transactions);
-    
-    return new Response(JSON.stringify({ ok: true, newBalance: newBalance.toFixed(2) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-}
+
+    return new Response(JSON.stringify({ ok: true, status: 'APPROVED', newBalance: Number(overview.balance).toFixed(2), debtRepaid, newDebt: Number(overview.borrowedBalance || 0) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
 
   return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

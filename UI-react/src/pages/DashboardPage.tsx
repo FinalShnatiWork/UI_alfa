@@ -135,10 +135,10 @@ export function DashboardPage() {
   const borrowedBalance = overview ? Number(overview.borrowedBalance ?? 0) : 0;
   const creditLimit = overview ? Number(overview.creditLimit ?? 10000) : 10000;
   const marginLevelPct = overview && overview.marginLevelPct != null ? Number(overview.marginLevelPct) : null;
-  const interestAccrued = overview ? Number(overview.interestAccruedTotal ?? 0) : 0;
+  const hasDebt = borrowedBalance > 0;
+  const interestAccrued = overview && hasDebt ? Number(overview.interestOnOpenDebt ?? 0) : 0;
   const dailyInterestRate = overview && overview.dailyInterestRate ? Number(overview.dailyInterestRate) : 0.005;
   const dailyInterestStr = `${(dailyInterestRate * 100).toFixed(1)}% / day`;
-  const hasDebt = borrowedBalance > 0;
 
   const isMarginCall = marginLevelPct != null && marginLevelPct < 110;
   const isLiquidationRisk = marginLevelPct != null && marginLevelPct < 100;

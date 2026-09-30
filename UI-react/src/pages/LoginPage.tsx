@@ -26,7 +26,7 @@ export function LoginPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const { refresh, status } = useAuth();
+  const { refresh, status, user } = useAuth();
 
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/dashboard';
 
@@ -43,10 +43,10 @@ export function LoginPage() {
   }, [t]);
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      navigate(from, { replace: true });
-    }
-  }, [status, navigate, from]);
+    if (status !== 'authenticated') return;
+    const dest = user?.role === 'ADMIN' ? '/admin' : from.startsWith('/admin') ? '/dashboard' : from;
+    navigate(dest, { replace: true });
+  }, [status, user, navigate, from]);
 
   const onSubmit = async (data: FormData) => {
     const trimmedEmail = data.email.trim().toLowerCase();
@@ -59,7 +59,6 @@ export function LoginPage() {
       if (res.ok) {
         toast.show(t('alerts.authLoginOk'), { variant: 'success', duration: 1400 });
         await refresh();
-        setTimeout(() => navigate(from, { replace: true }), 600);
         return;
       }
 

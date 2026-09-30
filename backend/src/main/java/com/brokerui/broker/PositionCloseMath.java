@@ -53,7 +53,8 @@ public final class PositionCloseMath {
         : closePrice.subtract(avg).multiply(qty).multiply(contractSize);
     BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
     BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, closePrice);
-    closeCommission = TradingFees.applyProfitSafetyGuard(openCommission, closeCommission, grossPnl);
+    BigDecimal venueFloor = TradingFees.exchangeFee(pos.getSymbolCode(), qty, closePrice);
+    closeCommission = TradingFees.applyProfitSafetyGuard(openCommission, closeCommission, grossPnl, venueFloor);
     BigDecimal totalFees = openCommission.add(closeCommission);
     BigDecimal netPnl = grossPnl.subtract(totalFees);
     return new Snapshot(

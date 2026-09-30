@@ -37,6 +37,7 @@ public class BrokerApiController {
   private final NNPredictorClient nnPredictorClient;
   private final MarginLoanService marginLoanService;
   private final MarginLoanLedgerRepository ledgerRepo;
+  private final CommissionLedger commissionLedger;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -52,7 +53,8 @@ public class BrokerApiController {
       AuditLogService auditLogService,
       NNPredictorClient nnPredictorClient,
       MarginLoanService marginLoanService,
-      MarginLoanLedgerRepository ledgerRepo) {
+      MarginLoanLedgerRepository ledgerRepo,
+      CommissionLedger commissionLedger) {
     this.userRepo = userRepo;
     this.accountRepo = accountRepo;
     this.symbolRepo = symbolRepo;
@@ -67,6 +69,7 @@ public class BrokerApiController {
     this.nnPredictorClient = nnPredictorClient;
     this.marginLoanService = marginLoanService;
     this.ledgerRepo = ledgerRepo;
+    this.commissionLedger = commissionLedger;
   }
 
   private AppUser requireUser(Authentication auth) {
@@ -124,7 +127,7 @@ public class BrokerApiController {
     return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(),
         ta.getBalance(), liveEquity, marginUsed, freeMargin,
         ta.getBorrowedBalance(), ta.getCreditLimit(), marginLevelPct, ta.getInterestAccruedTotal(),
-        ta.getCommissionPaidTotal(), ta.getDailyInterestRate()));
+        ta.getCommissionPaidTotal(), ta.getDailyInterestRate(), marginLoanService.interestOnOpenDebt(ta)));
   }
 
   @Transactional(readOnly = true)@GetMapping("/symbols")
@@ -182,15 +185,15 @@ public class BrokerApiController {
     if (amount.compareTo(BigDecimal.ZERO) <= 0) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "amount_must_be_positive"));
     }
+    BigDecimal reserved = BigDecimal.ZERO;
     if ("WITHDRAWAL".equals(type)) {
-      // Balance already excludes margin prepaid into open positions / pending reserves,
-      // so the whole cash balance is withdrawable — do NOT subtract marginUsed again.
-      if (ta.getBalance().compareTo(amount) < 0) {
+      // Cash stays on the account until an admin approves. Pending requests already
+      // reserve their amount, so a second request cannot spend the same cash twice.
+      reserved = pendingWithdrawals(ta.getId());
+      if (ta.getBalance().subtract(reserved).compareTo(amount) < 0) {
         return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "insufficient_funds"));
       }
-      // If there's an outstanding credit-line debt, withdrawing cannot be allowed to push
-      // the account straight into margin call — the collateral backing the loan must stay intact.
-      BigDecimal levelAfter = marginLoanService.simulateMarginLevelAfterWithdrawal(ta, amount);
+      BigDecimal levelAfter = marginLoanService.simulateMarginLevelAfterWithdrawal(ta, reserved.add(amount));
       if (levelAfter != null && levelAfter.compareTo(MarginLoanService.MARGIN_CALL_LEVEL) < 0) {
         return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "withdrawal_would_trigger_margin_call",
             "marginLevelAfterPct", levelAfter.multiply(BigDecimal.valueOf(100))));
@@ -202,8 +205,9 @@ public class BrokerApiController {
     tx.setTxType(type);
     tx.setAmount(amount);
     tx.setCurrency(ta.getCurrency());
-    tx.setStatus("APPROVED");
-    tx.setProcessedAt(Instant.now());
+    boolean withdrawalRequest = "WITHDRAWAL".equals(type);
+    tx.setStatus(withdrawalRequest ? "PENDING" : "APPROVED");
+    if (!withdrawalRequest) tx.setProcessedAt(Instant.now());
     Object rawMethod = body.get("method");
     if (rawMethod != null) {
       String method = String.valueOf(rawMethod).trim();
@@ -218,10 +222,19 @@ public class BrokerApiController {
     }
     txRepo.save(tx);
 
-    if ("DEPOSIT".equals(type))
-      ta.setBalance(ta.getBalance().add(amount));
-    else
-      ta.setBalance(ta.getBalance().subtract(amount));
+    BigDecimal debtRepaid = BigDecimal.ZERO;
+    if ("DEPOSIT".equals(type)) {
+      BigDecimal debtBefore = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
+      marginLoanService.repaySettlementOrBorrow(ta, amount, "Repaid from deposit");
+      BigDecimal debtAfter = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
+      debtRepaid = debtBefore.subtract(debtAfter).max(BigDecimal.ZERO);
+      if (debtRepaid.signum() > 0) {
+        String applied = debtRepaid.setScale(2, RoundingMode.HALF_UP).toPlainString();
+        String existing = tx.getNote() == null ? "" : tx.getNote();
+        tx.setNote((existing.isBlank() ? "" : existing + ". ") + applied + " applied to the credit line");
+        txRepo.save(tx);
+      }
+    }
     // Equity is balance + floating P/L everywhere else; writing bare cash here made the
     // stored column disagree with the account's real value until the next trade.
     ta.setEquity(recalcEquity(ta));
@@ -229,7 +242,20 @@ public class BrokerApiController {
 
     auditLogService.log(u, type, type + " " + amount + " " + ta.getCurrency(), request);
 
-    return ResponseEntity.ok(Map.of("ok", true, "newBalance", ta.getBalance()));
+    return ResponseEntity.ok(Map.of(
+        "ok", true,
+        "status", tx.getStatus(),
+        "newBalance", ta.getBalance(),
+        "debtRepaid", debtRepaid,
+        "newDebt", ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance()));
+  }
+
+  /** Sum of withdrawal requests that have not been paid or refused yet. */
+  private BigDecimal pendingWithdrawals(Long accountId) {
+    return txRepo.findByTradingAccountIdOrderByCreatedAtDesc(accountId).stream()
+        .filter(t -> "WITHDRAWAL".equals(t.getTxType()) && "PENDING".equals(t.getStatus()))
+        .map(AccountTransaction::getAmount)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -577,16 +603,7 @@ public class BrokerApiController {
     BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, netPnl);
     order.setOpenPrice(pos.getAvgPrice());
     order.setOpenedAt(pos.getOpenedAt());
-    TradingFees.charge(ta, order, closeCommission);
-
-    AccountTransaction closeFeeTx = new AccountTransaction();
-    closeFeeTx.setTradingAccount(ta);
-    closeFeeTx.setTxType("COMMISSION");
-    closeFeeTx.setAmount(closeCommission);
-    closeFeeTx.setCurrency(ta.getCurrency());
-    closeFeeTx.setStatus("APPROVED");
-    closeFeeTx.setProcessedAt(Instant.now());
-    txRepo.save(closeFeeTx);
+    commissionLedger.record(ta, order, closeCommission);
 
     marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
 
