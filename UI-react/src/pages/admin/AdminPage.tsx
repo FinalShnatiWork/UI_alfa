@@ -1,5 +1,6 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useI18n } from '@/hooks/useI18n';
 import { adminGet, adminPost, healthOk } from '@/lib/adminApi';
 import { isoDate, money, num, relTime, signedMoney } from './format';
 import { AdminNettingTab } from './AdminNettingTab';
@@ -23,7 +24,12 @@ const TABS: { id: Tab; label: string }[] = [
  * Localhost admin hub. Same APIs as the old HTML file; same tables; lives in the React app.
  */
 export function AdminPage() {
+  const { t } = useI18n();
   const location = useLocation();
+
+  useEffect(() => {
+    document.title = t('titles.broker');
+  }, [t]);
   const [tab, setTab] = useState<Tab>(location.pathname.includes('netting') ? 'netting' : 'overview');
   const [online, setOnline] = useState(false);
   const [loading, setLoading] = useState(true);
