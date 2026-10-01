@@ -73,6 +73,7 @@ public class SecurityConfig {
     configuration.setAllowedOriginPatterns(List.of("*"));
     configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
     configuration.setAllowedHeaders(List.of("*"));
+    configuration.setExposedHeaders(Arrays.asList("X-Session-Id", "X-Auth-Token", "Set-Cookie"));
     configuration.setAllowCredentials(true);
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration("/**", configuration);
@@ -100,11 +101,14 @@ public class SecurityConfig {
    *
    * @param http HttpSecurity configuration builder
    * @param daoAuthenticationProvider configured database user auth provider
+   * @param headerSessionFilter filter that binds requests with X-Session-Id to tab-isolated HttpSessions
    * @return the final constructed SecurityFilterChain bean
    * @throws Exception if security building fails
    */
   @Bean
-  public SecurityFilterChain filterChain(HttpSecurity http, DaoAuthenticationProvider daoAuthenticationProvider)
+  public SecurityFilterChain filterChain(HttpSecurity http,
+                                         DaoAuthenticationProvider daoAuthenticationProvider,
+                                         HeaderSessionFilter headerSessionFilter)
       throws Exception {
     CookieCsrfTokenRepository csrfRepo = CookieCsrfTokenRepository.withHttpOnlyFalse();
     csrfRepo.setCookiePath("/");
@@ -117,9 +121,15 @@ public class SecurityConfig {
           String email = authentication.getName();
           appUserRepository.findByEmailIgnoreCase(email).ifPresent(user ->
               auditLogService.log(user, "LOGIN_SUCCESS", "email=" + email, request));
+          jakarta.servlet.http.HttpSession session = request.getSession(false);
+          String sid = session != null ? session.getId() : "";
+          if (session != null) {
+            SessionRegistryService.register(session);
+          }
           response.setStatus(200);
           response.setContentType("application/json;charset=UTF-8");
-          response.getWriter().write("{\"ok\":true}");
+          response.setHeader("X-Session-Id", sid);
+          response.getWriter().write("{\"ok\":true,\"sessionId\":\"" + sid + "\"}");
         };
     AuthenticationFailureHandler denyJson =
         (request, response, exception) -> {
@@ -136,6 +146,8 @@ public class SecurityConfig {
           }
         };
 
+    http.addFilterBefore(headerSessionFilter, org.springframework.security.web.context.SecurityContextHolderFilter.class);
+
     http.authenticationProvider(daoAuthenticationProvider)
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .csrf(
@@ -144,7 +156,8 @@ public class SecurityConfig {
                     .csrfTokenRequestHandler(csrfHandler)
                     .ignoringRequestMatchers(
                         new AntPathRequestMatcher("/api/auth/login", "POST"),
-                        new AntPathRequestMatcher("/api/admin/**")))
+                        new AntPathRequestMatcher("/api/admin/**"),
+                        request -> request.getHeader("X-Session-Id") != null || request.getHeader("X-Auth-Token") != null))
         .sessionManagement(
             sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
         .authorizeHttpRequests(
@@ -207,6 +220,10 @@ public class SecurityConfig {
                 logout.logoutUrl("/api/auth/logout")
                     .logoutSuccessHandler(
                         (request, response, authentication) -> {
+                          String sid = request.getHeader("X-Session-Id");
+                          if (sid != null) {
+                            SessionRegistryService.unregister(sid);
+                          }
                           response.setStatus(200);
                           response.setContentType("application/json;charset=UTF-8");
                           response.getWriter().write("{\"ok\":true}");

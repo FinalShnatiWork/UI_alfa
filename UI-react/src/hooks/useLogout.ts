@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiPostLogout } from '@/lib/api';
+import { apiPostLogout, setTabSessionId } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 
 /**
@@ -26,6 +26,7 @@ export function useLogout() {
     } catch {
       // ignore server errors — always clear local state
     } finally {
+      setTabSessionId(null);
       localStorage.removeItem('theme');
       localStorage.removeItem('broker-ui-lang');
       document.documentElement.setAttribute('data-theme', 'dark');

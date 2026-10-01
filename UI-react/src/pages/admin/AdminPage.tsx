@@ -1,6 +1,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
+import { useLogout } from '@/hooks/useLogout';
 import { adminGet, adminPost, healthOk } from '@/lib/adminApi';
 import { isoDate, money, num, relTime, signedMoney } from './format';
 import { AdminNettingTab } from './AdminNettingTab';
@@ -26,6 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
 export function AdminPage() {
   const { t } = useI18n();
   const location = useLocation();
+  const { logout, loggingOut } = useLogout();
 
   useEffect(() => {
     document.title = t('titles.broker');
@@ -103,7 +105,23 @@ export function AdminPage() {
             </button>
           ))}
         </nav>
-        <Link to="/landing" className="admin-back">← Trading app</Link>
+        <div className="admin-aside-footer">
+          <Link to="/landing" className="admin-back">← Trading app</Link>
+          <button
+            type="button"
+            className="admin-logout-btn"
+            onClick={() => void logout()}
+            disabled={loggingOut}
+            title="Log out of Admin session"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>{loggingOut ? 'Logging out…' : 'Log out'}</span>
+          </button>
+        </div>
       </aside>
 
       <div className="admin-main">
@@ -111,9 +129,23 @@ export function AdminPage() {
           <h1>{TABS.find((t) => t.id === tab)?.label}</h1>
           <div className="admin-status">
             <span className={`admin-dot${online ? ' on' : ''}`} />
-            {online ? 'Server online' : 'Server offline'}
+            <span>{online ? 'Server online' : 'Server offline'}</span>
             <button type="button" className="btn btn-outline btn-sm" onClick={() => void load()} disabled={loading}>
               {loading ? 'Loading…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm admin-header-logout"
+              onClick={() => void logout()}
+              disabled={loggingOut}
+              title="Sign out of Admin session"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <span>{loggingOut ? '...' : 'Log out'}</span>
             </button>
           </div>
         </header>

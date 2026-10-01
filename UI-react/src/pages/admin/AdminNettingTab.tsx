@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminGet, adminPost } from '@/lib/adminApi';
-import { money, num, signedMoney } from './format';
+import { num, signedMoney } from './format';
 import type { Invariants, NettingBook, NettingSummary } from './types';
 
 /**

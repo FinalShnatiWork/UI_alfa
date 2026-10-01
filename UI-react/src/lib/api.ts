@@ -8,6 +8,28 @@ export const IS_MOCK = localStorage.getItem('force_mock') === 'true' ||
 // Fired whenever the server returns 401. Components can listen and redirect.
 export const onUnauthorized: Array<() => void> = [];
 
+const TAB_SESSION_KEY = 'broker_tab_session_id';
+
+export function getTabSessionId(): string | null {
+  try {
+    return sessionStorage.getItem(TAB_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setTabSessionId(sessionId: string | null): void {
+  try {
+    if (sessionId) {
+      sessionStorage.setItem(TAB_SESSION_KEY, sessionId);
+    } else {
+      sessionStorage.removeItem(TAB_SESSION_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Extracts the XSRF token value from the cookies mapping.
  *
@@ -86,7 +108,8 @@ const defaultOverview = {
   balance: 100000.00,
   equity: 100000.00,
   marginUsed: 0.00,
-  freeMargin: 100000.00
+  freeMargin: 100000.00,
+  borrowedBalance: 0.00
 };
 
 const defaultNotifications = [
@@ -434,7 +457,7 @@ async function mockGet(path: string): Promise<any> {
 
   if (path.includes('/api/broker/overview')) {
     await processMockPendingOrders();
-    const overview = getStorage('mock_overview', defaultOverview);
+    const overview = getStorage<any>('mock_overview', defaultOverview);
     const positions = getStorage<any[]>('mock_positions', []);
     
     let unrealizedPnlTotal = 0;
@@ -605,7 +628,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
     const contractSize = getContractSize(symbolCode);
     const cost = (quantity * contractSize * price) / leverage;
     
-    const overview = getStorage('mock_overview', defaultOverview);
+    const overview = getStorage<any>('mock_overview', defaultOverview);
     const balance = parseOverviewValue(overview.balance);
     
     if (orderType === 'MARKET') {
@@ -753,7 +776,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
       const pnl = pos.side === 'SHORT' ? (avgPrice - livePrice) * qty * contractSize : (livePrice - avgPrice) * qty * contractSize;
       const marginReturned = (qty * contractSize * avgPrice) / leverage;
 
-      const overview = getStorage('mock_overview', defaultOverview);
+      const overview = getStorage<any>('mock_overview', defaultOverview);
       const balance = parseOverviewValue(overview.balance);
       overview.balance = balance + marginReturned + pnl;
       setStorage('mock_overview', overview);
@@ -808,7 +831,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
       const qty = parseFloat(order.quantity);
       const reserved = reservePrice * qty;
 
-      const overview = getStorage('mock_overview', defaultOverview);
+      const overview = getStorage<any>('mock_overview', defaultOverview);
       overview.balance = parseOverviewValue(overview.balance) + reserved;
       setStorage('mock_overview', overview);
 
@@ -852,7 +875,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
     const txType = txReq.txType || 'DEPOSIT';
     const method = txReq.method || 'MOCK';
 
-    const overview = getStorage('mock_overview', defaultOverview);
+    const overview = getStorage<any>('mock_overview', defaultOverview);
     const balance = parseOverviewValue(overview.balance);
     const transactions = getStorage<any[]>('mock_transactions', []);
 
@@ -920,11 +943,17 @@ export async function apiGet<T>(path: string): Promise<T | null> {
   if (IS_MOCK) {
     return mockGet(path) as Promise<T | null>;
   }
-  
+
+  const tabSid = getTabSessionId();
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (tabSid) {
+    headers['X-Session-Id'] = tabSid;
+  }
+
   const res = await fetch(path, {
     method: 'GET',
     credentials: 'include',
-    headers: { Accept: 'application/json' },
+    headers,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -933,6 +962,7 @@ export async function apiGet<T>(path: string): Promise<T | null> {
     }
     throw new ApiError(res.status, text, path);
   }
+
   if (res.status === 204) return null;
   const ct = res.headers.get('content-type') || '';
   if (!ct.includes('application/json')) return null;
@@ -952,16 +982,24 @@ async function postWithCsrfRetry(
   contentType: string,
   body: string,
 ): Promise<Response> {
+  const isLogin = path.endsWith('/api/auth/login');
   const doReq = async (): Promise<Response> => {
     const xsrf = await xsrfHeader();
+    const headers: Record<string, string> = {
+      'Content-Type': contentType,
+      Accept: 'application/json',
+      ...xsrf,
+    };
+    const tabSid = getTabSessionId();
+    if (tabSid && !isLogin) {
+      headers['X-Session-Id'] = tabSid;
+    }
+
+    // For login endpoint, omit credentials so browser's shared cookie does not steal or invalidate another tab's session
     return fetch(path, {
       method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': contentType,
-        Accept: 'application/json',
-        ...xsrf,
-      },
+      credentials: isLogin ? 'omit' : 'include',
+      headers,
       body,
     });
   };
@@ -971,6 +1009,14 @@ async function postWithCsrfRetry(
     await ensureCsrfCookie().catch(() => undefined);
     res = await doReq();
   }
+
+  if (isLogin && res.ok) {
+    const resSid = res.headers.get('X-Session-Id');
+    if (resSid) {
+      setTabSessionId(resSid);
+    }
+  }
+
   return res;
 }
 
@@ -1027,9 +1073,17 @@ export async function apiPostLogout(): Promise<Response> {
   }
 
   const xsrf = await xsrfHeader();
-  return fetch('/api/auth/logout', {
+  const headers: Record<string, string> = { Accept: 'application/json', ...xsrf };
+  const tabSid = getTabSessionId();
+  if (tabSid) {
+    headers['X-Session-Id'] = tabSid;
+  }
+
+  const res = await fetch('/api/auth/logout', {
     method: 'POST',
     credentials: 'include',
-    headers: { Accept: 'application/json', ...xsrf },
+    headers,
   });
+  setTabSessionId(null);
+  return res;
 }

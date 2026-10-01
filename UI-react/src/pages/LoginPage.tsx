@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { apiPostFormUrlEncoded } from '@/lib/api';
+import { apiPostFormUrlEncoded, setTabSessionId } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/hooks/useAuth';
@@ -57,6 +57,19 @@ export function LoginPage() {
     try {
       const res = await apiPostFormUrlEncoded('/api/auth/login', body);
       if (res.ok) {
+        let jsonRes: any = null;
+        try {
+          jsonRes = await res.json();
+        } catch {
+          /* ignore */
+        }
+        if (jsonRes?.sessionId) {
+          setTabSessionId(jsonRes.sessionId);
+        } else {
+          const headerSid = res.headers.get('X-Session-Id');
+          if (headerSid) setTabSessionId(headerSid);
+        }
+
         toast.show(t('alerts.authLoginOk'), { variant: 'success', duration: 1400 });
         await refresh();
         return;
