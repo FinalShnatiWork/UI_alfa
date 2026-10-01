@@ -115,6 +115,10 @@ public class BrokerOrder {
   @Column(name = "net_deadline")
   private Instant netDeadline;
 
+  /** Open position this order reduces. Null for a normal order that opens a new position. */
+  @Column(name = "closes_position_id")
+  private Long closesPositionId;
+
   /** NN advisor (shadow mode) agreed with what the engine actually did. */
   @Column(name = "nn_shadow_correct")
   private Boolean nnShadowCorrect;
@@ -307,6 +311,8 @@ public class BrokerOrder {
   public void setRouting(String routing) { this.routing = routing; }
   public Instant getNetDeadline() { return netDeadline; }
   public void setNetDeadline(Instant netDeadline) { this.netDeadline = netDeadline; }
+  public Long getClosesPositionId() { return closesPositionId; }
+  public void setClosesPositionId(Long closesPositionId) { this.closesPositionId = closesPositionId; }
   public Boolean getNnShadowCorrect() { return nnShadowCorrect; }
   public void setNnShadowCorrect(Boolean nnShadowCorrect) { this.nnShadowCorrect = nnShadowCorrect; }
 

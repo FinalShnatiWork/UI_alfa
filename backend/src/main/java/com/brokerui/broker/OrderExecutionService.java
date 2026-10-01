@@ -135,7 +135,7 @@ public class OrderExecutionService {
     String side = order.getSide() == null ? "" : order.getSide().trim().toUpperCase();
     String type = order.getOrderType() == null ? "" : order.getOrderType().trim().toUpperCase();
 
-    boolean shouldFill = (type.equals("MARKET")) ||
+    boolean shouldFill = (type.equals("MARKET") || type.equals("CLOSE")) ||
         switch (type) {
           case "LIMIT" -> shouldFillLimit(order, side, last);
           case "STOP" -> shouldFillStop(order, side, last);
@@ -303,6 +303,12 @@ public class OrderExecutionService {
 
   @Transactional
   public void closePositionDueToSlTp(Long posId, BigDecimal closePrice, String reason) {
+    // A stop or take-profit is a forced close. Offer it to the internal book for the
+    // same short window as a manual close, so another client can take it.
+    if (nettingService != null) {
+      nettingService.offerClose(posId);
+      return;
+    }
     // Locks are always taken account-first, then position — the same order used by
     // BrokerApiController.closePosition and MarginLoanService.liquidateAccount. Mixing the
     // order between these paths let two concurrent closes deadlock on each other.

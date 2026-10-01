@@ -1342,7 +1342,8 @@ html[data-theme="light"] .live-price-text {
 /* Admin hub (localhost) */
 .admin-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg);
 }
 .admin-aside {
@@ -1354,6 +1355,7 @@ html[data-theme="light"] .live-price-text {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow: auto;
 }
 .admin-brand { display: flex; gap: 10px; align-items: center; }
 .admin-brand-name { font-weight: 700; }
@@ -1435,7 +1437,7 @@ html[data-theme="light"] .live-price-text {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.admin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.admin-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .admin-header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 18px 24px; border-bottom: 1px solid var(--border);
@@ -1450,7 +1452,110 @@ html[data-theme="light"] .live-price-text {
 .admin-status { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary); }
 .admin-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
 .admin-dot.on { background: var(--green); }
-.admin-body { padding: 20px 24px 48px; overflow: auto; }
+.admin-body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 24px 16px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.admin-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.admin-stack.admin-fill > .card:last-child {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.admin-grid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.admin-fill .table-scroll,
+.admin-grid .table-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+.admin-body .table-scroll table {
+  min-width: 0;
+}
+.admin-table {
+  table-layout: auto;
+  width: 100%;
+  overflow: visible;
+}
+.admin-table th,
+.admin-table td {
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  vertical-align: middle;
+  white-space: nowrap;
+  /* 1px plus nowrap: the column stays as wide as its text, and does not swallow spare space. */
+  width: 1px;
+}
+.admin-table th.fill,
+.admin-table td.fill {
+  width: auto;
+}
+.admin-table .badge {
+  padding: 4px 8px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.admin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #101828;
+}
+.admin-table td.wrap,
+.admin-table th.wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.admin-table td.actions,
+.admin-table th.actions {
+  overflow: visible;
+  text-align: end;
+}
+.admin-table td.actions .admin-row-actions,
+.admin-table td.actions .admin-actions {
+  flex-wrap: nowrap;
+}
+.admin-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.admin-sort .arrow { opacity: 0.35; font-size: 0.72rem; }
+.admin-sort.on .arrow { opacity: 1; }
+.admin-pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+html[data-theme="light"] .admin-table thead th { background: #f1f5f9; }
 .admin-stack { display: flex; flex-direction: column; gap: 16px; }
 .admin-card { padding: 18px; }
 .admin-card:hover { transform: none; }
@@ -1633,8 +1738,10 @@ html[data-theme="light"] .live-price-text {
 @media (max-width: 900px) {
   .admin-book-grid, .admin-pl-layout, .admin-overview-split { grid-template-columns: 1fr; }
   .admin-stat-grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .admin-shell { flex-direction: column; }
+  .admin-shell { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
   .admin-aside { width: auto; }
+  .admin-fill .table-scroll,
+  .admin-grid .table-scroll { max-height: 70vh; }
 }
 .admin-row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .admin-badges { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }

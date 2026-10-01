@@ -1,5 +1,6 @@
 package com.brokerui.broker;
 
+import com.brokerui.broker.netting.NettingService;
 import com.brokerui.market.MarketPriceService;
 import com.brokerui.user.AppUser;
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,6 +50,10 @@ public class MarginLoanService {
 
   @Autowired @Lazy
   private MarginLoanService self;
+
+  /** Present in the running app. Unit tests construct the service directly and leave this empty. */
+  @Autowired(required = false) @Lazy
+  private NettingService nettingService;
 
   public MarginLoanService(
       TradingAccountRepository accountRepo,
@@ -369,18 +374,80 @@ public class MarginLoanService {
     }
   }
 
-  @Transactional
   public void checkLiquidations() {
     List<TradingAccount> debtors = accountRepo.findByBorrowedBalanceGreaterThan(BigDecimal.ZERO);
     for (TradingAccount ref : debtors) {
       BigDecimal level = computeMarginLevel(ref);
-      if (level != null && level.compareTo(LIQUIDATION_LEVEL) < 0) {
-        try {
+      if (level == null || level.compareTo(LIQUIDATION_LEVEL) >= 0) continue;
+      try {
+        if (nettingService == null) {
           self.liquidateAccount(ref.getId());
-        } catch (Exception e) {
-          log.error("[MarginLoan] Failed to liquidate account #{}: {}", ref.getId(), e.getMessage());
+          continue;
         }
+        // One position at a time. A close that is still waiting blocks the next one,
+        // so a recovery after the first fill is not overrun by closing everything.
+        while (true) {
+          Long posId = self.nextLiquidationPosition(ref.getId());
+          if (posId == null || posId < 0) break;
+          NettingService.Result result = nettingService.offerClose(posId);
+          if (result == null || !"FILLED".equals(result.status())) break;
+        }
+        self.finishLiquidation(ref.getId());
+      } catch (Exception e) {
+        log.error("[MarginLoan] Failed to liquidate account #{}: {}", ref.getId(), e.getMessage());
       }
+    }
+  }
+
+  /**
+   * The worst open position that should be force-closed now.
+   * Returns null when nothing should close, and -1 when a close is already waiting
+   * on the book (do not start another until that one finishes).
+   */
+  @Transactional
+  public Long nextLiquidationPosition(Long accountId) {
+    TradingAccount ta = accountRepo.findByIdForUpdate(accountId).orElse(null);
+    if (ta == null) return null;
+    if (ta.getBorrowedBalance() == null || ta.getBorrowedBalance().compareTo(BigDecimal.ZERO) <= 0) return null;
+    BigDecimal lockedLevel = computeMarginLevel(ta);
+    if (lockedLevel == null || lockedLevel.compareTo(LIQUIDATION_LEVEL) >= 0) return null;
+
+    List<Position> positions = new ArrayList<>(positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()));
+    positions.sort(Comparator.comparing(this::floatingPnl));
+    for (Position snapshot : positions) {
+      BigDecimal level = computeMarginLevel(ta);
+      if (level != null && level.compareTo(MARGIN_CALL_LEVEL) >= 0) return null;
+      if (snapshot.getId() == null) continue;
+      List<BrokerOrder> waiting = orderRepo.findByClosesPositionIdAndStatusIn(
+          snapshot.getId(), NettingService.OPEN_STATUSES);
+      if (!waiting.isEmpty()) return -1L;
+      double live;
+      try {
+        live = priceService.getLivePrice(snapshot.getSymbolCode());
+      } catch (Exception e) {
+        continue;
+      }
+      if (live <= 0) continue;
+      return snapshot.getId();
+    }
+    return null;
+  }
+
+  /** Writes off debt only after every position is actually gone. A waiting close is not gone. */
+  @Transactional
+  public void finishLiquidation(Long accountId) {
+    TradingAccount ta = accountRepo.findByIdForUpdate(accountId).orElse(null);
+    if (ta == null) return;
+    BigDecimal remainingDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
+    List<Position> stillOpen = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
+    boolean positionsRemain = stillOpen != null && !stillOpen.isEmpty();
+    if (remainingDebt.compareTo(BigDecimal.ZERO) > 0 && !positionsRemain) {
+      writeLedger(ta, "LIQUIDATION", remainingDebt,
+          "Liquidation complete — residual debt written off");
+      ta.setBorrowedBalance(BigDecimal.ZERO);
+      ta.setEquity(liveEquity(ta));
+      accountRepo.save(ta);
+      auditLogService.log(ta.getUser(), "LIQUIDATION", "residual debt written off after positions closed", null);
     }
   }
 

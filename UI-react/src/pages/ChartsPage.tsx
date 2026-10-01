@@ -285,6 +285,9 @@ export function ChartsPage() {
   const [liveChange, setLiveChange] = useState('—');
   const [liveChangePct, setLiveChangePct] = useState(0);
   const [status, setStatus] = useState('');
+  /** True only when the exchange did not answer and the candles were drawn here. */
+  const [feed, setFeed] = useState<'live' | 'candles'>('live');
+  const feedRef = useRef<'live' | 'candles'>('live');
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [volume, setVolume] = useState('1.00');
   const [entryPrice, setEntryPrice] = useState('');
@@ -414,7 +417,7 @@ export function ChartsPage() {
     });
 
     // 3. Draw Existing Pending Orders target price lines
-    const activePending = pendingOrders.filter(o => o.symbolCode.toUpperCase() === currentSym);
+    const activePending = pendingOrders.filter(o => o.symbolCode.toUpperCase() === currentSym && o.orderType !== 'CLOSE');
     activePending.forEach((o) => {
       const limitVal = o.limitPrice ? Number(o.limitPrice) : 0;
       const stopVal = o.stopPrice ? Number(o.stopPrice) : 0;
@@ -550,6 +553,10 @@ export function ChartsPage() {
     const instr = cfg.instruments.find(i => i.id === sym) ?? cfg.instruments[0];
     const source = instr.source ?? cfg.source;
     setStatus(t('charts.loading'));
+    const markFeed = (next: 'live' | 'candles') => {
+      feedRef.current = next;
+      setFeed(next);
+    };
     if (mountRef.current) { mountRef.current.style.opacity = '0.4'; mountRef.current.style.transition = 'opacity 0.15s'; }
     const fadeIn = () => { if (mountRef.current) mountRef.current.style.opacity = '1'; };
 
@@ -563,7 +570,8 @@ export function ChartsPage() {
         setChartData(data); chartRef.current?.timeScale().fitContent(); fadeIn();
         const last = data[data.length - 1];
         if (last) updateBidAsk(instr, last.close);
-        setStatus(restOk ? (t('charts.liveBybit') || 'Live (Bybit)') : t('charts.binanceSlow'));
+        markFeed(restOk ? 'live' : 'candles');
+        setStatus(restOk ? (t('charts.liveBybit') || 'Live (Bybit)') : t('charts.syntheticCandles'));
 
         const mappedSym = mapToBybitSymbol(sym);
         const ivMap: Record<Interval, string> = {
@@ -575,7 +583,7 @@ export function ChartsPage() {
         const ws = new WebSocket(BYBIT_WS);
         wsRef.current = ws;
         ws.onopen = () => {
-          if (gen === liveGenRef.current) {
+          if (gen === liveGenRef.current && feedRef.current === 'live') {
             setStatus(t('charts.liveBybit') || 'Live (Bybit)');
             ws.send(JSON.stringify({
               op: 'subscribe',
@@ -626,7 +634,8 @@ export function ChartsPage() {
         const lastYahoo = data[data.length - 1];
         if (realPrice) updateBidAsk(instr, realPrice);
         else if (lastYahoo) updateBidAsk(instr, lastYahoo.close);
-        setStatus(yahooOk ? t('charts.liveYahoo') : t('charts.demoData'));
+        markFeed(yahooOk ? 'live' : 'candles');
+        setStatus(yahooOk ? t('charts.liveYahoo') : t('charts.syntheticCandles'));
 
         let currentBar: Candle | null = lastYahoo ? { ...lastYahoo } : null;
         if (realPrice && currentBar) {
@@ -789,7 +798,10 @@ export function ChartsPage() {
       const res = await apiPostJson(`/api/broker/positions/${id}/close`, {});
       const data = await res.json() as ClosePositionResponse;
       if (res.ok && data.ok) {
-        toast.show(t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : ''), { variant: 'success' });
+        const msg = data.status === 'PENDING_NET'
+          ? t('alerts.closeWaiting', { symbol: sym })
+          : t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
+        toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {
         toast.show(t('alerts.closeFail'), { variant: 'error' });
@@ -858,6 +870,26 @@ export function ChartsPage() {
           <div className="charts-left-col">
             <div className="card chart-preview-area" style={{ position: 'relative' }}>
               {/* Zoom toolbar */}
+              {feed === 'candles' ? (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    left: 12,
+                    zIndex: 10,
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    background: 'rgba(234, 179, 8, 0.16)',
+                    border: '1px solid rgba(234, 179, 8, 0.5)',
+                    color: 'var(--accent, #eab308)',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    maxWidth: '70%',
+                  }}
+                >
+                  {t('charts.syntheticCandles')}
+                </div>
+              ) : null}
               <div style={{ position: 'absolute', top: 10, right: 12, zIndex: 10, display: 'flex', gap: 6, opacity: 0.75 }}>
                 {[
                   { id: 'zi', label: '+', action: () => { const ts = chartRef.current?.timeScale(); const r = ts?.getVisibleLogicalRange(); if (r) { const m = (r.from + r.to) / 2, h = (r.to - r.from) / 2 * 0.65; ts?.setVisibleLogicalRange({ from: m - h, to: m + h }); } } },
@@ -1102,7 +1134,7 @@ export function ChartsPage() {
                             </span>
                           </td>
                           <td className="num">{fmtP(o.quantity)}</td>
-                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{limitVal ? fmtP(limitVal) : '—'}</td>
+                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{o.orderType === 'CLOSE' || !limitVal ? '—' : fmtP(limitVal)}</td>
                           <td className="num" style={{ color: 'var(--text-secondary)' }}>{stopVal ? fmtP(stopVal) : '—'}</td>
                           <td className="center">
                             <button

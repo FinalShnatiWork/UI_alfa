@@ -31,3 +31,25 @@ export function isoDate(raw?: string): string {
   if (!raw) return '';
   return String(raw).replace('T', ' ').replace(/\.\d+Z?$/, '').slice(0, 19);
 }
+
+/** The clock on this machine: three hours ahead of the server, all year. */
+const LOCAL_ZONE = 'Europe/Moscow';
+
+/** Admin table clock in the local zone. Empty when the row has no timestamp. */
+export function when(raw?: string): string {
+  if (!raw) return '–';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return isoDate(raw) || '–';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: LOCAL_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(d);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`;
+}

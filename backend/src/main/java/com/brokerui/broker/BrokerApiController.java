@@ -569,88 +569,36 @@ public class BrokerApiController {
   // ───────────────────────────────────────────────────────────────────────────
 
   @PostMapping("/positions/{id}/close")
-  @Transactional
   public ResponseEntity<?> closePosition(Authentication auth,
       @PathVariable Long id, HttpServletRequest request) {
     AppUser u = requireUser(auth);
-    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId())
-        .orElseGet(() -> ensurePrimaryAccount(u));
-    Position pos = positionRepo.findByIdForUpdate(id).orElse(null);
-    if (pos == null || !pos.getTradingAccount().getId().equals(ta.getId())) {
+    Long owned = inTransaction(() -> {
+      TradingAccount ta = ensurePrimaryAccount(u);
+      Position pos = positionRepo.findById(id).orElse(null);
+      if (pos == null || pos.getTradingAccount() == null || !pos.getTradingAccount().getId().equals(ta.getId())) {
+        return null;
+      }
+      return pos.getId();
+    });
+    if (owned == null) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "position_not_found"));
     }
-
-    double price;
-    try {
-      price = priceService.getLivePrice(pos.getSymbolCode());
-      if (price <= 0) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
-      }
-    } catch (Exception e) {
-      return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+    if (nettingService == null) {
+      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("ok", false, "error", "netting_unavailable"));
     }
-
-    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, BigDecimal.valueOf(price));
-    BigDecimal bdPrice = close.closePrice();
-    BigDecimal qty = close.quantity();
-    boolean isShort = close.shortPosition();
-    String closeSide = close.closeSide();
-    BigDecimal grossPnl = close.grossPnl();
-    BigDecimal closeCommission = close.closeCommission();
-    BigDecimal totalFees = close.totalFees();
-    BigDecimal netPnl = close.netPnl();
-
-    BrokerOrder order = buildFilledOrder(ta, pos.getSymbolCode(), closeSide, qty, bdPrice, netPnl);
-    order.setOpenPrice(pos.getAvgPrice());
-    order.setOpenedAt(pos.getOpenedAt());
-    commissionLedger.record(ta, order, closeCommission);
-
-    marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
-
-    positionRepo.delete(pos);
-    ta.setEquity(recalcEquity(ta));
-    // Prepaid-margin model: remaining balance is free cash.
-    ta.setFreeMargin(ta.getBalance());
-    accountRepo.save(ta);
-
-    // Record permanent transaction in database memory
-    AccountTransaction tx = new AccountTransaction();
-    tx.setTradingAccount(ta);
-    tx.setTxType("TRADE_CLOSE");
-    tx.setStatus("COMPLETED");
-    tx.setAmount(netPnl);
-    tx.setMethod("SYSTEM");
-    tx.setNote("Closed position " + pos.getSymbolCode() + " " + pos.getSide() + " qty=" + qty + " Net PnL=" + netPnl + " (Gross: " + grossPnl + ", Fees: " + totalFees + ")");
-    txRepo.save(tx);
-
-    try {
-      Notification notif = new Notification();
-      notif.setUser(u);
-      notif.setNotifType("TRADE");
-      notif.setTitle("notification.tradeClosed.title");
-      notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}", 
-          pos.getSide(), qty.doubleValue(), pos.getSymbolCode(), bdPrice.doubleValue(), netPnl.doubleValue()));
-      notificationRepo.save(notif);
-    } catch (Exception e) {
-      log.warn("Failed to create notification: {}", e.getMessage());
+    com.brokerui.broker.netting.NettingService.Result r = nettingService.offerClose(owned);
+    if (r == null) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "position_not_found"));
     }
-
-    // Record order history
-    orderRepo.save(order);
-
     auditLogService.log(u, "POSITION_CLOSED",
-        (isShort ? "SHORT" : "LONG") + " " + pos.getSymbolCode() +
-            " qty=" + qty + " @ " + bdPrice + " pnl=" + netPnl,
-        request);
-
-    // Forward to MT5
-    try {
-      mt5Service.sendTrade(pos.getSymbolCode(), closeSide, price, 0, 0, qty.doubleValue());
-    } catch (Exception ex) {
-      log.error("MT5 Send Failed: {}", ex.getMessage());
-    }
-
-    return ResponseEntity.ok(Map.of("ok", true, "closePnl", netPnl, "commission", order.getCommission(), "newBalance", ta.getBalance()));
+        "offered close order " + r.orderId() + " status=" + r.status(), request);
+    Map<String, Object> body = new java.util.LinkedHashMap<>();
+    body.put("ok", true);
+    body.put("orderId", r.orderId());
+    body.put("status", r.status());
+    body.put("routing", r.routing() == null ? "" : r.routing());
+    if ("PENDING_NET".equals(r.status())) body.put("waiting", true);
+    return ResponseEntity.ok(body);
   }
 
   @Transactional(readOnly = true)@GetMapping("/notifications")

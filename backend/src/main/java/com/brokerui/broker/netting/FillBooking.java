@@ -1,5 +1,7 @@
 package com.brokerui.broker.netting;
 
+import com.brokerui.broker.AccountTransaction;
+import com.brokerui.broker.AccountTransactionRepository;
 import com.brokerui.broker.BrokerApiController;
 import com.brokerui.broker.BrokerOrder;
 import com.brokerui.broker.CommissionLedger;
@@ -8,6 +10,7 @@ import com.brokerui.broker.MarginLoanService;
 import com.brokerui.broker.Notification;
 import com.brokerui.broker.NotificationRepository;
 import com.brokerui.broker.Position;
+import com.brokerui.broker.PositionCloseMath;
 import com.brokerui.broker.PositionRepository;
 import com.brokerui.broker.TradingAccount;
 import com.brokerui.broker.TradingFees;
@@ -37,14 +40,17 @@ public class FillBooking {
   private final PositionRepository positionRepo;
   private final NotificationRepository notificationRepo;
   private final MarketPriceService priceService;
+  private final AccountTransactionRepository txRepo;
 
   public FillBooking(MarginLoanService marginLoanService, CommissionLedger commissionLedger,
-      PositionRepository positionRepo, NotificationRepository notificationRepo, MarketPriceService priceService) {
+      PositionRepository positionRepo, NotificationRepository notificationRepo, MarketPriceService priceService,
+      AccountTransactionRepository txRepo) {
     this.marginLoanService = marginLoanService;
     this.commissionLedger = commissionLedger;
     this.positionRepo = positionRepo;
     this.notificationRepo = notificationRepo;
     this.priceService = priceService;
+    this.txRepo = txRepo;
   }
 
   /** Price × qty × contract size / leverage — the margin formula used everywhere in the project. */
@@ -101,12 +107,25 @@ public class FillBooking {
   }
 
   /**
+   * A close must be allowed to finish: the loss has already happened, and the credit
+   * line absorbs what cash cannot. A new position still has to fit the credit limit.
+   */
+  public boolean canBook(BrokerOrder o, TradingAccount ta, BigDecimal qty, BigDecimal price, boolean internal) {
+    if (o.getClosesPositionId() != null) return true;
+    return affordable(ta, cost(o, ta, qty, price));
+  }
+
+  /**
    * Books one fill for one side. Caller holds the order and account locks and has already
    * checked {@link #affordable}.
    *
    * @param internal true for an internal cross, false for an external fill
    */
   public void book(BrokerOrder o, TradingAccount ta, BigDecimal qty, BigDecimal price, FillCost c, boolean internal) {
+    if (o.getClosesPositionId() != null) {
+      bookClose(o, ta, qty, price, internal);
+      return;
+    }
     // 1. Cash: return unused reserve, or borrow the extra (pre-checked, cannot fail here).
     BigDecimal settle = c.settlement();
     if (settle.signum() > 0) {
@@ -134,8 +153,94 @@ public class FillBooking {
     pos.setTakeProfit(o.getTakeProfit());
     pos.setStopLoss(o.getStopLoss());
     positionRepo.save(pos);
+    noteFill(o, ta, qty, price, internal);
 
-    // 4. Order bookkeeping.
+    // Notification for real clients (same payload as before netting).
+    if (!ta.isSimulated()) {
+      try {
+        Notification n = new Notification();
+        n.setUser(ta.getUser());
+        n.setNotifType("TRADE");
+        n.setTitle("notification.tradeOpened.title");
+        n.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\"}",
+            o.getSide(), qty.doubleValue(), o.getSymbolCode(), price.doubleValue()));
+        notificationRepo.save(n);
+      } catch (Exception e) {
+        log.warn("Failed to create notification: {}", e.getMessage());
+      }
+    }
+  }
+
+  /**
+   * Reduces the position this order is closing. Does not open a new one.
+   * An internal fill is valued at the mid. An external fill is valued at the price
+   * the caller already chose (bid or ask).
+   */
+  private void bookClose(BrokerOrder o, TradingAccount ta, BigDecimal qty, BigDecimal price, boolean internal) {
+    Position pos = o.getClosesPositionId() == null ? null
+        : positionRepo.findByIdForUpdate(o.getClosesPositionId()).orElse(null);
+    if (pos == null || pos.getQuantity() == null || pos.getQuantity().signum() <= 0) {
+      o.setStatus(NettingService.CANCELLED);
+      o.setNetDeadline(null);
+      return;
+    }
+    BigDecimal sliceQty = qty.min(pos.getQuantity());
+    Position slice = new Position();
+    slice.setSymbolCode(pos.getSymbolCode());
+    slice.setSide(pos.getSide());
+    slice.setQuantity(sliceQty);
+    slice.setAvgPrice(pos.getAvgPrice());
+    PositionCloseMath.Snapshot close = PositionCloseMath.atFillPrice(slice, ta, price, !internal);
+
+    marginLoanService.repaySettlementOrBorrow(ta, close.settlement(),
+        internal ? "Closed inside against another client" : "Closed on the outside market");
+    commissionLedger.record(ta, o, close.closeCommission(), true);
+
+    BigDecimal left = pos.getQuantity().subtract(sliceQty);
+    if (left.signum() <= 0) {
+      positionRepo.delete(pos);
+    } else {
+      pos.setQuantity(left);
+      positionRepo.save(pos);
+    }
+
+    BigDecimal pnlBefore = o.getRealizedPnl() == null ? BigDecimal.ZERO : o.getRealizedPnl();
+    o.setRealizedPnl(pnlBefore.add(close.netPnl()));
+    if (o.getOpenPrice() == null) o.setOpenPrice(pos.getAvgPrice());
+    noteFill(o, ta, sliceQty, price, internal);
+
+    AccountTransaction tx = new AccountTransaction();
+    tx.setTradingAccount(ta);
+    tx.setTxType("TRADE_CLOSE");
+    tx.setStatus("COMPLETED");
+    tx.setAmount(close.netPnl());
+    tx.setMethod("SYSTEM");
+    tx.setNote("Closed " + pos.getSymbolCode() + " " + pos.getSide()
+        + " qty=" + sliceQty + " net=" + close.netPnl()
+        + (internal ? " internal" : " external"));
+    tx.setCurrency(ta.getCurrency());
+    tx.setProcessedAt(Instant.now());
+    txRepo.save(tx);
+
+    if (!ta.isSimulated()) {
+      try {
+        Notification n = new Notification();
+        n.setUser(ta.getUser());
+        n.setNotifType("TRADE");
+        n.setTitle("notification.tradeClosed.title");
+        n.setBody(String.format(java.util.Locale.US,
+            "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",
+            pos.getSide(), sliceQty.doubleValue(), pos.getSymbolCode(), price.doubleValue(),
+            close.netPnl().doubleValue()));
+        notificationRepo.save(n);
+      } catch (Exception e) {
+        log.warn("Failed to create close notification: {}", e.getMessage());
+      }
+    }
+  }
+
+  /** Quantity, price and routing fields shared by an opening fill and a closing fill. */
+  private void noteFill(BrokerOrder o, TradingAccount ta, BigDecimal qty, BigDecimal price, boolean internal) {
     BigDecimal filledBefore = o.getFilledQty() == null ? BigDecimal.ZERO : o.getFilledQty();
     BigDecimal filledAfter = filledBefore.add(qty);
     BigDecimal prevEntry = o.getEntryPrice();
@@ -153,25 +258,8 @@ public class FillBooking {
     o.setRouting(routingOf(o));
     o.setFilledAt(Instant.now());
     if (o.getRealizedPnl() == null) o.setRealizedPnl(BigDecimal.ZERO);
-
-    // 5. Account snapshot fields (same as the rest of the codebase: equity = balance + floating P/L).
     ta.setEquity(liveEquity(ta));
     ta.setFreeMargin(ta.getBalance());
-
-    // 6. Notification for real clients (same payload as before netting).
-    if (!ta.isSimulated()) {
-      try {
-        Notification n = new Notification();
-        n.setUser(ta.getUser());
-        n.setNotifType("TRADE");
-        n.setTitle("notification.tradeOpened.title");
-        n.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\"}",
-            o.getSide(), qty.doubleValue(), o.getSymbolCode(), price.doubleValue()));
-        notificationRepo.save(n);
-      } catch (Exception e) {
-        log.warn("Failed to create notification: {}", e.getMessage());
-      }
-    }
   }
 
   /** Returns the whole outstanding reserve (cancel / reject of the unfilled part). */

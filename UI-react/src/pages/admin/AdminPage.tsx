@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { useLogout } from '@/hooks/useLogout';
 import { adminGet, adminPost, healthOk } from '@/lib/adminApi';
-import { isoDate, money, num, relTime, signedMoney } from './format';
+import { AdminDataTable, type AdminColumn } from './AdminDataTable';
+import { money, num, signedMoney, when } from './format';
 import { AdminNettingTab } from './AdminNettingTab';
 import type { AdminAccount, AdminAudit, AdminLoan, AdminTrade, AdminTx, AdminUser, NettingSummary, VenueHolding } from './types';
 
@@ -439,50 +440,56 @@ function UsersTab({ users, accounts, onChanged }: { users: AdminUser[]; accounts
   });
 
   return (
-    <div className="card admin-card">
+    <div className="card admin-card admin-fill">
       <div className="admin-toolbar">
         <h3>Users <span className="text-muted">{filtered.length} / {users.length}</span></h3>
         <input className="admin-input" placeholder="Search name or email" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Balance</th><th>Status</th><th></th></tr>
-          </thead>
-          <tbody>
-            {filtered.map((u, i) => (
-              <tr key={u.id}>
-                <td className="text-muted">{i + 1}</td>
-                <td>{u.displayName}</td>
-                <td className="text-muted">{u.email}</td>
-                <td>
-                  <span className="admin-badges">
-                    <span className={`badge ${u.role === 'ADMIN' ? 'badge-warning' : 'badge-info'}`}>{u.role}</span>
-                    {u.simulated ? <span className="badge badge-warning">computer</span> : null}
-                  </span>
-                </td>
-                <td>{money(balMap[u.id])}</td>
-                <td><span className={`badge ${u.banned ? 'badge-danger' : 'badge-success'}`}>{u.banned ? 'Banned' : 'Active'}</span></td>
-                <td className="admin-row-actions">
-                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setEdit(u)}>Edit</button>
-                  {u.banned ? (
-                    <button type="button" className="btn btn-outline btn-sm" onClick={() => void adminPost(`/users/${u.id}/unban`).then(onChanged)}>Unban</button>
-                  ) : (
-                    <button type="button" className="btn btn-outline btn-sm" onClick={() => {
-                      const reason = window.prompt(`Ban reason for #${u.id} (optional):`);
-                      if (reason === null) return;
-                      void adminPost(`/users/${u.id}/ban`, { reason }).then(onChanged);
-                    }}>Ban</button>
-                  )}
-                  <button type="button" className="btn btn-outline btn-sm" style={{ color: 'var(--red)' }} onClick={() => {
-                    if (window.confirm(`Delete user #${u.id}?`)) void adminPost(`/users/${u.id}/delete`).then(onChanged);
-                  }}>Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AdminDataTable
+        rows={filtered}
+        rowKey={(u) => u.id}
+        initialSort="name"
+        initialDir="asc"
+        resetKey={q}
+        columns={[
+          { id: 'name', label: 'Name', firstDir: 'asc', fill: true, sort: (u) => u.displayName || '', render: (u) => u.displayName },
+          { id: 'email', label: 'Email', firstDir: 'asc', sort: (u) => u.email || '', render: (u) => <span className="text-muted">{u.email}</span> },
+          {
+            id: 'role', label: 'Role', firstDir: 'asc', sort: (u) => u.role || '',
+            render: (u) => (
+              <span className="admin-badges">
+                <span className={`badge ${u.role === 'ADMIN' ? 'badge-warning' : 'badge-info'}`}>{u.role}</span>
+                {u.simulated ? <span className="badge badge-warning">computer</span> : null}
+              </span>
+            ),
+          },
+          { id: 'balance', label: 'Balance', firstDir: 'desc', sort: (u) => balMap[u.id] || 0, render: (u) => money(balMap[u.id]) },
+          {
+            id: 'status', label: 'Status', firstDir: 'asc', sort: (u) => (u.banned ? 'Banned' : 'Active'),
+            render: (u) => <span className={`badge ${u.banned ? 'badge-danger' : 'badge-success'}`}>{u.banned ? 'Banned' : 'Active'}</span>,
+          },
+          {
+            id: 'actions', label: '', actions: true,
+            render: (u) => (
+              <span className="admin-row-actions">
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => setEdit(u)}>Edit</button>
+                {u.banned ? (
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => void adminPost(`/users/${u.id}/unban`).then(onChanged)}>Unban</button>
+                ) : (
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => {
+                    const reason = window.prompt(`Ban reason for #${u.id} (optional):`);
+                    if (reason === null) return;
+                    void adminPost(`/users/${u.id}/ban`, { reason }).then(onChanged);
+                  }}>Ban</button>
+                )}
+                <button type="button" className="btn btn-outline btn-sm" style={{ color: 'var(--red)' }} onClick={() => {
+                  if (window.confirm(`Delete user #${u.id}?`)) void adminPost(`/users/${u.id}/delete`).then(onChanged);
+                }}>Delete</button>
+              </span>
+            ),
+          },
+        ] satisfies AdminColumn<AdminUser>[]}
+      />
       {edit ? (
         <Modal title="Edit user" onClose={() => setEdit(null)}>
           <UserEditForm user={edit} onDone={() => { setEdit(null); onChanged(); }} />
@@ -512,19 +519,21 @@ function UserEditForm({ user, onDone }: { user: AdminUser; onDone: () => void })
 function TradesTab({ trades, usersById }: { trades: AdminTrade[]; usersById: Record<number, AdminUser> }) {
   const [kind, setKind] = useState<'all' | 'positions' | 'orders'>('all');
   const [routing, setRouting] = useState('');
+  const [showComputer, setShowComputer] = useState(false);
   let data = trades;
   if (kind === 'positions') data = data.filter((t) => t.type === 'POSITION');
   if (kind === 'orders') data = data.filter((t) => t.type !== 'POSITION');
   if (routing) data = data.filter((t) => t.executionRouting === routing);
-  const sorted = [...data].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  if (!showComputer) data = data.filter((t) => !usersById[t.accountId]?.simulated);
 
   return (
-    <div className="card admin-card">
+    <div className="card admin-card admin-fill">
       <div className="admin-toolbar">
         <div className="admin-pills">
           {(['all', 'positions', 'orders'] as const).map((k) => (
             <button key={k} type="button" className={`admin-pill${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>{k}</button>
           ))}
+          <button type="button" className={`admin-pill${showComputer ? ' on' : ''}`} onClick={() => setShowComputer((v) => !v)}>computer</button>
         </div>
         <select className="admin-input" value={routing} onChange={(e) => setRouting(e.target.value)}>
           <option value="">All routing</option>
@@ -537,37 +546,37 @@ function TradesTab({ trades, usersById }: { trades: AdminTrade[]; usersById: Rec
           <option value="NEW">New</option>
           <option value="CANCELLED">Cancelled</option>
         </select>
-        <span className="text-muted">{sorted.length} records</span>
+        <span className="text-muted">{data.length} records</span>
       </div>
       <p className="text-muted admin-help">
         A new fill writes this same amount on the order, on the account, and as a commission posting. Older rows are the archive and can differ.
       </p>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>#</th><th>User</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Type</th><th>Routing</th><th>On the order</th><th>Status</th><th>Date</th></tr>
-          </thead>
-          <tbody>
-            {sorted.map((t, i) => {
+      <AdminDataTable
+        rows={data}
+        rowKey={(t) => `${t.type}-${t.id}`}
+        initialSort="date"
+        resetKey={`${kind}|${routing}|${showComputer}`}
+        columns={[
+          {
+            id: 'user', label: 'User', firstDir: 'asc', fill: true, wrap: true, sort: (t) => usersById[t.accountId]?.email || '',
+            render: (t) => {
               const u = usersById[t.accountId];
-              return (
-                <tr key={`${t.type}-${t.id}-${i}`}>
-                  <td className="text-muted">{i + 1}</td>
-                  <td>{u ? <>{u.displayName}<div className="text-muted">{u.email}</div></> : `#${t.accountId}`}</td>
-                  <td>{t.symbol}</td>
-                  <td style={{ color: t.side === 'BUY' || t.side === 'OPEN' ? 'var(--green)' : 'var(--red)' }}>{t.side}</td>
-                  <td>{num(t.quantity).toFixed(4)}</td>
-                  <td><span className="badge badge-info">{t.type}</span></td>
-                  <td><span className="badge">{t.executionRouting || '–'}</span></td>
-                  <td>{num(t.commission) > 0 ? money(t.commission) : '–'}</td>
-                  <td><span className="badge badge-success">{t.status}</span></td>
-                  <td className="text-muted">{relTime(t.date)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              return u ? <>{u.displayName}<div className="text-muted">{u.email}</div></> : `#${t.accountId}`;
+            },
+          },
+          { id: 'symbol', label: 'Symbol', firstDir: 'asc', sort: (t) => t.symbol || '', render: (t) => t.symbol },
+          {
+            id: 'side', label: 'Side', firstDir: 'asc', sort: (t) => t.side || '',
+            render: (t) => <span style={{ color: t.side === 'BUY' || t.side === 'OPEN' ? 'var(--green)' : 'var(--red)' }}>{t.side}</span>,
+          },
+          { id: 'qty', label: 'Qty', firstDir: 'desc', sort: (t) => num(t.quantity), render: (t) => num(t.quantity).toFixed(4) },
+          { id: 'type', label: 'Type', firstDir: 'asc', sort: (t) => t.type || '', render: (t) => <span className="badge badge-info">{t.type}</span> },
+          { id: 'routing', label: 'Routing', firstDir: 'asc', sort: (t) => t.executionRouting || '', render: (t) => <span className="badge">{t.executionRouting || '–'}</span> },
+          { id: 'commission', label: 'On the order', firstDir: 'desc', sort: (t) => num(t.commission), render: (t) => (num(t.commission) > 0 ? money(t.commission) : '–') },
+          { id: 'status', label: 'Status', firstDir: 'asc', sort: (t) => t.status || '', render: (t) => <span className="badge badge-success">{t.status}</span> },
+          { id: 'date', label: 'Date', firstDir: 'desc', sort: (t) => t.date || '', render: (t) => <span className="text-muted">{when(t.date)}</span> },
+        ] satisfies AdminColumn<AdminTrade>[]}
+      />
     </div>
   );
 }
@@ -575,38 +584,41 @@ function TradesTab({ trades, usersById }: { trades: AdminTrade[]; usersById: Rec
 function AccountsTab({ accounts, usersById, onChanged }: { accounts: AdminAccount[]; usersById: Record<number, AdminUser>; onChanged: () => void }) {
   const [edit, setEdit] = useState<AdminAccount | null>(null);
   return (
-    <div className="card admin-card">
+    <div className="card admin-card admin-fill">
       <h3>Accounts</h3>
       <p className="text-muted admin-help">
         On the account is the lifetime counter. New charges match the order and the commission posting. Older rows are the archive and can differ.
       </p>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>#</th><th>User</th><th>Type</th><th>Balance</th><th>Equity</th><th>Free</th><th>Borrowed</th><th>Margin</th><th>On the account</th><th></th></tr>
-          </thead>
-          <tbody>
-            {accounts.map((a, i) => {
+      <AdminDataTable
+        rows={accounts}
+        rowKey={(a) => a.id}
+        initialSort="user"
+        initialDir="asc"
+        columns={[
+          {
+            id: 'user', label: 'User', firstDir: 'asc', fill: true, wrap: true, sort: (a) => usersById[a.userId]?.email || '',
+            render: (a) => {
               const u = usersById[a.userId];
-              const lvl = a.marginLevelPct == null ? null : num(a.marginLevelPct);
-              return (
-                <tr key={a.id}>
-                  <td className="text-muted">{i + 1}</td>
-                  <td>{u ? <>{u.displayName}{a.simulated ? <> <span className="badge badge-warning">computer</span></> : null}<div className="text-muted">{u.email}</div></> : `#${a.userId}`}</td>
-                  <td>{a.accountType} · x{a.leverage}</td>
-                  <td>{money(a.balance)}</td>
-                  <td>{money(a.equity)}</td>
-                  <td>{money(a.freeMargin)}</td>
-                  <td>{num(a.borrowedBalance) > 0 ? money(a.borrowedBalance) : '–'}</td>
-                  <td>{lvl == null ? '–' : `${lvl.toFixed(1)}%`}</td>
-                  <td>{money(a.commissionPaidTotal)}</td>
-                  <td><button type="button" className="btn btn-outline btn-sm" onClick={() => setEdit(a)}>Adjust</button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              return u ? <>{u.displayName}{a.simulated ? <> <span className="badge badge-warning">computer</span></> : null}<div className="text-muted">{u.email}</div></> : `#${a.userId}`;
+            },
+          },
+          { id: 'type', label: 'Type', firstDir: 'asc', sort: (a) => `${a.accountType || ''} ${a.leverage}`, render: (a) => `${a.accountType} · x${a.leverage}` },
+          { id: 'balance', label: 'Balance', firstDir: 'desc', sort: (a) => num(a.balance), render: (a) => money(a.balance) },
+          { id: 'equity', label: 'Equity', firstDir: 'desc', sort: (a) => num(a.equity), render: (a) => money(a.equity) },
+          { id: 'free', label: 'Free', firstDir: 'desc', sort: (a) => num(a.freeMargin), render: (a) => money(a.freeMargin) },
+          { id: 'borrowed', label: 'Borrowed', firstDir: 'desc', sort: (a) => num(a.borrowedBalance), render: (a) => (num(a.borrowedBalance) > 0 ? money(a.borrowedBalance) : '–') },
+          {
+            id: 'margin', label: 'Margin', firstDir: 'asc',
+            sort: (a) => (a.marginLevelPct == null ? -1 : num(a.marginLevelPct)),
+            render: (a) => (a.marginLevelPct == null ? '–' : `${num(a.marginLevelPct).toFixed(1)}%`),
+          },
+          { id: 'paid', label: 'On the account', firstDir: 'desc', sort: (a) => num(a.commissionPaidTotal), render: (a) => money(a.commissionPaidTotal) },
+          {
+            id: 'actions', label: '', actions: true,
+            render: (a) => <button type="button" className="btn btn-outline btn-sm" onClick={() => setEdit(a)}>Adjust</button>,
+          },
+        ] satisfies AdminColumn<AdminAccount>[]}
+      />
       {edit ? (
         <Modal title="Update balance" onClose={() => setEdit(null)}>
           <BalanceForm account={edit} onDone={() => { setEdit(null); onChanged(); }} />
@@ -641,7 +653,6 @@ function TxTab({ txs, accounts, usersById, onChanged }: { txs: AdminTx[]; accoun
   const wit = txs.filter((t) => t.txType === 'WITHDRAWAL' && approved(t)).reduce((s, t) => s + num(t.amount), 0);
   const comm = txs.filter((t) => t.txType === 'COMMISSION').reduce((s, t) => s + num(t.amount), 0);
   const pending = txs.filter((t) => t.txType === 'WITHDRAWAL' && (t.status || '').toUpperCase() === 'PENDING');
-  const sorted = [...txs].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
   async function decide(id: number, decision: 'APPROVED' | 'REJECTED') {
     setBusy(id);
@@ -666,7 +677,7 @@ function TxTab({ txs, accounts, usersById, onChanged }: { txs: AdminTx[]; accoun
   }
 
   return (
-    <div className="card admin-card">
+    <div className="card admin-card admin-fill">
       <div className="admin-stat-grid">
         <Kpi label="Deposits" value={money(dep)} />
         <Kpi label="Withdrawals" value={money(wit)} sub={pending.length ? `${pending.length} waiting` : undefined} />
@@ -677,40 +688,42 @@ function TxTab({ txs, accounts, usersById, onChanged }: { txs: AdminTx[]; accoun
         A withdrawal stays pending until you approve it. The cash leaves the account only then. Posted commissions are the cash that was actually taken. Older commission rows are the archive and can differ.
       </p>
       {decideError ? <p className="text-muted admin-help">{decideError}</p> : null}
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>#</th><th>User</th><th>Type</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th><th></th></tr>
-          </thead>
-          <tbody>
-            {sorted.map((tx, i) => {
-              const u = usersById[accUser[tx.accountId]];
+      <AdminDataTable
+        rows={txs}
+        rowKey={(tx) => tx.id}
+        initialSort="date"
+        columns={[
+          {
+            id: 'user', label: 'User', firstDir: 'asc', fill: true, sort: (tx) => usersById[accUser[tx.accountId]]?.email || '',
+            render: (tx) => usersById[accUser[tx.accountId]]?.email || `#${tx.accountId}`,
+          },
+          { id: 'type', label: 'Type', firstDir: 'asc', sort: (tx) => tx.txType || '', render: (tx) => tx.txType },
+          { id: 'amount', label: 'Amount', firstDir: 'desc', sort: (tx) => num(tx.amount), render: (tx) => money(tx.amount) },
+          { id: 'method', label: 'Method', firstDir: 'asc', sort: (tx) => tx.method || tx.currency || '', render: (tx) => <span className="text-muted">{tx.method || tx.currency || '–'}</span> },
+          {
+            id: 'status', label: 'Status', firstDir: 'asc', sort: (tx) => tx.status || '',
+            render: (tx) => {
               const status = (tx.status || '').toUpperCase();
               const badge = status === 'PENDING' ? 'badge-warning' : status === 'REJECTED' ? 'badge-danger' : 'badge-success';
+              return <span className={`badge ${badge}`}>{tx.status}</span>;
+            },
+          },
+          { id: 'date', label: 'Date', firstDir: 'desc', sort: (tx) => tx.createdAt || '', render: (tx) => <span className="text-muted">{when(tx.createdAt)}</span> },
+          {
+            id: 'actions', label: '', actions: true,
+            render: (tx) => {
+              const status = (tx.status || '').toUpperCase();
               const waiting = tx.txType === 'WITHDRAWAL' && status === 'PENDING';
-              return (
-                <tr key={tx.id}>
-                  <td className="text-muted">{sorted.length - i}</td>
-                  <td>{u ? u.email : `#${tx.accountId}`}</td>
-                  <td>{tx.txType}</td>
-                  <td>{money(tx.amount)}</td>
-                  <td className="text-muted">{tx.method || tx.currency || '–'}</td>
-                  <td><span className={`badge ${badge}`}>{tx.status}</span></td>
-                  <td className="text-muted">{isoDate(tx.createdAt)}</td>
-                  <td>
-                    {waiting ? (
-                      <span className="admin-actions">
-                        <button type="button" className="btn btn-primary btn-sm" disabled={busy === tx.id} onClick={() => void decide(tx.id, 'APPROVED')}>Approve</button>
-                        <button type="button" className="btn btn-outline btn-sm" disabled={busy === tx.id} onClick={() => void decide(tx.id, 'REJECTED')}>Reject</button>
-                      </span>
-                    ) : null}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              return waiting ? (
+                <span className="admin-actions">
+                  <button type="button" className="btn btn-primary btn-sm" disabled={busy === tx.id} onClick={() => void decide(tx.id, 'APPROVED')}>Approve</button>
+                  <button type="button" className="btn btn-outline btn-sm" disabled={busy === tx.id} onClick={() => void decide(tx.id, 'REJECTED')}>Reject</button>
+                </span>
+              ) : null;
+            },
+          },
+        ] satisfies AdminColumn<AdminTx>[]}
+      />
     </div>
   );
 }
@@ -726,7 +739,7 @@ function CreditTab({ accounts, loans, usersById, onChanged }: {
   const credit = creditInterest(loans);
   const filtered = type ? loans.filter((e) => e.entryType === type) : loans;
   return (
-    <div className="admin-stack">
+    <div className="admin-stack admin-fill">
       <div className="admin-stat-grid">
         <Kpi label="In debt" value={`${inDebt.length} / ${accounts.length}`} />
         <Kpi label="Borrowed" value={money(inDebt.reduce((s, a) => s + num(a.borrowedBalance), 0))} />
@@ -752,29 +765,23 @@ function CreditTab({ accounts, loans, usersById, onChanged }: {
             <option value="LIQUIDATION">Liquidation</option>
           </select>
         </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr><th>#</th><th>User</th><th>Event</th><th>Amount</th><th>Debt after</th><th>Note</th><th>Time</th></tr>
-            </thead>
-            <tbody>
-              {filtered.map((e, i) => {
-                const u = e.userId ? usersById[e.userId] : undefined;
-                return (
-                  <tr key={e.id}>
-                    <td className="text-muted">{filtered.length - i}</td>
-                    <td>{u ? u.email : e.userId ? `#${e.userId}` : '–'}</td>
-                    <td><span className="badge">{e.entryType}</span></td>
-                    <td>{money(e.amount)}</td>
-                    <td>{money(e.borrowedAfter)}</td>
-                    <td className="text-muted">{e.note || '–'}</td>
-                    <td className="text-muted">{relTime(e.createdAt)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <AdminDataTable
+          rows={filtered}
+          rowKey={(e) => e.id}
+          initialSort="time"
+          resetKey={type}
+          columns={[
+            {
+              id: 'user', label: 'User', firstDir: 'asc', sort: (e) => (e.userId ? usersById[e.userId]?.email || '' : ''),
+              render: (e) => (e.userId ? usersById[e.userId]?.email || `#${e.userId}` : '–'),
+            },
+            { id: 'event', label: 'Event', firstDir: 'asc', sort: (e) => e.entryType || '', render: (e) => <span className="badge">{e.entryType}</span> },
+            { id: 'amount', label: 'Amount', firstDir: 'desc', sort: (e) => num(e.amount), render: (e) => money(e.amount) },
+            { id: 'debt', label: 'Debt after', firstDir: 'desc', sort: (e) => num(e.borrowedAfter), render: (e) => money(e.borrowedAfter) },
+            { id: 'note', label: 'Note', wrap: true, fill: true, firstDir: 'asc', sort: (e) => e.note || '', render: (e) => <span className="text-muted">{e.note || '–'}</span> },
+            { id: 'time', label: 'Time', firstDir: 'desc', sort: (e) => e.createdAt || '', render: (e) => <span className="text-muted">{when(e.createdAt)}</span> },
+          ] satisfies AdminColumn<AdminLoan>[]}
+        />
       </div>
     </div>
   );
@@ -793,7 +800,7 @@ function AuditTab({ audit, usersById }: { audit: AdminAudit[]; usersById: Record
     return true;
   });
   return (
-    <div className="card admin-card">
+    <div className="card admin-card admin-fill">
       <div className="admin-toolbar">
         <select className="admin-input" value={action} onChange={(e) => setAction(e.target.value)}>
           <option value="">All events</option>
@@ -809,28 +816,22 @@ function AuditTab({ audit, usersById }: { audit: AdminAudit[]; usersById: Record
         <input className="admin-input" placeholder="Filter user" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="text-muted">{filtered.length} / {audit.length}</span>
       </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>#</th><th>User</th><th>Action</th><th>Details</th><th>IP</th><th>Time</th></tr>
-          </thead>
-          <tbody>
-            {filtered.map((a, i) => {
-              const u = a.userId ? usersById[a.userId] : undefined;
-              return (
-                <tr key={a.id}>
-                  <td className="text-muted">{filtered.length - i}</td>
-                  <td>{u ? u.email : a.userId ? `#${a.userId}` : '–'}</td>
-                  <td><span className="badge badge-info">{a.action}</span></td>
-                  <td className="text-muted">{a.detail || '–'}</td>
-                  <td className="text-muted">{a.ip || '–'}</td>
-                  <td className="text-muted">{relTime(a.createdAt)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <AdminDataTable
+        rows={filtered}
+        rowKey={(a) => a.id}
+        initialSort="time"
+        resetKey={`${action}|${q}`}
+        columns={[
+          {
+            id: 'user', label: 'User', firstDir: 'asc', sort: (a) => (a.userId ? usersById[a.userId]?.email || '' : ''),
+            render: (a) => (a.userId ? usersById[a.userId]?.email || `#${a.userId}` : '–'),
+          },
+          { id: 'action', label: 'Action', firstDir: 'asc', sort: (a) => a.action || '', render: (a) => <span className="badge badge-info">{a.action}</span> },
+          { id: 'details', label: 'Details', wrap: true, fill: true, firstDir: 'asc', sort: (a) => a.detail || '', render: (a) => <span className="text-muted">{a.detail || '–'}</span> },
+          { id: 'ip', label: 'IP', firstDir: 'asc', sort: (a) => a.ip || '', render: (a) => <span className="text-muted">{a.ip || '–'}</span> },
+          { id: 'time', label: 'Time', firstDir: 'desc', sort: (a) => a.createdAt || '', render: (a) => <span className="text-muted">{when(a.createdAt)}</span> },
+        ] satisfies AdminColumn<AdminAudit>[]}
+      />
     </div>
   );
 }

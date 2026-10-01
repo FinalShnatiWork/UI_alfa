@@ -14,7 +14,7 @@ public final class ContractSpecs {
     String sym = symbol.toUpperCase();
     if (sym.contains("BTC")) return BigDecimal.ONE;
     if (sym.contains("ETH")) return BigDecimal.ONE;
-    if (sym.contains("SOL")) return BigDecimal.valueOf(100);
+    if (sym.contains("SOL")) return BigDecimal.ONE;
     if (sym.contains("XRP")) return BigDecimal.valueOf(1000);
     if (sym.contains("XAU")) return BigDecimal.valueOf(100);
     if (sym.contains("XAG")) return BigDecimal.valueOf(5000);

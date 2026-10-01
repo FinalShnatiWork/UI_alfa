@@ -8,6 +8,8 @@ import com.brokerui.broker.ContractSpecs;
 import com.brokerui.broker.MT5IntegrationService;
 import com.brokerui.broker.MarginLoanService;
 import com.brokerui.broker.NNPredictorClient;
+import com.brokerui.broker.Position;
+import com.brokerui.broker.PositionRepository;
 import com.brokerui.broker.PriceSpread;
 import com.brokerui.broker.TradingAccount;
 import com.brokerui.broker.TradingAccountRepository;
@@ -39,6 +41,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * Remainder rules:
  *  - MARKET / triggered STOP: the unmatched quantity fills externally immediately (as before netting).
+ *  - CLOSE (manual, stop, or liquidation): waits the same window as a marketable LIMIT, so another
+ *    client's order can take the position inside. After the window the rest leaves at the bid or ask.
  *  - LIMIT that is marketable: waits up to {@code limit-wait-ms} as PENDING_NET so an opposite order
  *    can cross it internally; after the window it fills externally (if still marketable).
  *  - LIMIT that is not marketable: rests as NEW / PARTIALLY_FILLED.
@@ -61,7 +65,10 @@ public class NettingService {
   public static final String REJECTED = "REJECTED";
   public static final String LIQUIDITY = "LIQUIDITY";
   public static final List<String> OPEN_STATUSES = List.of(NEW, PARTIALLY_FILLED, PENDING_NET);
-  private static final List<String> RESTING_TYPES = List.of("LIMIT", LIQUIDITY);
+  private static final List<String> RESTING_TYPES = List.of("LIMIT", LIQUIDITY, "CLOSE");
+  /** A closing sell accepts any mid. A closing buy (covering a short) does too. */
+  private static final BigDecimal CLOSE_SELL_LIMIT = new BigDecimal("0.00000001");
+  private static final BigDecimal CLOSE_BUY_LIMIT = new BigDecimal("1000000000");
 
   /** Service-level event codes (engine codes are in {@link NettingTypes}). */
   public static final String EXTERNAL_FILL = "EXTERNAL_FILL";
@@ -81,6 +88,7 @@ public class NettingService {
   private final NNPredictorClient nnClient;
   private final MT5IntegrationService mt5Service;
   private final MarginLoanService marginLoanService;
+  private final PositionRepository positionRepo;
   private final EntityManager em;
   private final TransactionTemplate requiresNew;
   private final TransactionTemplate readOnly;
@@ -93,7 +101,8 @@ public class NettingService {
   public NettingService(BrokerOrderRepository orderRepo, TradingAccountRepository accountRepo,
       InternalMatchRepository matchRepo, MarketPriceService priceService, FillBooking booking,
       NettingEventLog eventLog, NettingProperties props, NNPredictorClient nnClient,
-      MT5IntegrationService mt5Service, MarginLoanService marginLoanService, EntityManager em,
+      MT5IntegrationService mt5Service, MarginLoanService marginLoanService,
+      PositionRepository positionRepo, EntityManager em,
       PlatformTransactionManager txManager) {
     this.orderRepo = orderRepo;
     this.accountRepo = accountRepo;
@@ -102,6 +111,7 @@ public class NettingService {
     this.booking = booking;
     this.eventLog = eventLog;
     this.props = props;
+    this.positionRepo = positionRepo;
     this.nnClient = nnClient;
     this.mt5Service = mt5Service;
     this.marginLoanService = marginLoanService;
@@ -232,18 +242,16 @@ public class NettingService {
       }
       BigDecimal qty = f.qty().min(in.remainingQty()).min(r.remainingQty());
       if (qty.signum() <= 0) continue;
-      FillBooking.FillCost inCost = booking.cost(in, inTa, qty, q.mid());
-      FillBooking.FillCost rCost = booking.cost(r, rTa, qty, q.mid());
-      if (!booking.affordable(inTa, inCost)) {
+      if (!booking.canBook(in, inTa, qty, q.mid(), true)) {
         pending.event(in.getId(), r.getId(), FUNDS_SKIP, "incoming account cannot fund an internal fill");
         break;
       }
-      if (!booking.affordable(rTa, rCost)) {
+      if (!booking.canBook(r, rTa, qty, q.mid(), true)) {
         pending.event(in.getId(), r.getId(), FUNDS_SKIP, "resting account cannot fund this fill");
         continue;
       }
-      booking.book(in, inTa, qty, q.mid(), inCost, true);
-      booking.book(r, rTa, qty, q.mid(), rCost, true);
+      booking.book(in, inTa, qty, q.mid(), booking.cost(in, inTa, qty, q.mid()), true);
+      booking.book(r, rTa, qty, q.mid(), booking.cost(r, rTa, qty, q.mid()), true);
       settleStatusAfterFill(r);
 
       BrokerOrder buy = isBuy ? in : r;
@@ -277,6 +285,8 @@ public class NettingService {
       if (LIQUIDITY.equals(type)) {
         restOrder(in);
         pending.event(in.getId(), null, RESTING, "computer quote rests " + left.stripTrailingZeros().toPlainString());
+      } else if ("CLOSE".equals(type)) {
+        waitThenExternal(in, inTa, left, mid, now, pending);
       } else if ("LIMIT".equals(type)) {
         boolean marketable = isBuy ? q.mid().compareTo(in.getLimitPrice()) <= 0 : q.mid().compareTo(in.getLimitPrice()) >= 0;
         if (!marketable) {
@@ -317,11 +327,28 @@ public class NettingService {
     return result(in, matches);
   }
 
+  /** A close waits the same window as a marketable limit, then leaves at the bid or ask. */
+  private void waitThenExternal(BrokerOrder in, TradingAccount inTa, BigDecimal left, BigDecimal mid, Instant now, Pending pending) {
+    if (CANCELLED.equals(in.getStatus()) || REJECTED.equals(in.getStatus())) return;
+    long wait = props.getLimitWaitMs();
+    Instant deadline = in.getNetDeadline();
+    if (wait > 0 && (deadline == null || now.isBefore(deadline))) {
+      if (deadline == null) {
+        in.setNetDeadline(now.plus(Duration.ofMillis(wait)));
+        pending.event(in.getId(), null, WAITING_FOR_MATCH, "close waiting up to " + wait + " ms for an internal counterparty");
+      }
+      in.setStatus(PENDING_NET);
+    } else {
+      externalFill(in, inTa, left, mid, pending);
+    }
+  }
+
   private void externalFill(BrokerOrder in, TradingAccount inTa, BigDecimal qty, BigDecimal mid, Pending pending) {
+    if (CANCELLED.equals(in.getStatus()) || REJECTED.equals(in.getStatus())) return;
     boolean isBuy = BUY.equalsIgnoreCase(in.getSide());
     BigDecimal price = PriceSpread.apply(mid, isBuy);
     FillBooking.FillCost c = booking.cost(in, inTa, qty, price);
-    if (!booking.affordable(inTa, c)) {
+    if (!booking.canBook(in, inTa, qty, price, false)) {
       booking.releaseReserve(in, inTa);
       in.setStatus(in.getFilledQty() != null && in.getFilledQty().signum() > 0 ? CANCELLED : REJECTED);
       in.setNetDeadline(null);
@@ -395,6 +422,50 @@ public class NettingService {
     try { balance = o.getTradingAccount().getBalance(); } catch (Exception ignored) {}
     return new Result(o.getId(), o.getStatus(), o.getQuantity(), o.getFilledQty(), o.getInternalQty(), o.getExternalQty(),
         o.getEntryPrice(), o.getRouting(), balance, matches);
+  }
+
+  /**
+   * Puts a position close on the internal book and tries to match it now.
+   * If nobody is waiting on the other side, the close stays up for the usual
+   * limit window, then the rest is filled outside. Returns null when the position is gone.
+   */
+  public Result offerClose(Long positionId) {
+    Long orderId = requiresNew.execute(s -> stageClose(positionId));
+    if (orderId == null) return null;
+    return executeNow(orderId);
+  }
+
+  /** Creates the close order, or returns the one already waiting for this position. */
+  private Long stageClose(Long positionId) {
+    Position pos = positionRepo.findById(positionId).orElse(null);
+    if (pos == null || pos.getTradingAccount() == null) return null;
+    Long accountId = pos.getTradingAccount().getId();
+    TradingAccount ta = accountRepo.findByIdForUpdate(accountId).orElse(null);
+    if (ta == null) return null;
+    pos = positionRepo.findByIdForUpdate(positionId).orElse(null);
+    if (pos == null || pos.getQuantity() == null || pos.getQuantity().signum() <= 0) return null;
+
+    List<BrokerOrder> waiting = orderRepo.findByClosesPositionIdAndStatusIn(positionId, OPEN_STATUSES);
+    if (!waiting.isEmpty()) return waiting.get(0).getId();
+
+    boolean coverShort = "SHORT".equals(pos.getSide());
+    BrokerOrder o = new BrokerOrder();
+    o.setTradingAccount(ta);
+    o.setSymbolCode(pos.getSymbolCode());
+    o.setSide(coverShort ? BUY : SELL);
+    o.setOrderType("CLOSE");
+    o.setStatus(NEW);
+    o.setQuantity(pos.getQuantity());
+    o.setLimitPrice(coverShort ? CLOSE_BUY_LIMIT : CLOSE_SELL_LIMIT);
+    o.setReserveRemaining(BigDecimal.ZERO);
+    o.setClosesPositionId(pos.getId());
+    o.setOpenPrice(pos.getAvgPrice());
+    o.setOpenedAt(pos.getOpenedAt());
+    o.setCommission(BigDecimal.ZERO);
+    o.setFilledQty(BigDecimal.ZERO);
+    o.setInternalQty(BigDecimal.ZERO);
+    o.setExternalQty(BigDecimal.ZERO);
+    return orderRepo.save(o).getId();
   }
 
   // ───────────────────────────────────────────────────────────────────────────

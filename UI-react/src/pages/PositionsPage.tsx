@@ -130,9 +130,12 @@ export function PositionsPage() {
     setClosing(pos.id);
     try {
       const res = await apiPostJson(`/api/broker/positions/${pos.id}/close`, {});
-      const data = (await res.json()) as { ok: boolean; closePnl?: string; error?: string };
+      const data = (await res.json()) as { ok: boolean; closePnl?: string; status?: string; error?: string };
       if (res.ok && data.ok) {
-        toast.show(t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : ''), { variant: 'success' });
+        const msg = data.status === 'PENDING_NET'
+          ? t('alerts.closeWaiting', { symbol: pos.symbolCode })
+          : t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
+        toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {
         toast.show(`Error: ${data.error ?? ''}`, { variant: 'error' });
@@ -402,7 +405,7 @@ export function PositionsPage() {
                         </span>
                       </td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(o.quantity)}</td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.limitPrice)}</td>
+                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.stopPrice)}</td>
                       <td className="text-sm">{fmtTime(o.createdAt)}</td>
                       <td style={{ textAlign: 'center' }}>

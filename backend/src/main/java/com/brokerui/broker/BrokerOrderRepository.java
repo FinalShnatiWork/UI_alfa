@@ -58,6 +58,8 @@ public interface BrokerOrderRepository extends JpaRepository<BrokerOrder, Long> 
 
   List<BrokerOrder> findByTradingAccountIdAndStatusInOrderByCreatedAtDesc(Long tradingAccountId, Collection<String> statuses);
 
+  List<BrokerOrder> findByClosesPositionIdAndStatusIn(Long closesPositionId, Collection<String> statuses);
+
   /** Share of recently filled netting-era quantity that crossed internally: [internal, filled]. */
   @Query("SELECT COALESCE(SUM(o.internalQty), 0), COALESCE(SUM(o.filledQty), 0) FROM BrokerOrder o "
       + "WHERE o.routing IN ('INTERNAL', 'EXTERNAL', 'SPLIT') AND o.filledAt > :since")

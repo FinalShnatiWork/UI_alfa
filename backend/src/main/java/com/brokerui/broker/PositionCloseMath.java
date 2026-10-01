@@ -43,6 +43,19 @@ public final class PositionCloseMath {
     }
     boolean isShort = "SHORT".equals(pos.getSide());
     BigDecimal closePrice = TradingFees.applySpread(rawMidPrice, isShort);
+    return atFillPrice(pos, ta, closePrice, true);
+  }
+
+  /**
+   * Same cash result as {@link #compute}, but the fill price is already chosen.
+   * An internal cross passes the mid and does not protect a venue fee, because the
+   * venue is not paid. An external fill passes the bid or ask and keeps the venue floor.
+   */
+  public static Snapshot atFillPrice(Position pos, TradingAccount ta, BigDecimal closePrice, boolean protectVenueFee) {
+    if (pos == null || ta == null || closePrice == null) {
+      throw new IllegalArgumentException("position, account and fill price are required");
+    }
+    boolean isShort = "SHORT".equals(pos.getSide());
     BigDecimal qty = pos.getQuantity() == null ? BigDecimal.ZERO : pos.getQuantity();
     BigDecimal avg = pos.getAvgPrice() == null ? BigDecimal.ZERO : pos.getAvgPrice();
     BigDecimal contractSize = BrokerApiController.getContractSize(pos.getSymbolCode());
@@ -53,7 +66,9 @@ public final class PositionCloseMath {
         : closePrice.subtract(avg).multiply(qty).multiply(contractSize);
     BigDecimal openCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, avg);
     BigDecimal closeCommission = TradingFees.calculateCommission(pos.getSymbolCode(), qty, closePrice);
-    BigDecimal venueFloor = TradingFees.exchangeFee(pos.getSymbolCode(), qty, closePrice);
+    BigDecimal venueFloor = protectVenueFee
+        ? TradingFees.exchangeFee(pos.getSymbolCode(), qty, closePrice)
+        : BigDecimal.ZERO;
     closeCommission = TradingFees.applyProfitSafetyGuard(openCommission, closeCommission, grossPnl, venueFloor);
     BigDecimal totalFees = openCommission.add(closeCommission);
     BigDecimal netPnl = grossPnl.subtract(totalFees);

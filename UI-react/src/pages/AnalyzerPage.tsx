@@ -4,25 +4,41 @@ import { useI18n } from '@/hooks/useI18n';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { AssetIcon } from '@/components/AssetIcon';
 
+interface IndicatorStatus {
+    status: string;
+    statusHe?: string;
+    statusRu?: string;
+}
+
 interface AnalysisResult {
     symbol: string;
     recommendation: string;
     recommendationHe: string;
+    recommendationRu?: string;
     score: number;
     confidence: number;
     color: string;
     price: number;
     category?: string;
     indicators: {
-        rsi: { value: number; status: string; statusHe: string } | null;
-        macd: { macdLine: number; signalLine: number; hist: number; status: string; statusHe: string } | null;
-        sma: { sma20: number; sma50: number; status: string; statusHe: string } | null;
-        bb: { upper: number; middle: number; lower: number; status: string; statusHe: string } | null;
+        rsi: ({ value: number } & IndicatorStatus) | null;
+        macd: ({ macdLine: number; signalLine: number; hist: number } & IndicatorStatus) | null;
+        sma: ({ sma20: number; sma50: number } & IndicatorStatus) | null;
+        bb: ({ upper: number; middle: number; lower: number } & IndicatorStatus) | null;
     };
     explanationsEn: string[];
     explanationsHe: string[];
+    explanationsRu?: string[];
     summary: string;
     summaryHe: string;
+    summaryRu?: string;
+}
+
+/** English, then the language the page is actually in. Missing text stays English. */
+function pick(lang: string, en?: string, he?: string, ru?: string): string {
+    if (lang === 'he') return he || en || '';
+    if (lang === 'ru') return ru || en || '';
+    return en || '';
 }
 
 interface OverviewAsset {
@@ -30,14 +46,17 @@ interface OverviewAsset {
     category: string;
     nameEn: string;
     nameHe: string;
+    nameRu?: string;
     price: number;
     recommendation: string;
     recommendationHe: string;
+    recommendationRu?: string;
     confidence: number;
     color: string;
     rsi: number;
     macdStatus: string;
     macdStatusHe: string;
+    macdStatusRu?: string;
 }
 
 // Built-in resilient assets database matching backend MarketAnalysisController.SUPPORTED
@@ -47,168 +66,204 @@ const FALLBACK_ASSETS: OverviewAsset[] = [
         category: 'crypto',
         nameEn: 'Bitcoin',
         nameHe: 'ביטקוין',
+        nameRu: 'Биткоин',
         price: 103430.50,
         recommendation: 'STRONG BUY',
         recommendationHe: 'קנייה חזקה',
+        recommendationRu: 'сильная покупка',
         confidence: 88,
         color: '#10b981',
         rsi: 61.4,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     },
     {
         symbol: 'ETHUSD',
         category: 'crypto',
         nameEn: 'Ethereum',
         nameHe: 'אתריום',
+        nameRu: 'Эфириум',
         price: 3482.20,
         recommendation: 'BUY',
         recommendationHe: 'קנייה',
+        recommendationRu: 'покупка',
         confidence: 76,
         color: '#10b981',
         rsi: 58.2,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     },
     {
         symbol: 'SOLUSD',
         category: 'crypto',
         nameEn: 'Solana',
         nameHe: 'סולאנה',
+        nameRu: 'Solana',
         price: 218.40,
         recommendation: 'STRONG BUY',
         recommendationHe: 'קנייה חזקה',
+        recommendationRu: 'сильная покупка',
         confidence: 84,
         color: '#10b981',
         rsi: 64.8,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     },
     {
         symbol: 'XRPUSD',
         category: 'crypto',
         nameEn: 'Ripple XRP',
         nameHe: 'ריפל',
+        nameRu: 'Ripple XRP',
         price: 2.45,
         recommendation: 'NEUTRAL',
         recommendationHe: 'נייטרלי',
+        recommendationRu: 'нейтрально',
         confidence: 54,
         color: '#eab308',
         rsi: 49.3,
         macdStatus: 'NEUTRAL',
         macdStatusHe: 'נייטרלי',
+        macdStatusRu: 'нейтрально',
     },
     {
         symbol: 'EURUSD',
         category: 'forex',
         nameEn: 'Euro / US Dollar',
         nameHe: 'אירו / דולר',
+        nameRu: 'Евро / доллар США',
         price: 1.0864,
         recommendation: 'BUY',
         recommendationHe: 'קנייה',
+        recommendationRu: 'покупка',
         confidence: 68,
         color: '#10b981',
         rsi: 53.1,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     },
     {
         symbol: 'GBPUSD',
         category: 'forex',
         nameEn: 'British Pound / US Dollar',
         nameHe: 'פאונד / דולר',
+        nameRu: 'Фунт / доллар США',
         price: 1.2982,
         recommendation: 'NEUTRAL',
         recommendationHe: 'נייטרלי',
+        recommendationRu: 'нейтрально',
         confidence: 58,
         color: '#eab308',
         rsi: 50.8,
         macdStatus: 'NEUTRAL',
         macdStatusHe: 'נייטרלי',
+        macdStatusRu: 'нейтрально',
     },
     {
         symbol: 'USDJPY',
         category: 'forex',
         nameEn: 'US Dollar / Japanese Yen',
         nameHe: 'דולר / ין יפני',
+        nameRu: 'Доллар США / иена',
         price: 153.42,
         recommendation: 'SELL',
         recommendationHe: 'מכירה',
+        recommendationRu: 'продажа',
         confidence: 72,
         color: '#f43f5e',
         rsi: 41.5,
         macdStatus: 'BEARISH',
         macdStatusHe: 'דובי (יורד)',
+        macdStatusRu: 'медвежий (падение)',
     },
     {
         symbol: 'GBPJPY',
         category: 'forex',
         nameEn: 'British Pound / Japanese Yen',
         nameHe: 'פאונד / ין יפני',
+        nameRu: 'Фунт / иена',
         price: 199.15,
         recommendation: 'BUY',
         recommendationHe: 'קנייה',
+        recommendationRu: 'покупка',
         confidence: 65,
         color: '#10b981',
         rsi: 54.6,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     },
     {
         symbol: 'USDCAD',
         category: 'forex',
         nameEn: 'US Dollar / Canadian Dollar',
         nameHe: 'דולר / דולר קנדי',
+        nameRu: 'Доллар США / канадский доллар',
         price: 1.3924,
         recommendation: 'SELL',
         recommendationHe: 'מכירה',
+        recommendationRu: 'продажа',
         confidence: 69,
         color: '#f43f5e',
         rsi: 43.2,
         macdStatus: 'BEARISH',
         macdStatusHe: 'דובי (יורד)',
+        macdStatusRu: 'медвежий (падение)',
     },
     {
         symbol: 'NZDUSD',
         category: 'forex',
         nameEn: 'NZ Dollar / US Dollar',
         nameHe: 'דולר ניו זילנדי / דולר',
+        nameRu: 'Новозеландский доллар / доллар США',
         price: 0.5942,
         recommendation: 'NEUTRAL',
         recommendationHe: 'נייטרלי',
+        recommendationRu: 'нейтрально',
         confidence: 52,
         color: '#eab308',
         rsi: 48.7,
         macdStatus: 'NEUTRAL',
         macdStatusHe: 'נייטרלי',
+        macdStatusRu: 'нейтрально',
     },
     {
         symbol: 'XAUUSD',
         category: 'metals',
         nameEn: 'Gold / US Dollar (Oz)',
         nameHe: 'זהב / דולר (אונקיה)',
+        nameRu: 'Золото / доллар США (унция)',
         price: 2764.80,
         recommendation: 'STRONG BUY',
         recommendationHe: 'קנייה חזקה',
+        recommendationRu: 'сильная покупка',
         confidence: 91,
         color: '#10b981',
         rsi: 67.2,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     },
     {
         symbol: 'XAGUSD',
         category: 'metals',
         nameEn: 'Silver / US Dollar (Oz)',
         nameHe: 'כסף / דולר (אונקיה)',
+        nameRu: 'Серебро / доллар США (унция)',
         price: 33.85,
         recommendation: 'BUY',
         recommendationHe: 'קנייה',
+        recommendationRu: 'покупка',
         confidence: 79,
         color: '#10b981',
         rsi: 59.4,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     },
 ];
 
@@ -219,14 +274,17 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
         category,
         nameEn: symbol,
         nameHe: symbol,
+        nameRu: symbol,
         price: 100.0,
         recommendation: 'BUY',
         recommendationHe: 'קנייה',
+        recommendationRu: 'покупка',
         confidence: 70,
         color: '#10b981',
         rsi: 55,
         macdStatus: 'BULLISH',
         macdStatusHe: 'שוריוני (עולה)',
+        macdStatusRu: 'бычий (рост)',
     };
 
     const price = asset.price;
@@ -246,6 +304,7 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
         category: asset.category,
         recommendation: asset.recommendation,
         recommendationHe: asset.recommendationHe,
+        recommendationRu: asset.recommendationRu,
         score,
         confidence: asset.confidence,
         color: asset.color,
@@ -255,6 +314,7 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
                 value: asset.rsi,
                 status: isBuy ? 'BULLISH SUPPORT' : isSell ? 'BEARISH EXHAUSTION' : 'BALANCED RANGE',
                 statusHe: isBuy ? 'תמיכה שורית' : isSell ? 'עייפות קונים' : 'טווח מאוזן',
+                statusRu: isBuy ? 'бычья поддержка' : isSell ? 'выдох покупателей' : 'ровный диапазон',
             },
             macd: {
                 macdLine: isBuy ? 0.00185 * price : -0.0012 * price,
@@ -262,12 +322,14 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
                 hist: isBuy ? 0.00073 * price : -0.0006 * price,
                 status: asset.macdStatus,
                 statusHe: asset.macdStatusHe,
+                statusRu: asset.macdStatusRu,
             },
             sma: {
                 sma20,
                 sma50,
                 status: isBuy ? 'GOLDEN CROSS (BULLISH)' : isSell ? 'DEATH CROSS (BEARISH)' : 'NEUTRAL ALIGNMENT',
                 statusHe: isBuy ? 'הצלבה שורית (עולה)' : isSell ? 'הצלבה דובית (יורדת)' : 'ממוצעים מאוזנים',
+                statusRu: isBuy ? 'золотой крест (бычий)' : isSell ? 'крест смерти (медвежий)' : 'средние рядом',
             },
             bb: {
                 upper: bbUpper,
@@ -275,6 +337,7 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
                 lower: bbLower,
                 status: isBuy ? 'TRADING IN UPPER EXPANSION' : isSell ? 'TESTING LOWER BOUND' : 'INSIDE STANDARD CHANNELS',
                 statusHe: isBuy ? 'התבססות ברצועה העליונה' : isSell ? 'לחץ לכיוון הרצועה התחתונה' : 'תנועה בתוך הערוץ המרכזי',
+                statusRu: isBuy ? 'ход у верхней полосы' : isSell ? 'проверка нижней границы' : 'внутри обычного канала',
             },
         },
         explanationsEn: [
@@ -289,6 +352,12 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
             `המחיר הנוכחי ($${price.toLocaleString()}) נסחר ${price > sma20 ? 'מעל' : 'מתחת'} לממוצעים הנעים לתקופות 20 ו-50 ימים.`,
             `רצועות בולינגר מראות ${isBuy ? 'פריצה מבוקרת ועוצמה במגמת העלייה' : isSell ? 'סיכון להמשך ירידה ובדיקת תמיכות' : 'תנודתיות מאוזנת בתוך גבולות הערוץ'}.`,
         ],
+        explanationsRu: [
+            `RSI на уровне ${asset.rsi.toFixed(1)}: импульс ровный, без крайнего перегрева.`,
+            `Гистограмма MACD показывает ${isBuy ? 'рост вверх и импульс покупателей' : isSell ? 'давление продавцов' : 'консолидацию, явного направления нет'}.`,
+            `Текущая цена ($${price.toLocaleString()}) ${price > sma20 ? 'выше' : 'ниже'} скользящих средних 20 и 50.`,
+            `Полосы Боллинджера: ${isBuy ? 'контролируемый пробой и сила восходящего движения' : isSell ? 'риск продолжения снижения' : 'спокойная волатильность внутри канала'}.`,
+        ],
         summary: isBuy
             ? `Algorithmic analysis identifies strong multi-indicator buy momentum on ${asset.symbol} with ${asset.confidence}% statistical confidence.`
             : isSell
@@ -299,6 +368,11 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
             : isSell
             ? `זוהתה סטייה דובית בשילוב ממוצעים נעים ומתנדים, המצביעה על זהירות ונטייה לירידות.`
             : `הנכס נמצא במצב התכנסות ודשדוש. מומלץ להמתין לפריצת רמות תמיכה/התנגדות לפני כניסה לפוזיציה.`,
+        summaryRu: isBuy
+            ? `Алгоритм видит импульс на покупку по нескольким индикаторам ${asset.symbol}, уверенность ${asset.confidence}%.`
+            : isSell
+            ? `Медвежье расхождение по средним и осцилляторам: лучше осторожность, уклон вниз.`
+            : `Актив в консолидации. Индикаторы нейтральны, перед входом стоит дождаться пробоя.`,
     };
 }
 
@@ -307,7 +381,6 @@ interface SpeedometerGaugeProps {
     recommendation: string;
     confidence: number;
     color: string;
-    isRtl: boolean;
 }
 
 function SpeedometerGauge({
@@ -315,8 +388,8 @@ function SpeedometerGauge({
     recommendation,
     confidence,
     color,
-    isRtl,
 }: SpeedometerGaugeProps) {
+    const { t } = useI18n();
     const cx = 115;
     const cy = 98;
     const r = 75;
@@ -522,15 +595,15 @@ function SpeedometerGauge({
             >
                 <span style={{ color: '#f43f5e', display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f43f5e' }} />
-                    {isRtl ? 'מכירה' : 'Sell'}
+                    {t('analyzer.sell')}
                 </span>
                 <span style={{ color: '#eab308', display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#eab308' }} />
-                    {isRtl ? 'נייטרלי' : 'Neutral'}
+                    {t('analyzer.neutral')}
                 </span>
                 <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#10b981' }} />
-                    {isRtl ? 'קנייה' : 'Buy'}
+                    {t('analyzer.buy')}
                 </span>
             </div>
         </div>
@@ -540,6 +613,10 @@ function SpeedometerGauge({
 export function AnalyzerPage() {
     const { t, lang } = useI18n();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        document.title = t('titles.analyzer');
+    }, [t]);
 
     const [assets, setAssets] = useState<OverviewAsset[]>(FALLBACK_ASSETS);
     const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSD');
@@ -571,6 +648,8 @@ export function AnalyzerPage() {
                                 ...bItem,
                                 nameEn: fallback?.nameEn || bItem.symbol,
                                 nameHe: fallback?.nameHe || bItem.symbol,
+                                nameRu: fallback?.nameRu || bItem.symbol,
+                                recommendationRu: bItem.recommendationRu || fallback?.recommendationRu || bItem.recommendation,
                             };
                         });
                         setAssets(merged);
@@ -659,6 +738,7 @@ export function AnalyzerPage() {
                 category: selectedCategory,
                 nameEn: selectedSymbol,
                 nameHe: selectedSymbol,
+                nameRu: selectedSymbol,
                 price: analysis?.price || 0,
             };
     }, [assets, selectedSymbol, selectedCategory, analysis?.price]);
@@ -716,12 +796,10 @@ export function AnalyzerPage() {
                         </div>
                         <div>
                             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
-                                {isRtl ? 'בוט אנליזה חכם ואיתותי שוק (AI Analyzer)' : 'AI Market Analyzer & Quant Signals'}
+                                {t('analyzer.title')}
                             </h2>
                             <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                                {isRtl
-                                    ? 'סריקת שוק רציפה באמצעות מודל כמותי: שילוב RSI, MACD, ממוצעים נעים ורצועות בולינגר לאיתור הזדמנויות'
-                                    : 'Real-time quantitative scanning: RSI, MACD, multi-period moving averages, and Bollinger Bands breakdown.'}
+                                {t('analyzer.subtitle')}
                             </p>
                         </div>
                     </div>
@@ -751,7 +829,7 @@ export function AnalyzerPage() {
                                     animation: 'pulseDot 2s infinite',
                                 }}
                             />
-                            {isRtl ? 'סריקה חיה פעילה' : 'Live Engine Active'}
+                            {t('analyzer.live')}
                         </span>
                     </div>
                 </div>
@@ -782,7 +860,7 @@ export function AnalyzerPage() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 8px var(--accent)' }} />
                                     <h3 style={{ fontSize: '1.02rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>
-                                        {isRtl ? 'לוח נכסי מסחר' : 'Asset Market Board'}
+                                        {t('analyzer.board')}
                                     </h3>
                                 </div>
                                 <span
@@ -796,7 +874,7 @@ export function AnalyzerPage() {
                                         borderRadius: 20,
                                     }}
                                 >
-                                    {filteredAssets.length} {isRtl ? 'נכסים' : 'assets'}
+                                    {t('analyzer.assets', { n: filteredAssets.length })}
                                 </span>
                             </div>
 
@@ -826,7 +904,7 @@ export function AnalyzerPage() {
 
                                 <input
                                     type="text"
-                                    placeholder={isRtl ? 'חיפוש סמל או שם נכס...' : 'Search symbol or name...'}
+                                    placeholder={t('analyzer.search')}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="form-control analyzer-search-input"
@@ -883,18 +961,13 @@ export function AnalyzerPage() {
                                     gap: 3,
                                 }}
                             >
-                                {[
-                                    { id: 'all', en: 'All', he: 'הכל' },
-                                    { id: 'crypto', en: 'Crypto', he: 'קריפטו' },
-                                    { id: 'forex', en: 'Forex', he: 'מט"ח' },
-                                    { id: 'metals', en: 'Metals', he: 'מתכות' },
-                                ].map(cat => {
-                                    const isActive = filterCategory === cat.id;
+                                {(['all', 'crypto', 'forex', 'metals'] as const).map(id => {
+                                    const isActive = filterCategory === id;
                                     return (
                                         <button
-                                            key={cat.id}
+                                            key={id}
                                             type="button"
-                                            onClick={() => setFilterCategory(cat.id)}
+                                            onClick={() => setFilterCategory(id)}
                                             className="analyzer-tab-btn"
                                             style={{
                                                 flex: 1,
@@ -911,7 +984,7 @@ export function AnalyzerPage() {
                                                 cursor: 'pointer',
                                             }}
                                         >
-                                            {isRtl ? cat.he : cat.en}
+                                            {t(`analyzer.cat.${id}`)}
                                         </button>
                                     );
                                 })}
@@ -1003,7 +1076,7 @@ export function AnalyzerPage() {
                                                         </span>
                                                     </div>
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>
-                                                        {isRtl ? asset.nameHe : asset.nameEn}
+                                                        {pick(lang, asset.nameEn, asset.nameHe, asset.nameRu)}
                                                     </div>
                                                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
                                                         {asset.price ? `$${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
@@ -1024,10 +1097,10 @@ export function AnalyzerPage() {
                                                         letterSpacing: '0.02em',
                                                     }}
                                                 >
-                                                    {isRtl ? asset.recommendationHe : asset.recommendation}
+                                                    {pick(lang, asset.recommendation, asset.recommendationHe, asset.recommendationRu)}
                                                 </span>
                                                 <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                                                    {asset.confidence}% {isRtl ? 'ביטחון' : 'conf.'}
+                                                    {t('analyzer.confidence', { n: asset.confidence })}
                                                 </span>
                                             </div>
                                         </div>
@@ -1036,7 +1109,7 @@ export function AnalyzerPage() {
 
                                 {filteredAssets.length === 0 && (
                                     <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 10px', fontSize: '0.85rem' }}>
-                                        {isRtl ? 'לא נמצאו נכסים תואמים' : 'No matching assets found'}
+                                        {t('analyzer.noMatch')}
                                     </div>
                                 )}
                             </div>
@@ -1050,7 +1123,7 @@ export function AnalyzerPage() {
                             <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 380, gap: 14 }}>
                                 <div className="loading-spinner" style={{ width: 36, height: 36 }} />
                                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-                                    {isRtl ? 'מנתח נתוני שוק חיים...' : 'Analyzing live market data...'}
+                                    {t('analyzer.analyzing')}
                                 </div>
                             </div>
                         ) : analysis ? (
@@ -1088,10 +1161,9 @@ export function AnalyzerPage() {
                                     {/* SPEEDOMETER GAUGE */}
                                     <SpeedometerGauge
                                         dialAngle={dialAngle}
-                                        recommendation={isRtl ? analysis.recommendationHe : analysis.recommendation}
+                                        recommendation={pick(lang, analysis.recommendation, analysis.recommendationHe, analysis.recommendationRu)}
                                         confidence={analysis.confidence}
                                         color={analysis.color}
-                                        isRtl={isRtl}
                                     />
 
                                     {/* MIDDLE: ASSET HEADER WITH REAL ICON & RECOMMENDATION */}
@@ -1115,23 +1187,23 @@ export function AnalyzerPage() {
                                                             letterSpacing: '0.03em',
                                                         }}
                                                     >
-                                                        {isRtl ? analysis.recommendationHe : analysis.recommendation}
+                                                        {pick(lang, analysis.recommendation, analysis.recommendationHe, analysis.recommendationRu)}
                                                     </span>
                                                 </div>
                                                 <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', fontWeight: 500, marginTop: 2 }}>
-                                                    {isRtl ? currentAssetMeta.nameHe : currentAssetMeta.nameEn}
+                                                    {pick(lang, currentAssetMeta.nameEn, currentAssetMeta.nameHe, currentAssetMeta.nameRu)}
                                                 </div>
                                             </div>
                                         </div>
 
                                         <p style={{ margin: '12px 0', fontSize: '0.94rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                                            {isRtl ? analysis.summaryHe : analysis.summary}
+                                            {pick(lang, analysis.summary, analysis.summaryHe, analysis.summaryRu)}
                                         </p>
 
                                         {/* Confidence progress bar */}
                                         <div style={{ marginTop: 14 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 6 }}>
-                                                <span style={{ fontWeight: 600 }}>{isRtl ? 'רמת ביטחון אלגוריתמית' : 'Quant Confidence Score'}</span>
+                                                <span style={{ fontWeight: 600 }}>{t('analyzer.confidenceScore')}</span>
                                                 <span style={{ fontWeight: 800, color: analysis.color }}>{analysis.confidence}%</span>
                                             </div>
                                             <div style={{ height: 8, width: '100%', background: 'rgba(255, 255, 255, 0.08)', borderRadius: 4, overflow: 'hidden' }}>
@@ -1165,7 +1237,7 @@ export function AnalyzerPage() {
                                         }}
                                     >
                                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                                            {isRtl ? 'מחיר שוק נוכחי' : 'Live Market Price'}
+                                            {t('analyzer.livePrice')}
                                         </div>
                                         <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--accent-strong)', margin: '8px 0 16px', letterSpacing: '-0.02em' }}>
                                             {typeof analysis.price === 'number'
@@ -1184,7 +1256,7 @@ export function AnalyzerPage() {
                                                 letterSpacing: '0.02em',
                                             }}
                                         >
-                                            {isRtl ? 'פתח עסקה בגרף ⚡' : 'Trade on Chart ⚡'}
+                                            {t('analyzer.trade')}
                                         </button>
                                     </div>
                                 </div>
@@ -1197,7 +1269,7 @@ export function AnalyzerPage() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                             <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>RSI (14)</span>
                                             <span className={getRecBadgeClass(analysis.indicators?.rsi?.status?.includes('OVERSOLD') ? 'BUY' : analysis.indicators?.rsi?.status?.includes('OVERBOUGHT') ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
-                                                {isRtl ? analysis.indicators?.rsi?.statusHe : analysis.indicators?.rsi?.status}
+                                                {pick(lang, analysis.indicators?.rsi?.status, analysis.indicators?.rsi?.statusHe, analysis.indicators?.rsi?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '2.2rem', fontWeight: 800, margin: '8px 0', display: 'flex', alignItems: 'baseline', gap: 4, color: 'var(--text-primary)' }}>
@@ -1223,8 +1295,8 @@ export function AnalyzerPage() {
                                             />
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 6, fontWeight: 500 }}>
-                                            <span>30 ({isRtl ? 'מכירת יתר' : 'Oversold'})</span>
-                                            <span>70 ({isRtl ? 'קניית יתר' : 'Overbought'})</span>
+                                            <span>30 ({t('analyzer.oversold')})</span>
+                                            <span>70 ({t('analyzer.overbought')})</span>
                                         </div>
                                     </div>
 
@@ -1233,7 +1305,7 @@ export function AnalyzerPage() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                             <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>MACD (12, 26, 9)</span>
                                             <span className={getRecBadgeClass(analysis.indicators?.macd?.status === 'BULLISH' ? 'BUY' : analysis.indicators?.macd?.status === 'BEARISH' ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
-                                                {isRtl ? analysis.indicators?.macd?.statusHe : analysis.indicators?.macd?.status}
+                                                {pick(lang, analysis.indicators?.macd?.status, analysis.indicators?.macd?.statusHe, analysis.indicators?.macd?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -1257,9 +1329,9 @@ export function AnalyzerPage() {
                                     {/* 3. MOVING AVERAGES CARD */}
                                     <div className="card" style={{ padding: 20, marginBottom: 0 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                            <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{isRtl ? 'ממוצעים נעים (MA)' : 'Moving Averages'}</span>
+                                            <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{t('analyzer.movingAverages')}</span>
                                             <span className={getRecBadgeClass(analysis.indicators?.sma?.status === 'BULLISH' ? 'BUY' : analysis.indicators?.sma?.status === 'BEARISH' ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
-                                                {isRtl ? analysis.indicators?.sma?.statusHe : analysis.indicators?.sma?.status}
+                                                {pick(lang, analysis.indicators?.sma?.status, analysis.indicators?.sma?.statusHe, analysis.indicators?.sma?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -1278,8 +1350,8 @@ export function AnalyzerPage() {
                                         </div>
                                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 8, textAlign: 'center', fontStyle: 'italic' }}>
                                             {analysis.price > (analysis.indicators?.sma?.sma20 || 0)
-                                                ? (isRtl ? 'מחיר נסחר מעל ממוצע קצר מועד' : 'Trading above short-term MA')
-                                                : (isRtl ? 'מחיר נסחר מתחת לממוצע קצר מועד' : 'Trading below short-term MA')}
+                                                ? t('analyzer.aboveMa')
+                                                : t('analyzer.belowMa')}
                                         </div>
                                     </div>
 
@@ -1288,7 +1360,7 @@ export function AnalyzerPage() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                             <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>Bollinger Bands (20, 2)</span>
                                             <span className={getRecBadgeClass(analysis.indicators?.bb?.status?.includes('OVERSOLD') ? 'BUY' : analysis.indicators?.bb?.status?.includes('OVERBOUGHT') ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
-                                                {isRtl ? analysis.indicators?.bb?.statusHe : analysis.indicators?.bb?.status}
+                                                {pick(lang, analysis.indicators?.bb?.status, analysis.indicators?.bb?.statusHe, analysis.indicators?.bb?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -1312,13 +1384,15 @@ export function AnalyzerPage() {
                                 <div className="card" style={{ padding: 24 }}>
                                     <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
                                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
-                                        {isRtl ? 'פירוט איתות טכני והסבר אסטרטגיה אלגוריתמית' : 'Detailed Technical Analysis Breakdown'}
+                                        {t('analyzer.breakdown')}
                                     </h4>
                                     <ul style={{ margin: 0, paddingInlineStart: 20, display: 'flex', flexDirection: 'column', gap: 12, lineHeight: 1.6 }}>
-                                        {(Array.isArray(isRtl ? analysis.explanationsHe : analysis.explanationsEn)
-                                            ? (isRtl ? analysis.explanationsHe : analysis.explanationsEn)
-                                            : []
-                                        ).map((exp, idx) => (
+                                        {(lang === 'he'
+                                            ? analysis.explanationsHe
+                                            : lang === 'ru'
+                                                ? (analysis.explanationsRu?.length ? analysis.explanationsRu : analysis.explanationsEn)
+                                                : analysis.explanationsEn
+                                        )?.map((exp, idx) => (
                                             <li key={idx} style={{ color: 'var(--text-primary)', fontSize: '0.92rem' }}>
                                                 {exp}
                                             </li>

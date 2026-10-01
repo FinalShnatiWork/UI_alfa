@@ -63,17 +63,21 @@ public class SecurityConfig {
   }
 
   /**
-   * Builds the CORS policy allowing credentials and arbitrary origin request patterns.
+   * Allows the local site to call the API with cookies. Other websites are refused.
    *
    * @return the CORS configurations source bean
    */
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration configuration = new CorsConfiguration();
-    configuration.setAllowedOriginPatterns(List.of("*"));
+    configuration.setAllowedOrigins(List.of(
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"));
     configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
     configuration.setAllowedHeaders(List.of("*"));
-    configuration.setExposedHeaders(Arrays.asList("X-Session-Id", "X-Auth-Token", "Set-Cookie"));
+    configuration.setExposedHeaders(List.of("X-Session-Id"));
     configuration.setAllowCredentials(true);
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration("/**", configuration);
@@ -156,8 +160,7 @@ public class SecurityConfig {
                     .csrfTokenRequestHandler(csrfHandler)
                     .ignoringRequestMatchers(
                         new AntPathRequestMatcher("/api/auth/login", "POST"),
-                        new AntPathRequestMatcher("/api/admin/**"),
-                        request -> request.getHeader("X-Session-Id") != null || request.getHeader("X-Auth-Token") != null))
+                        new AntPathRequestMatcher("/api/admin/**")))
         .sessionManagement(
             sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
         .authorizeHttpRequests(

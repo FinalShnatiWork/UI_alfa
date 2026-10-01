@@ -123,9 +123,9 @@ export function AdminNettingTab() {
       <div className="card admin-card">
         <h3>Invariants I1–I7</h3>
         <div className="table-scroll">
-          <table>
+          <table className="admin-table">
             <thead>
-              <tr><th>Id</th><th>Result</th><th>Meaning</th></tr>
+              <tr><th style={{ width: 72 }}>Id</th><th style={{ width: 100 }}>Result</th><th className="wrap">Meaning</th></tr>
             </thead>
             <tbody>
               {invEntries.map(([k, v]) => {
@@ -160,7 +160,7 @@ function BookTable({ title, rows }: { title: string; rows: NettingBook['buys'] }
     <div className="card admin-card">
       <h3>{title} <span className="text-muted">{rows.length}</span></h3>
       <div className="table-scroll">
-        <table>
+        <table className="admin-table">
           <thead>
             <tr><th>Id</th><th>Owner</th><th>Type</th><th>Status</th><th>Remain</th><th>Limit</th></tr>
           </thead>
