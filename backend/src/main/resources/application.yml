@@ -29,7 +29,7 @@ broker:
   netting:
     external-fee-rate: 0.001      # 0.10% of notional on the quantity routed to the external market
     nn-shadow: true                # NN advisor is called after commit and only recorded, never decides
-    limit-wait-ms: 8000            # a marketable LIMIT waits this long for an internal counterparty (0 = never)
+    limit-wait-ms: 5000            # a close or a marketable LIMIT waits this long for an internal counterparty (0 = never)
     test-endpoints:
       enabled: true                # demo only: /api/admin/netting/test/** (localhost-only anyway)
       freeze-ttl-minutes: 10       # frozen test prices expire on their own

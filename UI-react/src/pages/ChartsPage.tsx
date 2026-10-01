@@ -300,7 +300,8 @@ export function ChartsPage() {
   const { data: overviewData } = useBrokerOverview();
   const { data: positionsData, isLoading: posLoading } = usePositions();
   const { data: pendingData } = usePendingOrders();
-  const pendingOrders = Array.isArray(pendingData) ? pendingData : [];
+  const pendingOrders = (Array.isArray(pendingData) ? pendingData : [])
+    .filter((o) => o.orderType !== 'CLOSE');
   const { mutateAsync: cancelOrder } = useCancelOrder();
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const invalidateAfterTrade = useInvalidateAfterTrade();
@@ -798,9 +799,7 @@ export function ChartsPage() {
       const res = await apiPostJson(`/api/broker/positions/${id}/close`, {});
       const data = await res.json() as ClosePositionResponse;
       if (res.ok && data.ok) {
-        const msg = data.status === 'PENDING_NET'
-          ? t('alerts.closeWaiting', { symbol: sym })
-          : t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
+        const msg = t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
         toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {

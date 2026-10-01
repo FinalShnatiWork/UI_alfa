@@ -102,7 +102,8 @@ export function PositionsPage() {
 
   const allHistory: BrokerOrder[] = Array.isArray(historyData) ? historyData : [];
   const closedTrades = pairOrders(allHistory);
-  const pendingOrders: BrokerOrder[] = Array.isArray(pendingData) ? pendingData : [];
+  const pendingOrders: BrokerOrder[] = (Array.isArray(pendingData) ? pendingData : [])
+    .filter((o) => o.orderType !== 'CLOSE');
 
   const filteredOpen = activePositions.filter((p) =>
     p.symbolCode.toLowerCase().includes(search.toLowerCase()),
@@ -132,9 +133,7 @@ export function PositionsPage() {
       const res = await apiPostJson(`/api/broker/positions/${pos.id}/close`, {});
       const data = (await res.json()) as { ok: boolean; closePnl?: string; status?: string; error?: string };
       if (res.ok && data.ok) {
-        const msg = data.status === 'PENDING_NET'
-          ? t('alerts.closeWaiting', { symbol: pos.symbolCode })
-          : t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
+        const msg = t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
         toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {
