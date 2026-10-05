@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   root: __dirname,
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
@@ -19,7 +20,7 @@ export default defineConfig({
     host: 'localhost',
     fs: {
       strict: false,
-      allow: ['..', 'C:/Users/david/.gemini/antigravity-ide/scratch/UI_alfa'],
+      allow: ['..'],
     },
     proxy: {
       '/api': {
