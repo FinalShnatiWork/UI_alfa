@@ -16,3 +16,5 @@ erd_document.html
 reports/*
 !reports/netting_trades_comprehensive_report_he.html
 !reports/computer_liquidity_pool.png
+.last_deploy_state.json
+.vercel/
