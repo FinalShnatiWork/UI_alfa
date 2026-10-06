@@ -21,6 +21,7 @@ import { ChartsPage } from '@/pages/ChartsPage';
 import { AnalyzerPage } from '@/pages/AnalyzerPage';
 import { AdminPage } from '@/pages/admin/AdminPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
+import { PricingPage } from '@/pages/PricingPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +54,7 @@ export function App() {
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
                   <Route path="/demo-register" element={<DemoRegisterPage />} />
+                  <Route path="/pricing" element={<PricingPage />} />
 
                   <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                   <Route path="/positions" element={<ProtectedRoute><PositionsPage /></ProtectedRoute>} />

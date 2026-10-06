@@ -24,12 +24,18 @@ export const QK = {
  */
 export function useInvalidateAfterTrade() {
   const qc = useQueryClient();
-  return () => {
-    void qc.invalidateQueries({ queryKey: QK.positions });
-    void qc.invalidateQueries({ queryKey: QK.overview });
-    void qc.invalidateQueries({ queryKey: QK.history });
-  };
+  return () => invalidateTradeState(qc);
 }
+
+/** Everything a fill, close or cancel can change: refetch it now instead of on the next poll. */
+function invalidateTradeState(qc: ReturnType<typeof useQueryClient>) {
+  for (const key of [QK.positions, QK.overview, QK.history, QK.pendingOrders, QK.notifications, QK.creditLedger, QK.transactions]) {
+    void qc.invalidateQueries({ queryKey: key });
+  }
+}
+
+/** Account polling interval. Paused while the tab is hidden (React Query default). */
+const ACCOUNT_POLL_MS = 3000;
 
 /**
  * Custom hook to fetch general trading account metadata (balance, margin, etc.).
@@ -40,9 +46,8 @@ export function useBrokerOverview() {
   return useQuery({
     queryKey: QK.overview,
     queryFn: () => apiGet<BrokerOverview>('/api/broker/overview'),
-    refetchInterval: 1000,
-    refetchIntervalInBackground: true,
-    staleTime: 500,
+    refetchInterval: ACCOUNT_POLL_MS,
+    staleTime: 1000,
     retry: 1,
   });
 }
@@ -56,9 +61,8 @@ export function usePositions() {
   return useQuery({
     queryKey: QK.positions,
     queryFn: () => apiGet<Position[]>('/api/broker/positions'),
-    refetchInterval: 1000,
-    refetchIntervalInBackground: true,
-    staleTime: 500,
+    refetchInterval: ACCOUNT_POLL_MS,
+    staleTime: 1000,
     retry: 1,
   });
 }
@@ -104,7 +108,7 @@ export function useLivePrice(symbol: string | null) {
     queryFn: () => apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(symbol!)}`),
     enabled: !!symbol,
     staleTime: 1000,
-    refetchInterval: 1000,
+    refetchInterval: ACCOUNT_POLL_MS,
     retry: 0,
   });
 }
@@ -125,6 +129,7 @@ export function useLivePrices(symbols: string[]): Record<string, number> {
 
   useEffect(() => {
     const fetchAll = async () => {
+      if (document.hidden) return;
       const unique = [...new Set(mergedSymbols.map((s) => s.toUpperCase()))];
       const nextPrices: Record<string, number> = {};
 
@@ -154,6 +159,7 @@ export function useLivePrices(symbols: string[]): Record<string, number> {
 
     // Add local jitter every 500ms for visual effect, matching ChartsPage
     const jitterInterval = setInterval(() => {
+      if (document.hidden) return;
       setPrices((prev) => {
         const next = { ...prev };
         let changed = false;
@@ -225,10 +231,7 @@ export function useCancelOrder() {
       }
       return (await res.json()) as { ok: boolean; newBalance?: number };
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: QK.pendingOrders });
-      void queryClient.invalidateQueries({ queryKey: QK.overview });
-    },
+    onSuccess: () => invalidateTradeState(queryClient),
   });
 }
 

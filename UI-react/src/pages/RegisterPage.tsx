@@ -17,13 +17,13 @@ const schema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   idDoc: z.string().optional(),
-  email: z.string().email('Invalid email'),
+  email: z.string().email('validation.email'),
   phone: z.string().optional(),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(8, 'validation.passwordMin'),
   currency: z.enum(['USD', 'EUR', 'GBP']),
   leverage: z.enum(LEVERAGES),
-  terms: z.literal(true, { message: 'You must accept terms' }),
-  risk: z.literal(true, { message: 'You must accept risk disclosure' }),
+  terms: z.literal(true, { message: 'validation.terms' }),
+  risk: z.literal(true, { message: 'validation.risk' }),
 });
 type FormData = z.infer<typeof schema>;
 
@@ -109,6 +109,7 @@ export function RegisterPage() {
 
           <form
             className="text-left"
+            noValidate
             onSubmit={(e) => { void handleSubmit(onSubmit)(e); }}
           >
             <div className="grid-2">
@@ -157,7 +158,7 @@ export function RegisterPage() {
               />
               {errors.email && (
                 <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-                  {errors.email.message}
+                  {t(errors.email.message ?? '')}
                 </span>
               )}
             </div>
@@ -185,7 +186,7 @@ export function RegisterPage() {
               />
               {errors.password && (
                 <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-                  {errors.password.message}
+                  {t(errors.password.message ?? '')}
                 </span>
               )}
             </div>
@@ -233,7 +234,7 @@ export function RegisterPage() {
             </div>
             {errors.terms && (
               <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: -8, marginBottom: 8, display: 'block' }}>
-                {errors.terms.message}
+                {t(errors.terms.message ?? '')}
               </span>
             )}
 
@@ -249,7 +250,7 @@ export function RegisterPage() {
             </div>
             {errors.risk && (
               <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: -8, marginBottom: 8, display: 'block' }}>
-                {errors.risk.message}
+                {t(errors.risk.message ?? '')}
               </span>
             )}
 

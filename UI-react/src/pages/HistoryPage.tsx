@@ -8,20 +8,11 @@ import { useBrokerOverview, useTradeHistory } from '@/hooks/useApi';
 import type { BrokerOrder } from '@/types/api';
 import { pairOrders, tsMs as ts } from '@/lib/tradeUtils';
 import type { PairedTrade } from '@/lib/tradeUtils';
+import { fmtDateTime, fmtMoney, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
-const LANG_LOCALE: Record<string, string> = { en: 'en-US', ru: 'ru-RU', he: 'he-IL' };
-
-function fmtTime(iso: string | undefined, locale: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(LANG_LOCALE[locale] ?? locale, {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
+const fmtTime = fmtDateTime;
 
 function fmtPrice(n: unknown): string {
   if (n == null) return '—';
@@ -29,7 +20,7 @@ function fmtPrice(n: unknown): string {
   if (isNaN(v) || v === 0) return '—';
   const abs = Math.abs(v);
   const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
-  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 function fmtQty(n: unknown): string {
@@ -38,14 +29,8 @@ function fmtQty(n: unknown): string {
   return isNaN(v) ? '—' : v.toFixed(4);
 }
 
-function fmtPl(n: unknown, currency: string, locale: string): string {
-  if (n == null) return '—';
-  const v = Number(n);
-  if (isNaN(v)) return '—';
-  const abs = new Intl.NumberFormat(LANG_LOCALE[locale] ?? locale, {
-    style: 'currency', currency, maximumFractionDigits: 2,
-  }).format(Math.abs(v));
-  return `${v >= 0 ? '+' : '−'}${abs}`;
+function fmtPl(n: unknown, currency: string): string {
+  return n == null ? '—' : fmtSignedMoney(n, currency);
 }
 
 function exportCsv(trades: PairedTrade[], currency: string, locale: string) {
@@ -55,8 +40,8 @@ function exportCsv(trades: PairedTrade[], currency: string, locale: string) {
     fmtTime(t.openTime, locale), fmtPrice(t.openPrice),
     fmtTime(t.closeTime, locale), fmtPrice(t.closePrice),
     fmtPrice(t.stopLoss), fmtPrice(t.takeProfit),
-    t.commission != null ? `-$${Number(t.commission).toFixed(2)}` : '',
-    t.realizedPnl != null ? fmtPl(t.realizedPnl, currency, locale) : '',
+    t.commission != null ? `−${fmtMoney(t.commission, currency)}` : '',
+    t.realizedPnl != null ? fmtPl(t.realizedPnl, currency) : '',
   ]);
   const csv = [headers, ...rows]
     .map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
@@ -149,13 +134,13 @@ export function HistoryPage() {
 
   const stats = [
     { label: t('history.totalTrades'), value: isLoading ? '…' : String(filtered.length), sub: `${withPl.length} ${t('history.closedTrades').toLowerCase()}` },
-    { label: t('history.grossPl'), value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(grossTradePl, currency, lang) : '—'), colored: withPl.length > 0, positive: grossTradePl >= 0, sub: t('history.beforeFees') },
-    { label: t('history.commissionPaid'), value: isLoading ? '…' : (filtered.length > 0 ? `−$${commissionTotal.toFixed(2)}` : '—'), colored: filtered.length > 0, positive: false, sub: t('history.totalFeesDeducted') },
-    { label: t('history.netPl'), value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(netPl, currency, lang) : '—'), colored: withPl.length > 0, positive: netPl >= 0, sub: t('history.finalNetResult') },
+    { label: t('history.grossPl'), value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(grossTradePl, currency) : '—'), colored: withPl.length > 0, positive: grossTradePl >= 0, sub: t('history.beforeFees') },
+    { label: t('history.commissionPaid'), value: isLoading ? '…' : (filtered.length > 0 ? `−${fmtMoney(commissionTotal, currency)}` : '—'), colored: filtered.length > 0, positive: false, sub: t('history.totalFeesDeducted') },
+    { label: t('history.netPl'), value: isLoading ? '…' : (withPl.length > 0 ? fmtPl(netPl, currency) : '—'), colored: withPl.length > 0, positive: netPl >= 0, sub: t('history.finalNetResult') },
     { label: t('history.winRate'), value: isLoading ? '…' : (winRate != null ? `${winRate.toFixed(1)}%` : '—'), sub: withPl.length > 0 ? `${wins}W / ${losses}L` : t('history.noData'), colored: winRate != null, positive: (winRate ?? 0) >= 50 },
-    { label: t('history.avgPl'), value: isLoading ? '…' : (avgPl != null ? fmtPl(avgPl, currency, lang) : '—'), colored: avgPl != null, positive: (avgPl ?? 0) >= 0 },
-    { label: t('history.bestTrade'), value: isLoading ? '…' : (bestPl != null ? fmtPl(bestPl, currency, lang) : '—'), colored: bestPl != null, positive: true },
-    { label: t('history.worstTrade'), value: isLoading ? '…' : (worstPl != null ? fmtPl(worstPl, currency, lang) : '—'), colored: worstPl != null && worstPl < 0, positive: false },
+    { label: t('history.avgPl'), value: isLoading ? '…' : (avgPl != null ? fmtPl(avgPl, currency) : '—'), colored: avgPl != null, positive: (avgPl ?? 0) >= 0 },
+    { label: t('history.bestTrade'), value: isLoading ? '…' : (bestPl != null ? fmtPl(bestPl, currency) : '—'), colored: bestPl != null, positive: true },
+    { label: t('history.worstTrade'), value: isLoading ? '…' : (worstPl != null ? fmtPl(worstPl, currency) : '—'), colored: worstPl != null && worstPl < 0, positive: false },
     { label: t('history.profitFactor'), value: isLoading ? '…' : (profitFactor != null ? profitFactor.toFixed(2) : '—'), sub: profitFactor != null ? (profitFactor >= 1 ? '✓' : '✗') : '', colored: profitFactor != null, positive: (profitFactor ?? 0) >= 1 },
   ];
 
@@ -244,21 +229,21 @@ export function HistoryPage() {
                   <tr key={trade.id}>
                     <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
                     <td className="font-bold">{trade.symbolCode}</td>
-                    <td className="text-sm">{fmtTime(trade.openTime, lang)}</td>
-                    <td className="text-sm">{fmtTime(trade.closeTime, lang)}</td>
+                    <td className="text-sm"><bdi>{fmtTime(trade.openTime, lang)}</bdi></td>
+                    <td className="text-sm"><bdi>{fmtTime(trade.closeTime, lang)}</bdi></td>
                     <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.openPrice)}</td>
                     <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.closePrice)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
                     <td className="dir-ltr" style={{ textAlign: 'right', fontWeight: 600, color: grossPl != null ? (grossPl >= 0 ? 'var(--text-success)' : 'var(--text-danger)') : 'inherit' }}>
-                      {grossPl != null ? fmtPl(grossPl, currency, lang) : '—'}
+                      {grossPl != null ? fmtPl(grossPl, currency) : '—'}
                     </td>
                     <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>
-                      {trade.commission != null ? `−$${Number(trade.commission).toFixed(2)}` : '—'}
+                      {trade.commission != null ? `−${fmtMoney(trade.commission, currency)}` : '—'}
                     </td>
                     <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
-                      {pl != null ? `${pl >= 0 ? '+' : '-'}$${Math.abs(pl).toFixed(2)}` : '—'}
+                      {pl != null ? fmtPl(pl, currency) : '—'}
                     </td>
                   </tr>
                 );
@@ -272,13 +257,13 @@ export function HistoryPage() {
                   {t('history.totalPl')} ({withPl.length}):
                 </td>
                 <td className={`dir-ltr font-bold ${grossTradePl >= 0 ? 'text-success' : 'text-danger'}`}>
-                  {fmtPl(grossTradePl, currency, lang)}
+                  {fmtPl(grossTradePl, currency)}
                 </td>
                 <td className="dir-ltr font-bold text-danger">
-                  −${commissionTotal.toFixed(2)}
+                  −{fmtMoney(commissionTotal, currency)}
                 </td>
                 <td className={`dir-ltr font-bold ${netPl >= 0 ? 'text-success' : 'text-danger'}`}>
-                  {fmtPl(netPl, currency, lang)}
+                  {fmtPl(netPl, currency)}
                 </td>
               </tr>
             </tfoot>

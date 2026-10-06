@@ -16,6 +16,19 @@ export function isCryptoSymbol(symbol: string): boolean {
 /** Platform spread per side, matches backend PriceSpread.SPREAD_RATE. */
 export const SPREAD_RATE = 0.00015;
 
+/** Client commission per fill, matches backend TradingFees.CLIENT_PER_LOT and CLIENT_RATE. */
+export const COMMISSION_PER_LOT = 7;
+export const CRYPTO_COMMISSION_RATE = 0.002;
+/** On a winning close, open + close commission never exceeds this share of gross profit. */
+export const PROFIT_FEE_CAP = 0.2;
+
+/** Matches backend MarginLoanService. */
+export const CREDIT_LIMIT = 10000;
+export const DAILY_INTEREST_RATE = 0.005;
+export const MARGIN_CALL_LEVEL_PCT = 110;
+export const LIQUIDATION_LEVEL_PCT = 100;
+export const LEVERAGE = 100;
+
 export interface OrderCost {
   units: number;
   notional: number;
@@ -28,8 +41,8 @@ export interface OrderCost {
 export function estimateOrderCost(symbol: string, lots: number, price: number, leverage: number): OrderCost {
   const units = lots * getContractSize(symbol);
   const notional = units * price;
-  const margin = notional / (leverage > 0 ? leverage : 100);
-  const commission = isCryptoSymbol(symbol) ? notional * 0.002 : lots * 7;
+  const margin = notional / (leverage > 0 ? leverage : LEVERAGE);
+  const commission = isCryptoSymbol(symbol) ? notional * CRYPTO_COMMISSION_RATE : lots * COMMISSION_PER_LOT;
   return { units, notional, margin, commission, total: margin + commission };
 }
 

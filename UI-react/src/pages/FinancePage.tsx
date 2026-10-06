@@ -5,25 +5,55 @@ import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, useTransactions, useTransactionMutation, useCreditLedger } from '@/hooks/useApi';
+import { currencySymbol, fmtDateTime, fmtMoney } from '@/lib/format';
 
 type TxType = 'DEPOSIT' | 'WITHDRAWAL';
 
 const PRESETS = [500, 1000, 5000, 10000];
 
-function fmtMoney(n: unknown, currency = 'USD'): string {
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(n ?? 0));
+const METHOD_KEYS: Record<string, string> = {
+  card: 'finance.methodCard',
+  bank: 'finance.methodBank',
+  crypto: 'finance.methodCrypto',
+};
+
+type Tr = (key: string, vars?: Record<string, string | number>) => string;
+
+/** The server stores these notes as English text (MarginLoanService, AdminTradeController, AuthBootstrap); keep in sync. */
+const LEDGER_NOTES: [RegExp, string, ((m: RegExpMatchArray) => Record<string, string>)?][] = [
+  [/^Auto-borrow to cover trade shortfall$/, 'creditNote.autoBorrow'],
+  [/^Loss exceeded cash balance/, 'creditNote.lossToDebt'],
+  [/^Daily interest charge \(([\d.]+)%\/day\)$/, 'creditNote.interest', (m) => ({ pct: m[1] })],
+  [/^Repaid from deposit$/, 'creditNote.repayDeposit'],
+  [/^Auto-repay from trade settlement$/, 'creditNote.repaySettlement'],
+  [/^Liquidation complete — residual debt written off$/, 'creditNote.liquidationWriteOff'],
+  [/^Liquidation complete — (\d+) position\(s\) closed; residual debt written off$/, 'creditNote.liquidationClosedWriteOff', (m) => ({ count: m[1] })],
+  [/^Liquidation complete — (\d+) position\(s\) closed; margin level recovered$/, 'creditNote.liquidationRecovered', (m) => ({ count: m[1] })],
+  [/^Liquidation incomplete — (\d+) position\(s\) closed, (\d+) remain/, 'creditNote.liquidationIncomplete', (m) => ({ count: m[1], left: m[2] })],
+  [/^(Manual margin loan activation for demo|Standard margin credit line utilization)$/, 'creditNote.manual'],
+];
+
+function ledgerNote(t: Tr, note: string | null | undefined): string {
+  if (!note) return '—';
+  for (const [re, key, vars] of LEDGER_NOTES) {
+    const m = note.match(re);
+    if (m) return t(key, vars?.(m));
+  }
+  return note;
 }
 
-function fmtTime(iso: string | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** CommissionLedger writes "Commission EURUSD BUY". */
+function commissionNote(t: Tr, note: string | null | undefined): string | null {
+  const m = note?.match(/^Commission (\S+) (BUY|SELL)$/);
+  return m ? t('finance.commissionNote', { symbol: m[1], side: t(`badge.${m[2].toLowerCase()}`) }) : note ?? null;
+}
+
+/** Server codes become dictionary keys; an unknown code is still shown as-is. */
+function codeLabel(t: (key: string) => string, prefix: string, code: string | null | undefined): string {
+  if (!code) return '—';
+  const key = `${prefix}.${code.toLowerCase()}`;
+  const text = t(key);
+  return text && text !== key ? text : code;
 }
 
 interface TxModalProps {
@@ -34,7 +64,7 @@ interface TxModalProps {
   t: (key: string) => string;
 }
 
-function TxModal({ type, onClose, onConfirm, t }: TxModalProps) {
+function TxModal({ type, currency, onClose, onConfirm, t }: TxModalProps) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('card');
   const [preset, setPreset] = useState<number | null>(null);
@@ -108,21 +138,21 @@ function TxModal({ type, onClose, onConfirm, t }: TxModalProps) {
                 style={{ flex: 1, padding: '8px 4px', fontSize: '0.9rem' }}
                 onClick={() => selectPreset(v)}
               >
-                ${v.toLocaleString()}
+                <bdi>{fmtMoney(v, currency).replace(/\.00$/, '')}</bdi>
               </button>
             ))}
           </div>
 
           <div className="form-group">
             <label className="font-bold">{t('finance.modalAmount')}</label>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative' }} dir="ltr">
               <span
                 style={{
                   position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
                   color: 'var(--text-secondary)', fontWeight: 600,
                 }}
               >
-                $
+                {currencySymbol(currency)}
               </span>
               <input
                 type="number"
@@ -183,7 +213,7 @@ function TxModal({ type, onClose, onConfirm, t }: TxModalProps) {
  * @returns Finance page view layout
  */
 export function FinancePage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -208,7 +238,7 @@ export function FinancePage() {
   }, [overviewError, navigate, t, toast]);
 
   const currency = overview?.currency || 'USD';
-  const available = overview ? fmtMoney(overview.balance, currency) : '$0.00';
+  const available = fmtMoney(overview?.balance ?? 0, currency);
 
   const transactions = (Array.isArray(txData) ? txData : []).filter((r) => {
     const typ = (r.txType || '').toUpperCase();
@@ -338,7 +368,7 @@ export function FinancePage() {
                     const amt = Number(r.amount ?? 0);
                     const statusUpper = (r.status || '').toUpperCase();
                     const badgeClass =
-                      statusUpper === 'APPROVED'
+                      statusUpper === 'APPROVED' || statusUpper === 'COMPLETED'
                         ? 'badge-success'
                         : statusUpper === 'PENDING'
                           ? 'badge-warning'
@@ -351,20 +381,24 @@ export function FinancePage() {
 
                     return (
                       <tr key={r.id}>
-                        <td>{fmtTime(r.createdAt)}</td>
+                        <td><bdi>{fmtDateTime(r.createdAt, lang)}</bdi></td>
                         <td className={`font-bold ${isDeposit ? 'text-success' : 'text-danger'}`}>
                           {typeLabel}
                         </td>
                         <td className="font-bold">
-                          {isDeposit ? '+' : '-'}{fmtMoney(amt, currency)}
+                          <bdi>{isDeposit ? '+' : '−'}{fmtMoney(amt, currency)}</bdi>
                         </td>
-                        <td>{r.method || (isCommission ? r.note : null) || '—'}</td>
+                        <td>
+                          {r.method
+                            ? (METHOD_KEYS[r.method.toLowerCase()] ? t(METHOD_KEYS[r.method.toLowerCase()]) : r.method)
+                            : (isCommission ? commissionNote(t, r.note) : null) || '—'}
+                        </td>
                         <td>
                           <span
                             className={`badge ${badgeClass}`}
                             style={statusUpper === 'PENDING' ? { color: '#000' } : undefined}
                           >
-                            {r.status}
+                            {codeLabel(t, 'txStatus', r.status)}
                           </span>
                         </td>
                       </tr>
@@ -425,7 +459,7 @@ export function FinancePage() {
                     ) : (
                       ledger.map((entry) => (
                         <tr key={entry.id}>
-                          <td className="text-sm">{fmtTime(entry.createdAt)}</td>
+                          <td className="text-sm"><bdi>{fmtDateTime(entry.createdAt, lang)}</bdi></td>
                           <td>
                             <span
                               className="badge"
@@ -437,7 +471,7 @@ export function FinancePage() {
                                 fontSize: '0.75rem',
                               }}
                             >
-                              {entry.entryType}
+                              {codeLabel(t, 'creditEntry', entry.entryType)}
                             </span>
                           </td>
                           <td className="font-bold" style={{ color: entryColor(entry.entryType) }}>
@@ -450,7 +484,7 @@ export function FinancePage() {
                             {fmtMoney(Number(entry.balanceAfter ?? 0), currency)}
                           </td>
                           <td className="text-sm wrap" style={{ color: 'var(--text-secondary)', maxWidth: 280 }}>
-                            {entry.note ?? '—'}
+                            {ledgerNote(t, entry.note)}
                           </td>
                         </tr>
                       ))

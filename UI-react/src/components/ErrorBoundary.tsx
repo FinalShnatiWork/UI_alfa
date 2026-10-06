@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
+import { getLang, translate } from '@/lib/i18n';
 
 interface Props {
   children: ReactNode;
@@ -52,6 +53,8 @@ export class ErrorBoundary extends Component<Props, State> {
    */
   render() {
     if (this.state.hasError) {
+      // Sits outside I18nProvider, so it reads the saved language directly.
+      const tr = (key: string) => translate(getLang(), key);
       return (
         <div
           style={{
@@ -66,9 +69,9 @@ export class ErrorBoundary extends Component<Props, State> {
           }}
         >
           <div style={{ fontSize: '3rem' }}>⚠️</div>
-          <h2 style={{ margin: 0 }}>Something went wrong</h2>
+          <h2 style={{ margin: 0 }}>{tr('errorPage.title')}</h2>
           <p style={{ color: 'var(--text-secondary)', maxWidth: 480, margin: 0 }}>
-            {this.state.error?.message ?? 'An unexpected error occurred.'}
+            {tr('errorPage.text')}
           </p>
           <div style={{ display: 'flex', gap: 12 }}>
             <button
@@ -76,19 +79,19 @@ export class ErrorBoundary extends Component<Props, State> {
               className="btn btn-primary"
               onClick={() => this.setState({ hasError: false, error: null })}
             >
-              Try again
+              {tr('errorPage.retry')}
             </button>
             <button
               type="button"
               className="btn btn-outline-dark"
-              onClick={() => { window.location.href = '/dashboard'; }}
+              onClick={() => { window.location.hash = '#/dashboard'; this.setState({ hasError: false, error: null }); }}
             >
-              Go to Dashboard
+              {tr('errorPage.toDashboard')}
             </button>
           </div>
-          <details style={{ marginTop: 16, maxWidth: 600, textAlign: 'left' }}>
+          <details style={{ marginTop: 16, maxWidth: 600, textAlign: 'start' }} dir="ltr">
             <summary style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              Technical details
+              {tr('errorPage.details')}
             </summary>
             <pre
               style={{
@@ -101,7 +104,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 color: 'var(--text-secondary)',
               }}
             >
-              {this.state.error?.stack ?? 'No stack trace available.'}
+              {this.state.error?.message}
+              {'\n'}
+              {this.state.error?.stack}
             </pre>
           </details>
         </div>

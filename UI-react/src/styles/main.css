@@ -1023,19 +1023,19 @@ html[data-theme="light"] .trading-asset-select optgroup {
 }
 
 .toast--info {
-  border-left: 3px solid var(--blue);
+  border-inline-start: 3px solid var(--blue);
 }
 
 .toast--success {
-  border-left: 3px solid var(--green);
+  border-inline-start: 3px solid var(--green);
 }
 
 .toast--warning {
-  border-left: 3px solid var(--accent);
+  border-inline-start: 3px solid var(--accent);
 }
 
 .toast--error {
-  border-left: 3px solid var(--red);
+  border-inline-start: 3px solid var(--red);
 }
 
 @media (prefers-reduced-motion: reduce) {

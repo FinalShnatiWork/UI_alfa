@@ -10,8 +10,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthHeader } from '@/components/AuthHeader';
 
 const schema = z.object({
-  email: z.string().email('Invalid email'),
-  password: z.string().min(1, 'Password is required'),
+  email: z.string().email('validation.email'),
+  password: z.string().min(1, 'validation.passwordRequired'),
 });
 type FormData = z.infer<typeof schema>;
 
@@ -117,6 +117,7 @@ export function LoginPage() {
 
           <form
             className="text-left"
+            noValidate
             onSubmit={(e) => { void handleSubmit(onSubmit)(e); }}
           >
             <div className="form-group">
@@ -131,7 +132,7 @@ export function LoginPage() {
               />
               {errors.email && (
                 <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-                  {errors.email.message}
+                  {t(errors.email.message ?? '')}
                 </span>
               )}
             </div>
@@ -148,7 +149,7 @@ export function LoginPage() {
               />
               {errors.password && (
                 <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-                  {errors.password.message}
+                  {t(errors.password.message ?? '')}
                 </span>
               )}
             </div>

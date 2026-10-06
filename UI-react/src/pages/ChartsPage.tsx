@@ -10,6 +10,8 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { LoanOfferModal, type LoanOfferDetails } from '@/components/LoanOfferModal';
+import { fmtMoney, fmtNumber, NUM_LOCALE } from '@/lib/format';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { OrderConfirmModal, type OrderConfirmDetails } from '@/components/OrderConfirmModal';
 import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder, useOneClickTrading } from '@/hooks/useApi';
 import { MAX_LOTS, MIN_LOTS, SPREAD_RATE, stopsAreValid, volumeError } from '@/lib/tradeUtils';
@@ -238,14 +240,10 @@ function fmtP(n: unknown): string {
   // Fixed decimals within each band — variable maxFractionDigits made the
   // positions table under the chart jump on every live tick.
   const d = abs > 1000 ? 2 : abs >= 10 ? 4 : 5;
-  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-function fmtMoney2(n: unknown): string {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v)) return '—';
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+const fmtMoney2 = (n: unknown) => fmtNumber(n, 2);
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -317,9 +315,7 @@ export function ChartsPage() {
     ...queryLivePrices,
     ...chartLivePrices,
   };
-  const balance = overviewData
-    ? '$' + Number(overviewData.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
-    : '—';
+  const balance = overviewData ? fmtMoney(overviewData.balance, overviewData.currency) : '—';
   const positionQty = positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())
     ? Number(positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())!.quantity).toFixed(2)
     : '0.00';
@@ -649,7 +645,7 @@ export function ChartsPage() {
         let lastPriceVal = realPrice || (lastYahoo ? lastYahoo.close : defaultPrice(sym));
 
         const tickPrice = () => {
-          if (gen !== liveGenRef.current) return;
+          if (gen !== liveGenRef.current || document.hidden) return;
           // Generate a tiny random walk around the last price
           const jitterPercent = sym.includes('XAU') ? 0.00012 : 0.00004;
           const change = (Math.random() - 0.5) * lastPriceVal * jitterPercent;
@@ -677,7 +673,7 @@ export function ChartsPage() {
         synthTickRef.current = setInterval(tickPrice, 500);
 
         const pollPrice = async () => {
-          if (gen !== liveGenRef.current) return;
+          if (gen !== liveGenRef.current || document.hidden) return;
           try {
             const r2 = await fetch(`/api/market/price/${encodeURIComponent(sym)}`);
             const pd = r2.ok ? await r2.json() as { price?: number } : null;
@@ -717,7 +713,7 @@ export function ChartsPage() {
 
   const [loanOffer, setLoanOffer] = useState<LoanOfferDetails | null>(null);
   const [orderConfirm, setOrderConfirm] = useState<OrderConfirmDetails | null>(null);
-  const [closeConfirm, setCloseConfirm] = useState<{ id: number; symbol: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ message: string; run: () => void } | null>(null);
   const [oneClick, setOneClick] = useOneClickTrading();
 
   /** Validates the ticket, then either opens the confirmation window or sends straight away. */
@@ -797,6 +793,7 @@ export function ChartsPage() {
             dailyInterestRate: Number(data.dailyInterestRate ?? 0.005),
             symbol,
             side,
+            currency: overviewData?.currency,
             onConfirm: () => {
               setLoanOffer(null);
               void placeOrder(side, true);
@@ -967,7 +964,7 @@ export function ChartsPage() {
                     <div className="text-xs text-muted mb-4">{t('trading.livePriceLabel')}</div>
                     <div className="live-price-text">{livePrice}</div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ textAlign: 'end' }}>
                     <div className="text-xs text-muted mb-4">{t('trading.changeLabel')}</div>
                     <div className="live-change-text" style={{ color: liveChangePct >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)' }}>
                       {liveChange}
@@ -1140,7 +1137,10 @@ export function ChartsPage() {
                               aria-label={t('common.close')} title={t('common.close')}
                               onClick={() => {
                                 if (oneClick) void closeInlinePosition(p.id, p.symbolCode);
-                                else setCloseConfirm({ id: p.id, symbol: p.symbolCode });
+                                else setConfirmAction({
+                                  message: t('confirm.closePosition', { symbol: p.symbolCode }),
+                                  run: () => void closeInlinePosition(p.id, p.symbolCode),
+                                });
                               }}>✕</button>
                           </td>
                         </tr>
@@ -1191,7 +1191,13 @@ export function ChartsPage() {
                               className="btn btn-outline-danger"
                               style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                               disabled={isCancelling}
-                              onClick={() => void handleCancelOrder(o.id, o.symbolCode)}
+                              aria-label={t('common.cancel')}
+                              title={t('common.cancel')}
+                              onClick={() => {
+                                const run = () => void handleCancelOrder(o.id, o.symbolCode);
+                                if (oneClick) run();
+                                else setConfirmAction({ message: t('confirm.cancelOrder', { symbol: o.symbolCode }), run });
+                              }}
                             >
                               {isCancelling ? '...' : '✕'}
                             </button>
@@ -1219,22 +1225,12 @@ export function ChartsPage() {
           }}
         />
       )}
-      {closeConfirm && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={() => setCloseConfirm(null)}
-        >
-          <div className="card" role="dialog" aria-modal="true" style={{ maxWidth: 380, width: '90%', padding: 30, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-            <p style={{ marginBottom: 24, fontSize: '1.05rem' }}>{t('confirm.closePosition', { symbol: closeConfirm.symbol })}</p>
-            <div className="flex-gap" style={{ justifyContent: 'center' }}>
-              <button type="button" className="btn btn-danger" autoFocus
-                onClick={() => { const c = closeConfirm; setCloseConfirm(null); void closeInlinePosition(c.id, c.symbol); }}>
-                {t('common.confirm')}
-              </button>
-              <button type="button" className="btn btn-outline-dark" onClick={() => setCloseConfirm(null)}>{t('common.cancel')}</button>
-            </div>
-          </div>
-        </div>
+      {confirmAction && (
+        <ConfirmModal
+          message={confirmAction.message}
+          onConfirm={() => { const c = confirmAction; setConfirmAction(null); c.run(); }}
+          onCancel={() => setConfirmAction(null)}
+        />
       )}
     </>
   );

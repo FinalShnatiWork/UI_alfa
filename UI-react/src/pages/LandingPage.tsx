@@ -23,6 +23,9 @@ export function LandingPage() {
     <>
       <AuthHeader>
         <div className="flex-gap">
+          <Link to="/pricing" className="btn btn-outline">
+            {t('nav.pricing')}
+          </Link>
           <Link to="/login" className="btn btn-outline">
             {t('landing.logIn')}
           </Link>
@@ -120,7 +123,7 @@ export function LandingPage() {
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
             gap: 30,
             marginBottom: 60,
-            textAlign: 'left',
+            textAlign: 'start',
           }}
         >
           <div className="card" style={{ padding: 30, borderTop: '4px solid var(--primary)' }}>
@@ -146,6 +149,9 @@ export function LandingPage() {
             <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
               {t('landing.commissions.text')}
             </p>
+            <Link to="/pricing" style={{ color: 'var(--blue)', fontWeight: 600, textDecoration: 'none' }}>
+              {t('pricing.more')}
+            </Link>
           </div>
         </div>
 

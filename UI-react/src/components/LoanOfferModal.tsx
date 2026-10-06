@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useI18n } from '@/hooks/useI18n';
+import { fmtMoney } from '@/lib/format';
 
 export interface LoanOfferDetails {
   shortfall: number;
@@ -8,6 +10,7 @@ export interface LoanOfferDetails {
   dailyInterestRate: number;
   symbol: string;
   side: string;
+  currency?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -20,30 +23,47 @@ export const LoanOfferModal: React.FC<LoanOfferDetails> = ({
   dailyInterestRate,
   symbol,
   side,
+  currency = 'USD',
   onConfirm,
   onCancel,
 }) => {
-  const dailyRatePct = (dailyInterestRate * 100).toFixed(1);
+  const { t } = useI18n();
+  const pct = (dailyInterestRate * 100).toFixed(1);
+  const sideLabel = t(`badge.${side.toLowerCase()}`) || side;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  const row = (label: string, value: string, style?: React.CSSProperties, labelStyle?: React.CSSProperties) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10, ...style }}>
+      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', ...labelStyle }}>{label}</span>
+      <bdi style={{ fontWeight: 600 }}>{value}</bdi>
+    </div>
+  );
 
   return (
     <div
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        inset: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.75)',
         backdropFilter: 'blur(4px)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'Center',
+        justifyContent: 'center',
         zIndex: 9999,
         padding: 20,
       }}
+      onClick={onCancel}
     >
       <div
         className="card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="loan-offer-title"
         style={{
           maxWidth: 480,
           width: '100%',
@@ -53,59 +73,44 @@ export const LoanOfferModal: React.FC<LoanOfferDetails> = ({
           border: '1px solid var(--border-color)',
           background: 'var(--bg-card, #181c24)',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <span style={{ fontSize: '2rem' }}>📜</span>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Margin Loan Required</h3>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              Insufficient Cash Balance for {side} {symbol}
-            </span>
-          </div>
+        <div style={{ marginBottom: 16 }}>
+          <h3 id="loan-offer-title" style={{ margin: 0, fontSize: '1.25rem' }}>{t('loanOffer.title')}</h3>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            {t('loanOffer.subtitle', { side: sideLabel, symbol })}
+          </span>
         </div>
 
         <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 20 }}>
-          Your available cash balance is insufficient to cover the required margin for this trade.
-          You can cover the shortfall using your Credit Line.
+          {t('loanOffer.text')}
         </p>
 
         <div style={{ background: 'var(--bg-alt, #0f1218)', padding: '16px 20px', borderRadius: 12, marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Required Margin + Fee:</span>
-            <span style={{ fontWeight: 600 }}>${required.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Your Cash Balance:</span>
-            <span style={{ fontWeight: 600, color: 'var(--yellow, #e6a23c)' }}>
-              ${cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
+          {row(t('loanOffer.required'), fmtMoney(required, currency))}
+          {row(t('loanOffer.cash'), fmtMoney(cashBalance, currency))}
           <hr style={{ borderColor: 'var(--border-color)', opacity: 0.3, margin: '10px 0' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--blue, #409eff)', fontWeight: 600 }}>Margin Loan Needed:</span>
-            <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--blue, #409eff)' }}>
-              ${shortfall.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-            <span>Interest Rate:</span>
-            <span>{dailyRatePct}% / day</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            <span>Credit Limit Available:</span>
-            <span>${creditLimit.toLocaleString()}</span>
-          </div>
+          {row(
+            t('loanOffer.loan'),
+            fmtMoney(shortfall, currency),
+            { color: 'var(--blue, #409eff)', fontSize: '1.1rem' },
+            { color: 'var(--blue, #409eff)', fontWeight: 600 },
+          )}
+          {row(t('loanOffer.rate'), t('common.pctPerDay', { pct }), { fontSize: '0.78rem', marginBottom: 4 })}
+          {row(t('loanOffer.limit'), fmtMoney(creditLimit, currency), { fontSize: '0.78rem', marginBottom: 0 })}
         </div>
 
         <div style={{ display: 'flex', gap: 12 }}>
           <button
+            type="button"
             onClick={onCancel}
             className="btn btn-secondary"
             style={{ flex: 1, padding: '12px', borderRadius: 8 }}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             className="btn btn-primary"
             style={{
@@ -116,7 +121,7 @@ export const LoanOfferModal: React.FC<LoanOfferDetails> = ({
               fontWeight: 600,
             }}
           >
-            Accept Loan &amp; Trade
+            {t('loanOffer.accept')}
           </button>
         </div>
       </div>

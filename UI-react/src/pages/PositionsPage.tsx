@@ -5,9 +5,11 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
-import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder, useOneClickTrading } from '@/hooks/useApi';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder, useOneClickTrading, useBrokerOverview } from '@/hooks/useApi';
 import type { Position, BrokerOrder } from '@/types/api';
 import { pairOrders } from '@/lib/tradeUtils';
+import { fmtDateTime, fmtNumber, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
 
 type Tab = 'open' | 'closed' | 'pending';
 
@@ -17,51 +19,10 @@ function fmtPrice(n: unknown): string {
   const abs = Math.abs(v);
   // Fixed decimals within each magnitude band so live ticks don't change string length.
   const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
-  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-function fmtPnl(n: unknown): string {
-  const v = Number(n ?? 0);
-  return Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
-}
-
-function fmtQty(n: unknown): string {
-  const v = Number(n ?? 0);
-  return Number.isFinite(v) ? v.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '0.0000';
-}
-
-function fmtTime(iso: string | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-interface ConfirmModalProps {
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  confirmLabel: string;
-  cancelLabel: string;
-}
-
-function ConfirmModal({ message, onConfirm, onCancel, confirmLabel, cancelLabel }: ConfirmModalProps) {
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onCancel}
-    >
-      <div className="card" style={{ maxWidth: 380, width: '90%', padding: 30, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-        <p style={{ marginBottom: 24, fontSize: '1.05rem' }}>{message}</p>
-        <div className="flex-gap" style={{ justifyContent: 'center' }}>
-          <button type="button" className="btn btn-danger" onClick={onConfirm}>{confirmLabel}</button>
-          <button type="button" className="btn btn-outline-dark" onClick={onCancel}>{cancelLabel}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+const fmtQty = (n: unknown) => fmtNumber(n, 4);
 
 /**
  * Positions Page displays active open positions, working pending orders, and closed trades history.
@@ -71,14 +32,17 @@ function ConfirmModal({ message, onConfirm, onCancel, confirmLabel, cancelLabel 
  * @returns Positions management page layout
  */
 export function PositionsPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const fmtTime = (iso: string | undefined) => fmtDateTime(iso, lang);
+  const { data: overview } = useBrokerOverview();
+  const currency = overview?.currency || 'USD';
   const toast = useToast();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<Tab>('open');
   const [search, setSearch] = useState('');
   const [closing, setClosing] = useState<number | null>(null);
-  const [confirm, setConfirm] = useState<{ position: Position } | null>(null);
+  const [confirm, setConfirm] = useState<{ message: string; run: () => void } | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
 
   const { data: positionsData, isLoading, error } = usePositions();
@@ -134,7 +98,7 @@ export function PositionsPage() {
       const res = await apiPostJson(`/api/broker/positions/${pos.id}/close`, {});
       const data = (await res.json()) as { ok: boolean; closePnl?: string; status?: string; error?: string };
       if (res.ok && data.ok) {
-        const msg = t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
+        const msg = t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (${fmtSignedMoney(data.closePnl, currency)})` : '');
         toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {
@@ -153,10 +117,8 @@ export function PositionsPage() {
 
       {confirm && (
         <ConfirmModal
-          message={t('confirm.closePosition', { symbol: confirm.position.symbolCode })}
-          confirmLabel={t('common.confirm')}
-          cancelLabel={t('common.cancel')}
-          onConfirm={() => { const pos = confirm.position; setConfirm(null); void closePosition(pos); }}
+          message={confirm.message}
+          onConfirm={() => { const c = confirm; setConfirm(null); c.run(); }}
           onCancel={() => setConfirm(null)}
         />
       )}
@@ -257,7 +219,7 @@ export function PositionsPage() {
                         <td className="dir-ltr" style={{ textAlign: 'right' }}>
                           {pnl != null ? (
                             <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                              {pnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(pnl))}
+                              {fmtSignedMoney(pnl, currency)}
                             </span>
                           ) : (
                             <span className="text-muted">—</span>
@@ -269,7 +231,7 @@ export function PositionsPage() {
                           className="btn btn-danger"
                           style={{ padding: '6px 12px', fontSize: '0.8rem' }}
                           disabled={isClosing}
-                          onClick={() => { if (oneClick) void closePosition(p); else setConfirm({ position: p }); }}
+                          onClick={() => { if (oneClick) void closePosition(p); else setConfirm({ message: t('confirm.closePosition', { symbol: p.symbolCode }), run: () => void closePosition(p) }); }}
                         >
                           {isClosing ? t('common.closing') : t('common.close')}
                         </button>
@@ -296,7 +258,7 @@ export function PositionsPage() {
                       {t('table.totalPl')}
                     </td>
                     <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
-                      {totalPnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(totalPnl))}
+                      {fmtSignedMoney(totalPnl, currency)}
                     </td>
                     <td />
                   </tr>
@@ -342,15 +304,15 @@ export function PositionsPage() {
                     <tr key={trade.id}>
                       <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
                       <td className="font-bold">{trade.symbolCode}</td>
-                      <td className="text-sm">{fmtTime(trade.openTime)}</td>
-                      <td className="text-sm">{fmtTime(trade.closeTime)}</td>
+                      <td className="text-sm"><bdi>{fmtTime(trade.openTime)}</bdi></td>
+                      <td className="text-sm"><bdi>{fmtTime(trade.closeTime)}</bdi></td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.openPrice)}</td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.closePrice)}</td>
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
                       <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
                       <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
-                        {pl != null ? `${pl >= 0 ? '+' : '-'}$${fmtPnl(Math.abs(pl))}` : '—'}
+                        {pl != null ? fmtSignedMoney(pl, currency) : '—'}
                       </td>
                     </tr>
                   );
@@ -407,14 +369,18 @@ export function PositionsPage() {
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(o.quantity)}</td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.stopPrice)}</td>
-                      <td className="text-sm">{fmtTime(o.createdAt)}</td>
+                      <td className="text-sm"><bdi>{fmtTime(o.createdAt)}</bdi></td>
                       <td style={{ textAlign: 'center' }}>
                         <button
                           type="button"
                           className="btn btn-outline-danger"
                           style={{ padding: '5px 12px', fontSize: '0.8rem' }}
                           disabled={isCancelling}
-                          onClick={() => void handleCancelOrder(o.id, o.symbolCode)}
+                          onClick={() => {
+                            const run = () => void handleCancelOrder(o.id, o.symbolCode);
+                            if (oneClick) run();
+                            else setConfirm({ message: t('confirm.cancelOrder', { symbol: o.symbolCode }), run });
+                          }}
                         >
                           {isCancelling ? '...' : t('common.cancel')}
                         </button>

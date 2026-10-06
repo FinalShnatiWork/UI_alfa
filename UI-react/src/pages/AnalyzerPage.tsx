@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { AssetIcon } from '@/components/AssetIcon';
+import { NUM_LOCALE } from '@/lib/format';
 
 interface IndicatorStatus {
     status: string;
@@ -343,19 +344,19 @@ function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult
         explanationsEn: [
             `RSI is positioned at ${asset.rsi.toFixed(1)}, showing healthy momentum without extreme exhaustion.`,
             `MACD histogram demonstrates ${isBuy ? 'positive upward divergence' : isSell ? 'negative downward pressure' : 'neutral consolidation'}.`,
-            `Current price ($${price.toLocaleString()}) trades ${price > sma20 ? 'above' : 'below'} both the 20-period and 50-period moving averages.`,
+            `Current price ($${price.toLocaleString(NUM_LOCALE)}) trades ${price > sma20 ? 'above' : 'below'} both the 20-period and 50-period moving averages.`,
             `Bollinger Bands volatility structure indicates ${isBuy ? 'sustained bullish continuation' : isSell ? 'downside correction risk' : 'stable trading ranges'}.`,
         ],
         explanationsHe: [
             `מדד ה-RSI עומד על ${asset.rsi.toFixed(1)}, מציג מומנטום יציב ובריא ללא קיצוניות חריגה.`,
             `היסטוגרמת MACD מציגה ${isBuy ? 'התרחבות חיובית כלפי מעלה ומומנטום קונים' : isSell ? 'לחץ מכירות והיחלשות קונים' : 'קונסולידציה והמתנה לכיוון ברור'}.`,
-            `המחיר הנוכחי ($${price.toLocaleString()}) נסחר ${price > sma20 ? 'מעל' : 'מתחת'} לממוצעים הנעים לתקופות 20 ו-50 ימים.`,
+            `המחיר הנוכחי ($${price.toLocaleString(NUM_LOCALE)}) נסחר ${price > sma20 ? 'מעל' : 'מתחת'} לממוצעים הנעים לתקופות 20 ו-50 ימים.`,
             `רצועות בולינגר מראות ${isBuy ? 'פריצה מבוקרת ועוצמה במגמת העלייה' : isSell ? 'סיכון להמשך ירידה ובדיקת תמיכות' : 'תנודתיות מאוזנת בתוך גבולות הערוץ'}.`,
         ],
         explanationsRu: [
             `RSI на уровне ${asset.rsi.toFixed(1)}: импульс ровный, без крайнего перегрева.`,
             `Гистограмма MACD показывает ${isBuy ? 'рост вверх и импульс покупателей' : isSell ? 'давление продавцов' : 'консолидацию, явного направления нет'}.`,
-            `Текущая цена ($${price.toLocaleString()}) ${price > sma20 ? 'выше' : 'ниже'} скользящих средних 20 и 50.`,
+            `Текущая цена ($${price.toLocaleString(NUM_LOCALE)}) ${price > sma20 ? 'выше' : 'ниже'} скользящих средних 20 и 50.`,
             `Полосы Боллинджера: ${isBuy ? 'контролируемый пробой и сила восходящего движения' : isSell ? 'риск продолжения снижения' : 'спокойная волатильность внутри канала'}.`,
         ],
         summary: isBuy
@@ -1079,7 +1080,7 @@ export function AnalyzerPage() {
                                                         {pick(lang, asset.nameEn, asset.nameHe, asset.nameRu)}
                                                     </div>
                                                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                                                        {asset.price ? `$${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
+                                                        {asset.price ? `$${asset.price.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1241,7 +1242,7 @@ export function AnalyzerPage() {
                                         </div>
                                         <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--accent-strong)', margin: '8px 0 16px', letterSpacing: '-0.02em' }}>
                                             {typeof analysis.price === 'number'
-                                                ? `$${analysis.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`
+                                                ? `$${analysis.price.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`
                                                 : '—'}
                                         </div>
                                         <button
@@ -1338,13 +1339,13 @@ export function AnalyzerPage() {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
                                                 <span style={{ color: 'var(--text-secondary)' }}>SMA 20:</span>
                                                 <span style={{ fontWeight: 700, color: analysis.price > (analysis.indicators?.sma?.sma20 || 0) ? 'var(--green)' : 'var(--red)' }}>
-                                                    {typeof analysis.indicators?.sma?.sma20 === 'number' ? `$${analysis.indicators.sma.sma20.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
+                                                    {typeof analysis.indicators?.sma?.sma20 === 'number' ? `$${analysis.indicators.sma.sma20.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
                                                 </span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0' }}>
                                                 <span style={{ color: 'var(--text-secondary)' }}>SMA 50:</span>
                                                 <span style={{ fontWeight: 700, color: analysis.price > (analysis.indicators?.sma?.sma50 || 0) ? 'var(--green)' : 'var(--red)' }}>
-                                                    {typeof analysis.indicators?.sma?.sma50 === 'number' ? `$${analysis.indicators.sma.sma50.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
+                                                    {typeof analysis.indicators?.sma?.sma50 === 'number' ? `$${analysis.indicators.sma.sma50.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
                                                 </span>
                                             </div>
                                         </div>
@@ -1366,15 +1367,15 @@ export function AnalyzerPage() {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
                                                 <span style={{ color: 'var(--text-secondary)' }}>Upper Band:</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.upper === 'number' ? `$${analysis.indicators.bb.upper.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
+                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.upper === 'number' ? `$${analysis.indicators.bb.upper.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
                                                 <span style={{ color: 'var(--text-secondary)' }}>Middle (Basis):</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.middle === 'number' ? `$${analysis.indicators.bb.middle.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
+                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.middle === 'number' ? `$${analysis.indicators.bb.middle.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0' }}>
                                                 <span style={{ color: 'var(--text-secondary)' }}>Lower Band:</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.lower === 'number' ? `$${analysis.indicators.bb.lower.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
+                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.lower === 'number' ? `$${analysis.indicators.bb.lower.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
                                             </div>
                                         </div>
                                     </div>

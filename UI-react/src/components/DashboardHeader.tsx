@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { to: '/analyzer', key: 'nav.analyzer' },
   { to: '/finance', key: 'nav.finance' },
   { to: '/history', key: 'nav.history' },
+  { to: '/pricing', key: 'nav.pricing' },
   { to: '/account', key: 'nav.account' },
   { to: '/settings', key: 'nav.settings' },
 ] as const;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/hooks/useI18n';
 import { estimateOrderCost } from '@/lib/tradeUtils';
+import { fmtMoney, NUM_LOCALE } from '@/lib/format';
 
 export interface OrderConfirmDetails {
   symbol: string;
@@ -24,11 +25,11 @@ interface Props extends OrderConfirmDetails {
 function fmtPrice(v: number): string {
   const abs = Math.abs(v);
   const d = abs > 1000 ? 2 : abs >= 10 ? 4 : 5;
-  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 function fmtUsd(v: number): string {
-  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v < 0 ? `−${fmtMoney(-v)}` : fmtMoney(v);
 }
 
 export function OrderConfirmModal(props: Props) {
@@ -51,8 +52,8 @@ export function OrderConfirmModal(props: Props) {
     [t('confirmOrder.side'), sideLabel, sideColor],
     [t('trading.orderType'), t(`trading.${orderType.toLowerCase()}`)],
     [t('table.volume'), t('confirmOrder.volumeValue', {
-      lots: lots.toLocaleString(undefined, { maximumFractionDigits: 2 }),
-      units: cost.units.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+      lots: lots.toLocaleString(NUM_LOCALE, { maximumFractionDigits: 2 }),
+      units: cost.units.toLocaleString(NUM_LOCALE, { maximumFractionDigits: 2 }),
     })],
     [orderType === 'MARKET' ? t('confirmOrder.priceMarket') : t('confirmOrder.priceLimit'),
       (orderType === 'MARKET' ? '≈ ' : '') + fmtPrice(price)],

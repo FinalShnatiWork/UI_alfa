@@ -7,29 +7,9 @@ import { DashboardHeader } from '@/components/DashboardHeader';
 import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, usePositions, useNotifications, useLivePrices, useTradeHistory } from '@/hooks/useApi';
 import { getContractSize } from '@/lib/api';
+import { fmtMoney, fmtNumber, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
 
-/**
- * Formatting utility to render numeric values as currency localized strings.
- *
- * @param value raw numeric input value
- * @param currency target currency code, defaults to USD
- * @returns formatted currency string
- */
-function fmtMoney(value: unknown, currency = 'USD'): string {
-  const n = Number(value ?? 0);
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
-function fmtPnl(n: unknown): string {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v)) return '—';
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+const fmtPnl = (n: unknown) => fmtNumber(n, 2);
 
 /**
  * Formatting utility to render numeric values as price quotes with up to 5 decimals.
@@ -44,7 +24,7 @@ function fmtPrice(n: unknown): string {
   const abs = Math.abs(v);
   // Fixed decimals within each magnitude band so live ticks don't change string length.
   const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
-  return v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 /**
@@ -129,7 +109,7 @@ export function DashboardPage() {
   const freeMargin = overview ? fmtMoney(liveFreeMargin, currency) : '—';
 
   const pnl = overview ? (totalRealizedPnl + livePnl) : 0;
-  const pl = overview ? `${pnl >= 0 ? '+' : ''}${fmtPnl(pnl)}` : '—';
+  const pl = overview ? fmtSignedMoney(pnl, currency) : '—';
   const plPositive = pnl >= 0;
 
   const borrowedBalance = overview ? Number(overview.borrowedBalance ?? 0) : 0;
@@ -138,7 +118,7 @@ export function DashboardPage() {
   const hasDebt = borrowedBalance > 0;
   const interestAccrued = overview && hasDebt ? Number(overview.interestOnOpenDebt ?? 0) : 0;
   const dailyInterestRate = overview && overview.dailyInterestRate ? Number(overview.dailyInterestRate) : 0.005;
-  const dailyInterestStr = `${(dailyInterestRate * 100).toFixed(1)}% / day`;
+  const dailyInterestStr = t('common.pctPerDay', { pct: (dailyInterestRate * 100).toFixed(1) });
 
   const isMarginCall = marginLevelPct != null && marginLevelPct < 110;
   const isLiquidationRisk = marginLevelPct != null && marginLevelPct < 100;
