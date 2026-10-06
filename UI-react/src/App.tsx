@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // ReactQueryDevtools intentionally excluded from production build
 import { I18nProvider } from '@/hooks/useI18n';
@@ -44,7 +44,7 @@ export function App() {
       <ErrorBoundary>
         <I18nProvider>
           <ToastProvider>
-            <BrowserRouter>
+            <HashRouter>
               <AuthProvider>
                 <PreferenceSync>
                 <Routes>
@@ -69,7 +69,7 @@ export function App() {
                 </Routes>
                 </PreferenceSync>
               </AuthProvider>
-            </BrowserRouter>
+            </HashRouter>
           </ToastProvider>
         </I18nProvider>
       </ErrorBoundary>

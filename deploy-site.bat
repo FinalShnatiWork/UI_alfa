@@ -18,12 +18,15 @@ if %ERRORLEVEL% NEQ 0 (
 
 :: Step 2: Build the React Application
 echo [1/2] Building React production bundle...
-call npm run build
+call npm.cmd run build
 if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [ERROR] React build failed.
-    pause
-    exit /b 1
+    call npm run build
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo [ERROR] React build failed.
+        pause
+        exit /b 1
+    )
 )
 
 :: Create 404 fallback for React Router and .nojekyll
@@ -33,12 +36,15 @@ echo.
 
 :: Step 3: Publish to gh-pages branch on GitHub
 echo [2/2] Publishing to GitHub Pages (branch gh-pages)...
-call npx --yes gh-pages -d dist -m "Deploy to GitHub Pages"
+call npx.cmd --yes gh-pages -d dist -m "Deploy to GitHub Pages"
 if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [ERROR] Publishing to GitHub Pages failed.
-    pause
-    exit /b 1
+    call npx --yes gh-pages -d dist -m "Deploy to GitHub Pages"
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo [ERROR] Publishing to GitHub Pages failed.
+        pause
+        exit /b 1
+    )
 )
 
 echo.
