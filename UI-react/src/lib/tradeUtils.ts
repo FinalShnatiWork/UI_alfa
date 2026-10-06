@@ -43,6 +43,16 @@ export function stopsAreValid(side: 'BUY' | 'SELL', price: number, stopLoss?: nu
   return true;
 }
 
+/** Volume rules, same as backend ContractSpecs. */
+export const MIN_LOTS = 0.01;
+export const MAX_LOTS = 100;
+
+export function volumeError(lots: number): 'range' | 'step' | null {
+  if (!(lots >= MIN_LOTS && lots <= MAX_LOTS)) return 'range';
+  if (Math.abs(lots * 100 - Math.round(lots * 100)) > 1e-6) return 'step';
+  return null;
+}
+
 export interface PairedTrade {
   id: number;
   symbolCode: string;

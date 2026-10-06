@@ -438,7 +438,7 @@ public class AdminTradeController {
       if (acc.getInterestAccruedTotal() == null || acc.getInterestAccruedTotal().compareTo(BigDecimal.ZERO) == 0) {
         acc.setInterestAccruedTotal(new BigDecimal("17.50"));
       }
-      acc.setLastInterestAt(Instant.now());
+      acc.setLastInterestAt(newBorrowed.signum() > 0 ? Instant.now() : null);
       accountRepo.save(acc);
 
       MarginLoanLedger entry = new MarginLoanLedger();

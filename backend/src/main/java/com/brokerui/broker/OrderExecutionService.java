@@ -325,7 +325,7 @@ public class OrderExecutionService {
     // A stop or take-profit is a forced close. Offer it to the internal book for the
     // same short window as a manual close, so another client can take it.
     if (nettingService != null) {
-      nettingService.offerClose(posId);
+      nettingService.offerClose(posId, reason);
       return;
     }
     // Locks are always taken account-first, then position — the same order used by
@@ -371,7 +371,7 @@ public class OrderExecutionService {
       Notification notif = new Notification();
       notif.setUser(ta.getUser());
       notif.setNotifType("TRADE");
-      notif.setTitle(reason.equals("STOP_LOSS") ? "notification.tradeClosed.slTriggered" : "notification.tradeClosed.tpTriggered");
+      notif.setTitle(com.brokerui.broker.netting.FillBooking.closeNotificationTitle(reason));
       notif.setBody(String.format(java.util.Locale.US, "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",
           pos.getSide(), qty.doubleValue(), pos.getSymbolCode(), closePrice.doubleValue(), netPnl.doubleValue()));
       notificationRepo.save(notif);

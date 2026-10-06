@@ -12,7 +12,7 @@ import { BackPageHeader } from '@/components/BackPageHeader';
 import { LoanOfferModal, type LoanOfferDetails } from '@/components/LoanOfferModal';
 import { OrderConfirmModal, type OrderConfirmDetails } from '@/components/OrderConfirmModal';
 import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder, useOneClickTrading } from '@/hooks/useApi';
-import { SPREAD_RATE, stopsAreValid } from '@/lib/tradeUtils';
+import { MAX_LOTS, MIN_LOTS, SPREAD_RATE, stopsAreValid, volumeError } from '@/lib/tradeUtils';
 
 import type { PlaceOrderResponse, ClosePositionResponse } from '@/types/api';
 
@@ -724,6 +724,13 @@ export function ChartsPage() {
   function requestOrder(side: 'BUY' | 'SELL') {
     const qty = Number(volume);
     if (!symbol || !qty || qty <= 0) { toast.show(t('trading.errBadOrder'), { variant: 'warning' }); return; }
+    const volErr = volumeError(qty);
+    if (volErr) {
+      toast.show(volErr === 'range'
+        ? t('trading.errVolumeRange', { min: MIN_LOTS, max: MAX_LOTS })
+        : t('trading.errVolumeStep'), { variant: 'warning' });
+      return;
+    }
     if (orderType !== 'MARKET' && (!entryPrice || Number(entryPrice) <= 0)) {
       toast.show(t('trading.errEntryPriceRequired'), { variant: 'warning' }); return;
     }
@@ -806,6 +813,12 @@ export function ChartsPage() {
           price_unavailable: t('trading.errPriceUnavailable'),
           limit_price_required: t('trading.errEntryPriceRequired'),
           invalid_stops: t('trading.errInvalidStops'),
+          volume_out_of_range: t('trading.errVolumeRange', { min: MIN_LOTS, max: MAX_LOTS }),
+          volume_step: t('trading.errVolumeStep'),
+          symbol_not_tradable: t('trading.errSymbolNotTradable'),
+          funds_pending_withdrawal: t('trading.errPendingWithdrawal', {
+            available: Number((data as { available?: number }).available ?? 0).toFixed(2),
+          }),
         };
         const message = (data.error && knownErrors[data.error]) || (t('trading.errOrderFailed') + ': ' + (data.error ?? ''));
         toast.show(message, { variant: 'error' });
@@ -1001,7 +1014,8 @@ export function ChartsPage() {
                 <div className="flex-gap">
                   <button type="button" className="btn btn-outline-dark" style={{ width: 44 }}
                     onClick={() => { const v = parseFloat(volume) || 0.1; if (v > 0.1) setVolume((v - 0.1).toFixed(2)); }}>−</button>
-                  <input type="number" className="form-control text-center font-bold" step="0.1"
+                  <input type="number" className="form-control text-center font-bold" step="0.01"
+                    min={MIN_LOTS} max={MAX_LOTS}
                     value={volume} onChange={(e) => setVolume(e.target.value)} />
                   <button type="button" className="btn btn-outline-dark" style={{ width: 44 }}
                     onClick={() => setVolume(((parseFloat(volume) || 0) + 0.1).toFixed(2))}>+</button>

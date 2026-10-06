@@ -414,12 +414,21 @@ public class BrokerApiController {
     String orderType = body.orderType() == null ? "MARKET" : body.orderType().trim().toUpperCase();
     BigDecimal qty = body.quantity();
 
-    if (qty.compareTo(BigDecimal.ZERO) <= 0) {
-      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_quantity")));
+    String volumeError = ContractSpecs.volumeError(qty);
+    if (volumeError != null) {
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", volumeError,
+          "minLots", ContractSpecs.MIN_LOTS, "maxLots", ContractSpecs.MAX_LOTS)));
     }
     if (!"BUY".equals(side) && !"SELL".equals(side)) {
       return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "unsupported_side")));
     }
+    // Unknown codes would fall back to the forex contract size (100 000) and get a huge margin.
+    if (!ContractSpecs.isTradable(symbolCode)
+        || symbolRepo.findByCode(symbolCode).map(s -> !s.isEnabled()).orElse(true)) {
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "symbol_not_tradable")));
+    }
+    // Cash already requested for withdrawal belongs to the client's payout, not to new trades.
+    BigDecimal pendingOut = pendingWithdrawals(ta.getId());
 
     // ── Pending (LIMIT / STOP) orders – basic validation + fund reservation ─
     if (!"MARKET".equals(orderType)) {
@@ -472,7 +481,11 @@ public class BrokerApiController {
 
       BigDecimal contractSize = getContractSize(symbolCode);
       BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-      BigDecimal reserved = targetPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      // Margin and commission, like a market order; whatever the fill does not use is returned.
+      BigDecimal reserved = targetPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP)
+          .add(TradingFees.calculateCommission(symbolCode, qty, targetPrice));
+      ResponseEntity<?> held = withdrawalHold(ta, pendingOut, reserved);
+      if (held != null) return done(held);
       if (!marginLoanService.tryCoverShortfall(ta, reserved, u, request)) {
         return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
             "required", reserved, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit())));
@@ -527,6 +540,8 @@ public class BrokerApiController {
     BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
     BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
     BigDecimal required = margin.add(commission);
+    ResponseEntity<?> held = withdrawalHold(ta, pendingOut, required);
+    if (held != null) return done(held);
 
     if (ta.getBalance().compareTo(required) < 0 && !Boolean.TRUE.equals(body.acceptLoan())) {
       BigDecimal shortfall = required.subtract(ta.getBalance());
@@ -564,6 +579,18 @@ public class BrokerApiController {
     order.setReserveRemaining(required);
     order = orderRepo.save(order);
     return new Placement(null, order.getId(), "ORDER_PLACED");
+  }
+
+  /**
+   * Refuses a trade that would spend cash waiting to be withdrawn. Borrowing is not offered
+   * either: the client would be lending themselves their own payout.
+   */
+  private static ResponseEntity<?> withdrawalHold(TradingAccount ta, BigDecimal pendingOut, BigDecimal required) {
+    if (pendingOut == null || pendingOut.signum() <= 0) return null;
+    BigDecimal spendable = ta.getBalance().subtract(pendingOut).max(BigDecimal.ZERO);
+    if (spendable.compareTo(required) >= 0) return null;
+    return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "funds_pending_withdrawal",
+        "pendingWithdrawal", pendingOut, "available", spendable, "required", required));
   }
 
   /** BUY: SL below and TP above the reference price; SELL: the opposite. Null means not set. */

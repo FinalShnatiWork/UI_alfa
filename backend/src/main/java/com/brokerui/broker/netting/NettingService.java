@@ -445,13 +445,21 @@ public class NettingService {
    * limit window, then the rest is filled outside. Returns null when the position is gone.
    */
   public Result offerClose(Long positionId) {
-    Long orderId = requiresNew.execute(s -> stageClose(positionId));
+    return offerClose(positionId, null);
+  }
+
+  /**
+   * @param reason why the system is closing it (STOP_LOSS, TAKE_PROFIT, LIQUIDATION, SIM_TTL),
+   *               or null for a client's own close. Kept on the order so the client is told why.
+   */
+  public Result offerClose(Long positionId, String reason) {
+    Long orderId = requiresNew.execute(s -> stageClose(positionId, reason));
     if (orderId == null) return null;
     return executeNow(orderId);
   }
 
   /** Creates the close order, or returns the one already waiting for this position. */
-  private Long stageClose(Long positionId) {
+  private Long stageClose(Long positionId, String reason) {
     Position pos = positionRepo.findById(positionId).orElse(null);
     if (pos == null || pos.getTradingAccount() == null) return null;
     Long accountId = pos.getTradingAccount().getId();
@@ -474,6 +482,7 @@ public class NettingService {
     o.setLimitPrice(coverShort ? CLOSE_BUY_LIMIT : CLOSE_SELL_LIMIT);
     o.setReserveRemaining(BigDecimal.ZERO);
     o.setClosesPositionId(pos.getId());
+    o.setClientTag(reason);
     o.setOpenPrice(pos.getAvgPrice());
     o.setOpenedAt(pos.getOpenedAt());
     o.setCommission(BigDecimal.ZERO);

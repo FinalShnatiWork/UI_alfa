@@ -174,6 +174,7 @@ public class MarginLoanService {
       if (debt.compareTo(BigDecimal.ZERO) > 0) {
         BigDecimal repay = amount.min(debt);
         ta.setBorrowedBalance(debt.subtract(repay));
+        stopInterestClockIfRepaid(ta);
         BigDecimal remainder = amount.subtract(repay);
         ta.setBalance(ta.getBalance().add(remainder));
         if (repay.compareTo(BigDecimal.ZERO) > 0) {
@@ -203,19 +204,29 @@ public class MarginLoanService {
     writeLedger(ta, "BORROW", extra, "Loss exceeded cash balance — added to credit line debt");
   }
 
-  private void writeLedger(TradingAccount ta, String type, BigDecimal amount, String note) {
-    try {
-      MarginLoanLedger entry = new MarginLoanLedger();
-      entry.setTradingAccount(ta);
-      entry.setEntryType(type);
-      entry.setAmount(amount);
-      entry.setBorrowedAfter(ta.getBorrowedBalance());
-      entry.setBalanceAfter(ta.getBalance());
-      entry.setNote(note);
-      ledgerRepo.save(entry);
-    } catch (Exception e) {
-      log.error("[MarginLoan] Failed to write ledger entry: {}", e.getMessage());
+  /**
+   * A new debt must wait a full day before its first interest charge, so a repaid
+   * debt must not leave the old timestamp behind.
+   */
+  static void stopInterestClockIfRepaid(TradingAccount ta) {
+    if (ta.getBorrowedBalance() == null || ta.getBorrowedBalance().signum() <= 0) {
+      ta.setLastInterestAt(null);
     }
+  }
+
+  /**
+   * Not wrapped in try/catch on purpose: the debt and its ledger row must change together,
+   * so a failed insert rolls back the whole operation.
+   */
+  private void writeLedger(TradingAccount ta, String type, BigDecimal amount, String note) {
+    MarginLoanLedger entry = new MarginLoanLedger();
+    entry.setTradingAccount(ta);
+    entry.setEntryType(type);
+    entry.setAmount(amount);
+    entry.setBorrowedAfter(ta.getBorrowedBalance());
+    entry.setBalanceAfter(ta.getBalance());
+    entry.setNote(note);
+    ledgerRepo.save(entry);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -389,7 +400,7 @@ public class MarginLoanService {
         while (true) {
           Long posId = self.nextLiquidationPosition(ref.getId());
           if (posId == null || posId < 0) break;
-          NettingService.Result result = nettingService.offerClose(posId);
+          NettingService.Result result = nettingService.offerClose(posId, "LIQUIDATION");
           if (result == null || !"FILLED".equals(result.status())) break;
         }
         self.finishLiquidation(ref.getId());
@@ -445,6 +456,7 @@ public class MarginLoanService {
       writeLedger(ta, "LIQUIDATION", remainingDebt,
           "Liquidation complete — residual debt written off");
       ta.setBorrowedBalance(BigDecimal.ZERO);
+      stopInterestClockIfRepaid(ta);
       ta.setEquity(liveEquity(ta));
       accountRepo.save(ta);
       auditLogService.log(ta.getUser(), "LIQUIDATION", "residual debt written off after positions closed", null);
@@ -543,6 +555,7 @@ public class MarginLoanService {
       writeLedger(ta, "LIQUIDATION", remainingDebt, "Liquidation complete — " + closedCount
           + " position(s) closed; residual debt written off");
       ta.setBorrowedBalance(BigDecimal.ZERO);
+      stopInterestClockIfRepaid(ta);
     } else if (closedCount > 0 && recovered) {
       writeLedger(ta, "LIQUIDATION", BigDecimal.ZERO, "Liquidation complete — " + closedCount
           + " position(s) closed; margin level recovered");

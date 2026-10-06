@@ -196,6 +196,11 @@ The test users `netting.a@broker.local` / `netting.b@broker.local` (password `Ne
 - Every order opens a confirmation window with the volume, the expected price, margin, commission and the cash left after the trade. Closing a position asks too. **Settings → Trading → One-click trading** turns both off.
 - Stop Loss and Take Profit must sit on the right side of the price (BUY: SL below, TP above; SELL: the opposite). The form and the server both check it.
 - A close order cannot be cancelled once it is sent, whether it came from the client, a stop, a take profit or a liquidation.
+- Only the 14 instruments on the Charts page can be traded. Volume is 0.01 to 100 lots in steps of 0.01.
+- A pending LIMIT or STOP order reserves margin and commission, like a market order. What the fill does not use is returned.
+- Cash requested for withdrawal cannot be spent on new trades while the request is pending.
+- A stop loss, take profit or liquidation tells the client why the position was closed.
+- When a credit-line debt is fully repaid, the interest clock stops; a new debt waits a full day before its first charge.
 
 ---
 

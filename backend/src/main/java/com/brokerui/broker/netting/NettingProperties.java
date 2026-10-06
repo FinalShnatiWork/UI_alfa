@@ -18,7 +18,7 @@ public class NettingProperties {
   private boolean nnShadow;
 
   /** How long a marketable LIMIT waits for an internal counterparty before going external. 0 = never wait. */
-  @Value("${broker.netting.limit-wait-ms:8000}")
+  @Value("${broker.netting.limit-wait-ms:5000}")
   private long limitWaitMs;
 
   /** Enables /api/admin/netting/test/** and sim inject endpoints (localhost-only anyway). */

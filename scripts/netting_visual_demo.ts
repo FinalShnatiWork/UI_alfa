@@ -127,16 +127,15 @@ async function gate() {
 }
 
 function contractSize(sym) {
-  if (sym.includes('BTC') || sym.includes('ETH')) return 1;
-  if (sym.includes('SOL') || sym.includes('XAU')) return 100;
+  if (sym.includes('BTC') || sym.includes('ETH') || sym.includes('SOL')) return 1;
+  if (sym.includes('XAU')) return 100;
   if (sym.includes('XRP')) return 1000;
   if (sym.includes('XAG')) return 5000;
   return 100000;
 }
 
+// Every q(n) a scenario uses (smallest is q(0.2)) must stay at or above the 0.01 lot minimum.
 function unitFor(sym) {
-  const cs = contractSize(sym);
-  if (cs === 1) return 0.01;
   return 0.1;
 }
 

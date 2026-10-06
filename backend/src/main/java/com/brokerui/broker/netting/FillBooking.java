@@ -236,7 +236,7 @@ public class FillBooking {
         Notification n = new Notification();
         n.setUser(ta.getUser());
         n.setNotifType("TRADE");
-        n.setTitle("notification.tradeClosed.title");
+        n.setTitle(closeNotificationTitle(o.getClientTag()));
         n.setBody(String.format(java.util.Locale.US,
             "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",
             pos.getSide(), sliceQty.doubleValue(), pos.getSymbolCode(), price.doubleValue(),
@@ -246,6 +246,14 @@ public class FillBooking {
         log.warn("Failed to create close notification: {}", e.getMessage());
       }
     }
+  }
+
+  /** Notification title for a close; the client sees why the system closed the position. */
+  public static String closeNotificationTitle(String reason) {
+    if ("STOP_LOSS".equals(reason)) return "notification.tradeClosed.slTriggered";
+    if ("TAKE_PROFIT".equals(reason)) return "notification.tradeClosed.tpTriggered";
+    if ("LIQUIDATION".equals(reason)) return "notification.liquidation.title";
+    return "notification.tradeClosed.title";
   }
 
   /** Quantity, price and routing fields shared by an opening fill and a closing fill. */
