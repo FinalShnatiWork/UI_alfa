@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpSessionIdListener;
 import jakarta.servlet.http.HttpSessionListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -93,6 +95,33 @@ public class SessionRegistryService implements HttpSessionListener, HttpSessionI
       }
     }
     return null;
+  }
+
+  /**
+   * Ends every live session signed in as {@code email}, so a ban or deletion takes effect at
+   * once instead of when the session times out.
+   *
+   * @return how many sessions were ended
+   */
+  public static int invalidateUser(String email) {
+    if (email == null || email.isBlank()) return 0;
+    int ended = 0;
+    for (Map.Entry<String, HttpSession> e : SESSIONS.entrySet()) {
+      HttpSession s = e.getValue();
+      try {
+        Object ctx = s.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+        if (ctx instanceof SecurityContext sc && sc.getAuthentication() != null
+            && email.equalsIgnoreCase(sc.getAuthentication().getName())) {
+          s.invalidate();
+          SESSIONS.remove(e.getKey());
+          ended++;
+        }
+      } catch (IllegalStateException alreadyInvalid) {
+        SESSIONS.remove(e.getKey());
+      }
+    }
+    if (ended > 0) log.info("Ended {} session(s) for {}", ended, email);
+    return ended;
   }
 
   /**

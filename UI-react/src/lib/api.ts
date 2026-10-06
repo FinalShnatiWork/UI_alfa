@@ -1,4 +1,5 @@
 // Typed wrapper around fetch — preserves CSRF + cookie auth from the legacy api.js.
+import { getLang } from '@/lib/i18n';
 
 // Toggle to control whether we run in offline Mock Mode (recommended for GitHub Pages portfolio)
 export const IS_MOCK = localStorage.getItem('force_mock') === 'true' || 
@@ -123,10 +124,10 @@ const defaultNotifications = [
   }
 ];
 
-const defaultPreferences = {
-  lang: "he",
+const defaultPreferences = () => ({
+  lang: getLang(),
   theme: "dark"
-};
+});
 
 function getStorage<T>(key: string, def: T): T {
   const val = localStorage.getItem(key);
@@ -528,7 +529,7 @@ async function mockGet(path: string): Promise<any> {
   }
 
   if (path.includes('/api/broker/preferences')) {
-    return getStorage('mock_preferences', defaultPreferences);
+    return getStorage('mock_preferences', defaultPreferences());
   }
 
   if (path.includes('/api/market/price/')) {
@@ -846,7 +847,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
   }
 
   if (path.includes('/api/broker/preferences')) {
-    const current = getStorage('mock_preferences', defaultPreferences);
+    const current = getStorage('mock_preferences', defaultPreferences());
     const updated = { ...current, ...body };
     setStorage('mock_preferences', updated);
     return new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } });

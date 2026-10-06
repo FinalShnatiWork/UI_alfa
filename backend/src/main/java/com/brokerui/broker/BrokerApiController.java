@@ -120,14 +120,18 @@ public class BrokerApiController {
     BigDecimal marginLevel = marginLoanService.computeMarginLevel(ta);
     BigDecimal marginLevelPct = marginLevel == null ? null : marginLevel.multiply(BigDecimal.valueOf(100));
     BigDecimal marginUsed = computeMarginUsed(ta);
-    // Prepaid-margin model: placeOrder already deducts margin from balance via
-    // tryCoverShortfall, so remaining balance IS free cash. Subtracting marginUsed
-    // again would double-count and understate freeMargin / block valid withdrawals.
-    BigDecimal freeMargin = ta.getBalance();
+    // Prepaid-margin model: remaining cash is free, minus payouts still waiting for an admin.
+    BigDecimal pendingOut = pendingWithdrawals(ta.getId());
+    BigDecimal freeMargin = ta.getBalance().subtract(pendingOut);
+    BigDecimal settledValue = AccountEquity.settledValue(ta,
+        positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()),
+        orderRepo.findByTradingAccountIdAndStatusInOrderByCreatedAtDesc(ta.getId(),
+            com.brokerui.broker.netting.NettingService.OPEN_STATUSES));
     return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(),
         ta.getBalance(), liveEquity, marginUsed, freeMargin,
         ta.getBorrowedBalance(), ta.getCreditLimit(), marginLevelPct, ta.getInterestAccruedTotal(),
-        ta.getCommissionPaidTotal(), ta.getDailyInterestRate(), marginLoanService.interestOnOpenDebt(ta)));
+        ta.getCommissionPaidTotal(), ta.getDailyInterestRate(), marginLoanService.interestOnOpenDebt(ta),
+        settledValue, pendingOut));
   }
 
   @Transactional(readOnly = true)@GetMapping("/symbols")
@@ -262,29 +266,8 @@ public class BrokerApiController {
   // Private helpers
   // ───────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Equity for display / account bookkeeping: cash balance + live floating P/L on open
-   * positions (prepaid-margin model — margin is already out of balance, so it is NOT
-   * added back here). Matches the Dashboard formula. Distinct from
-   * {@link MarginLoanService}'s collateral equity used for margin-call ratios.
-   * Falls back to the last stored {@code unrealizedPnl} when a live quote is unavailable.
-   */
   private BigDecimal recalcEquity(TradingAccount ta) {
-    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    BigDecimal totalUnrealized = BigDecimal.ZERO;
-    for (Position p : positions) {
-      try {
-        double live = priceService.getLivePrice(p.getSymbolCode());
-        if (live <= 0) {
-          totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
-          continue;
-        }
-        totalUnrealized = totalUnrealized.add(liveUnrealizedPnl(p, BigDecimal.valueOf(live)));
-      } catch (Exception e) {
-        totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
-      }
-    }
-    return ta.getBalance().add(totalUnrealized);
+    return AccountEquity.equity(ta, positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
   }
 
   /** Floating P/L for one position at {@code livePrice} (LONG/SHORT + contract size). */
@@ -693,7 +676,7 @@ public class BrokerApiController {
 
   @PostMapping("/orders/{id}/cancel")
   @Transactional
-  public ResponseEntity<?> cancelOrder(Authentication auth, @PathVariable Long id) {
+  public ResponseEntity<?> cancelOrder(Authentication auth, @PathVariable Long id, HttpServletRequest request) {
     AppUser u = requireUser(auth);
     // Lock order FIRST, then account — same order as OrderExecutionService.tryExecute,
     // so a fill and a cancel cannot both pass the NEW check and settle the reservation.
@@ -726,6 +709,8 @@ public class BrokerApiController {
     order.setStatus("CANCELLED");
     order.setNetDeadline(null);
     orderRepo.save(order);
+    auditLogService.log(u, "ORDER_CANCELLED", "#" + order.getId() + " " + order.getSide() + " "
+        + order.getQuantity() + " " + order.getSymbolCode() + " type=" + order.getOrderType(), request);
     return ResponseEntity.ok(Map.of("ok", true, "newBalance", ta.getBalance()));
   }
 

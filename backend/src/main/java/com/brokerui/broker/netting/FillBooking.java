@@ -1,8 +1,8 @@
 package com.brokerui.broker.netting;
 
+import com.brokerui.broker.AccountEquity;
 import com.brokerui.broker.AccountTransaction;
 import com.brokerui.broker.AccountTransactionRepository;
-import com.brokerui.broker.BrokerApiController;
 import com.brokerui.broker.BrokerOrder;
 import com.brokerui.broker.CommissionLedger;
 import com.brokerui.broker.ContractSpecs;
@@ -18,7 +18,6 @@ import com.brokerui.market.MarketPriceService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
@@ -298,22 +297,7 @@ public class FillBooking {
     return o.getRouting();
   }
 
-  /** Cash balance + live floating P/L — same definition as BrokerApiController / OrderExecutionService. */
   public BigDecimal liveEquity(TradingAccount ta) {
-    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    BigDecimal total = BigDecimal.ZERO;
-    for (Position p : positions) {
-      try {
-        double live = priceService.getLivePrice(p.getSymbolCode());
-        if (live <= 0) {
-          total = total.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
-          continue;
-        }
-        total = total.add(BrokerApiController.liveUnrealizedPnl(p, BigDecimal.valueOf(live)));
-      } catch (Exception e) {
-        total = total.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
-      }
-    }
-    return ta.getBalance().add(total);
+    return AccountEquity.equity(ta, positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
   }
 }

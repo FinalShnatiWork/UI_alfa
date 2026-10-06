@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, useTransactions, useTransactionMutation, useCreditLedger } from '@/hooks/useApi';
-import { currencySymbol, fmtDateTime, fmtMoney } from '@/lib/format';
+import { currencySymbol, fmtCsvDateTime, fmtDateTime, fmtMoney } from '@/lib/format';
+import { downloadCsv } from '@/lib/csv';
 
 type TxType = 'DEPOSIT' | 'WITHDRAWAL';
 
@@ -215,11 +215,10 @@ function TxModal({ type, currency, onClose, onConfirm, t }: TxModalProps) {
 export function FinancePage() {
   const { t, lang } = useI18n();
   const toast = useToast();
-  const navigate = useNavigate();
 
   const [modal, setModal] = useState<TxType | null>(null);
 
-  const { data: overview, isLoading: overviewLoading, error: overviewError } = useBrokerOverview();
+  const { data: overview, isLoading: overviewLoading } = useBrokerOverview();
   const { data: txData, isLoading: txLoading } = useTransactions();
   const { data: ledgerData, isLoading: ledgerLoading } = useCreditLedger();
   const txMutation = useTransactionMutation();
@@ -230,24 +229,62 @@ export function FinancePage() {
     document.title = t('titles.finance');
   }, [t]);
 
-  useEffect(() => {
-    if (overviewError && (overviewError as { status?: number })?.status === 401) {
-      toast.show(t('alerts.authNeedLogin'), { variant: 'warning' });
-      setTimeout(() => navigate('/login'), 800);
-    }
-  }, [overviewError, navigate, t, toast]);
-
   const currency = overview?.currency || 'USD';
-  const available = fmtMoney(overview?.balance ?? 0, currency);
+  const cashOnAccount = Number(overview?.balance ?? 0);
 
-  const transactions = (Array.isArray(txData) ? txData : []).filter((r) => {
+  const allTransactions = (Array.isArray(txData) ? txData : []).filter((r) => {
     const typ = (r.txType || '').toUpperCase();
     return typ === 'DEPOSIT' || typ === 'WITHDRAWAL' || typ === 'COMMISSION';
-  }).slice(0, 50);
-  const pendingSum = transactions
+  });
+  const transactions = allTransactions.slice(0, 50);
+
+  function typeLabelOf(txType: string): string {
+    const typ = txType.toUpperCase();
+    return typ === 'DEPOSIT'
+      ? t('finance.depositType')
+      : typ === 'COMMISSION' ? t('finance.commissionType') : t('finance.withdrawType');
+  }
+
+  function methodLabelOf(r: (typeof allTransactions)[number]): string {
+    if (r.method) {
+      const key = METHOD_KEYS[r.method.toLowerCase()];
+      return key ? t(key) : r.method;
+    }
+    return (r.txType.toUpperCase() === 'COMMISSION' ? commissionNote(t, r.note) : null) || '';
+  }
+
+  /** Symbol and side only. The type column already says "commission", and a mixed Hebrew sentence breaks in Excel. */
+  function exportMethod(r: (typeof allTransactions)[number]): string {
+    if (r.txType.toUpperCase() === 'COMMISSION') {
+      const match = r.note?.match(/^Commission (\S+) (BUY|SELL)$/);
+      if (match) return `${match[1]} ${match[2]}`;
+    }
+    return methodLabelOf(r);
+  }
+
+  function exportStatement() {
+    const headers = [t('table.dateTime'), t('table.type'), t('table.amount'), t('finance.csvCurrency'), t('table.method'), t('table.status')];
+    const rows = allTransactions.map((r) => {
+      const amt = Number(r.amount ?? 0);
+      const signed = r.txType.toUpperCase() === 'DEPOSIT' ? amt : -amt;
+      return [
+        fmtCsvDateTime(r.createdAt),
+        typeLabelOf(r.txType),
+        signed,
+        currency,
+        exportMethod(r),
+        codeLabel(t, 'txStatus', r.status),
+      ];
+    });
+    downloadCsv('statement', headers, rows);
+  }
+  const pendingSum = allTransactions
     .filter((r) => r.txType.toUpperCase() === 'WITHDRAWAL' && r.status.toUpperCase() === 'PENDING')
     .reduce((s, r) => s + Number(r.amount ?? 0), 0);
-  const pendingWithdrawal = fmtMoney(pendingSum, currency);
+  const reserved = overview?.pendingWithdrawal != null ? Number(overview.pendingWithdrawal) : pendingSum;
+  const availableCash = Math.max(0, cashOnAccount - reserved);
+  const available = fmtMoney(availableCash, currency);
+  const pendingWithdrawal = fmtMoney(reserved, currency);
 
   async function handleConfirm(amount: number, method: string) {
     const isDeposit = modal === 'DEPOSIT';
@@ -305,6 +342,11 @@ export function FinancePage() {
             <div className="value text-primary font-bold">
               {isLoading ? '…' : available}
             </div>
+            {!isLoading && reserved > 0 && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 6 }}>
+                {t('finance.availableNote', { balance: fmtMoney(cashOnAccount, currency), pending: pendingWithdrawal })}
+              </div>
+            )}
           </div>
           <div className="card stat-card mb-0">
             <div className="label" style={{ color: 'var(--text-secondary)' }}>
@@ -338,7 +380,18 @@ export function FinancePage() {
         </div>
 
         <div className="text-left" style={{ marginTop: 40 }}>
-          <h3 className="mb-20 text-xl font-bold">{t('finance.ledger')}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+            <h3 className="text-xl font-bold" style={{ margin: 0 }}>{t('finance.ledger')}</h3>
+            <button
+              type="button"
+              className="btn btn-outline-dark"
+              style={{ padding: '7px 12px', fontSize: '0.85rem' }}
+              disabled={allTransactions.length === 0}
+              onClick={exportStatement}
+            >
+              {t('finance.exportCsv')}
+            </button>
+          </div>
           <p className="text-sm text-secondary" style={{ marginTop: -8 }}>{t('finance.journalHint')}</p>
           <div className="table-scroll">
             <table className="table-compact">
@@ -362,9 +415,7 @@ export function FinancePage() {
                   </tr>
                 ) : (
                   transactions.map((r) => {
-                    const typ = r.txType.toUpperCase();
-                    const isDeposit = typ === 'DEPOSIT';
-                    const isCommission = typ === 'COMMISSION';
+                    const isDeposit = r.txType.toUpperCase() === 'DEPOSIT';
                     const amt = Number(r.amount ?? 0);
                     const statusUpper = (r.status || '').toUpperCase();
                     const badgeClass =
@@ -373,31 +424,19 @@ export function FinancePage() {
                         : statusUpper === 'PENDING'
                           ? 'badge-warning'
                           : 'badge-danger';
-                    const typeLabel = isDeposit
-                      ? t('finance.depositType')
-                      : isCommission
-                        ? t('finance.commissionType')
-                        : t('finance.withdrawType');
 
                     return (
                       <tr key={r.id}>
                         <td><bdi>{fmtDateTime(r.createdAt, lang)}</bdi></td>
                         <td className={`font-bold ${isDeposit ? 'text-success' : 'text-danger'}`}>
-                          {typeLabel}
+                          {typeLabelOf(r.txType)}
                         </td>
                         <td className="font-bold">
                           <bdi>{isDeposit ? '+' : '−'}{fmtMoney(amt, currency)}</bdi>
                         </td>
+                        <td>{methodLabelOf(r) || '—'}</td>
                         <td>
-                          {r.method
-                            ? (METHOD_KEYS[r.method.toLowerCase()] ? t(METHOD_KEYS[r.method.toLowerCase()]) : r.method)
-                            : (isCommission ? commissionNote(t, r.note) : null) || '—'}
-                        </td>
-                        <td>
-                          <span
-                            className={`badge ${badgeClass}`}
-                            style={statusUpper === 'PENDING' ? { color: '#000' } : undefined}
-                          >
+                          <span className={`badge ${badgeClass}`}>
                             {codeLabel(t, 'txStatus', r.status)}
                           </span>
                         </td>

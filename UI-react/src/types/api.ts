@@ -42,6 +42,10 @@ export interface BrokerOverview {
   marginLevelPct?: number | string | null;
   interestAccruedTotal?: number | string;
   interestOnOpenDebt?: number | string;
+  /** Value without floating P/L; the anchor for the daily account value chart. */
+  settledValue?: number | string;
+  /** Cash reserved for withdrawals that an admin has not yet paid or refused. */
+  pendingWithdrawal?: number | string;
   commissionPaidTotal?: number | string;
   dailyInterestRate?: number | string;
 }
@@ -89,6 +93,8 @@ export interface BrokerOrder {
   openPrice?: string;
   openedAt?: string;
   commission?: string;
+  /** Set on orders that close a position through netting. */
+  closesPositionId?: number | null;
 }
 
 export interface PlaceOrderRequest {
@@ -133,6 +139,8 @@ export interface Transaction {
   method?: string;
   status: string;
   createdAt?: string;
+  /** When an admin approved or refused a withdrawal. */
+  processedAt?: string;
   note?: string;
 }
 

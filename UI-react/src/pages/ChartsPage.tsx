@@ -5,7 +5,7 @@ import {
   CandlestickSeries, HistogramSeries,
   type IChartApi, type ISeriesApi, type UTCTimestamp,
 } from 'lightweight-charts';
-import { apiPostJson, getContractSize } from '@/lib/api';
+import { apiPostJson } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
@@ -14,7 +14,7 @@ import { fmtMoney, fmtNumber, NUM_LOCALE } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { OrderConfirmModal, type OrderConfirmDetails } from '@/components/OrderConfirmModal';
 import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder, useOneClickTrading } from '@/hooks/useApi';
-import { MAX_LOTS, MIN_LOTS, SPREAD_RATE, stopsAreValid, volumeError } from '@/lib/tradeUtils';
+import { livePriceFor, MAX_LOTS, MIN_LOTS, positionPnl, SPREAD_RATE, stopsAreValid, volumeError } from '@/lib/tradeUtils';
 
 import type { PlaceOrderResponse, ClosePositionResponse } from '@/types/api';
 
@@ -1115,8 +1115,8 @@ export function ChartsPage() {
                     positions.map((p) => {
                       const qty = Number(p.quantity ?? 0);
                       const avg = Number(p.avgPrice ?? 0);
-                      const live = livePrices[p.symbolCode.toUpperCase()];
-                      const pnl = live ? (p.side === 'SHORT' ? -1 : 1) * (live - avg) * qty * getContractSize(p.symbolCode) : Number(p.unrealizedPnl ?? 0);
+                      const live = livePriceFor(livePrices, p.symbolCode);
+                      const pnl = positionPnl(p, live);
                       const pnlColor = pnl >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
                       return (
                         <tr key={p.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>

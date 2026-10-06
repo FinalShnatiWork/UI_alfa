@@ -20,26 +20,32 @@ export async function adminGet<T>(path: string): Promise<T | null> {
   }
 }
 
+/** POST with the tab's session header; returns the raw response so callers can read error bodies. */
+export async function adminPostResponse(path: string, body: unknown = {}): Promise<Response> {
+  const tabSid = getTabSessionId();
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (tabSid) {
+    headers['X-Session-Id'] = tabSid;
+  }
+  const res = await fetch(`/api/admin${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) {
+    onUnauthorized.forEach((fn) => fn());
+  }
+  return res;
+}
+
 export async function adminPost<T = { ok?: boolean }>(path: string, body: unknown = {}): Promise<T | null> {
   try {
-    const tabSid = getTabSessionId();
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    };
-    if (tabSid) {
-      headers['X-Session-Id'] = tabSid;
-    }
-    const res = await fetch(`/api/admin${path}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers,
-      body: JSON.stringify(body),
-    });
+    const res = await adminPostResponse(path, body);
     if (!res.ok) {
-      if (res.status === 401) {
-        onUnauthorized.forEach((fn) => fn());
-      }
       return null;
     }
     const ct = res.headers.get('content-type') || '';

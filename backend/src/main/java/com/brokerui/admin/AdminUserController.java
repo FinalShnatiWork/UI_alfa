@@ -1,13 +1,17 @@
 package com.brokerui.admin;
 
+import com.brokerui.broker.AuditLogService;
+import com.brokerui.config.SessionRegistryService;
 import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
 import com.brokerui.user.UserDto;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,14 +31,24 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/admin")
 public class AdminUserController {
   private final AppUserRepository repo;
+  private final AuditLogService auditLogService;
 
   /**
    * Constructs the AdminUserController with the user repository.
    *
    * @param repo the user repository
+   * @param auditLogService records who did what to which user
    */
-  public AdminUserController(AppUserRepository repo) {
+  public AdminUserController(AppUserRepository repo, AuditLogService auditLogService) {
     this.repo = repo;
+    this.auditLogService = auditLogService;
+  }
+
+  /** Logs under the acting admin; the target user is named in the detail. */
+  private void audit(Authentication auth, String action, AppUser target, String extra, HttpServletRequest request) {
+    AppUser admin = auth == null ? null : repo.findByEmailIgnoreCase(auth.getName()).orElse(null);
+    String detail = "user #" + target.getId() + " " + target.getEmail() + (extra == null || extra.isBlank() ? "" : " — " + extra);
+    auditLogService.log(admin, action, detail, request);
   }
 
   /**
@@ -72,13 +86,17 @@ public class AdminUserController {
    */
   @PostMapping("/users/{id}/ban")
   @Transactional
-  public Map<String, Object> ban(@PathVariable Long id, @Valid @RequestBody(required = false) BanRequest req) {
+  public Map<String, Object> ban(@PathVariable Long id, @Valid @RequestBody(required = false) BanRequest req,
+      Authentication auth, HttpServletRequest request) {
     AppUser u = findOrThrow(id);
     u.setBanned(true);
     u.setBannedAt(Instant.now());
     u.setBannedReason(req == null ? null : req.reason());
     repo.save(u);
-    return Map.of("ok", true);
+    int ended = SessionRegistryService.invalidateUser(u.getEmail());
+    audit(auth, "ADMIN_USER_BANNED", u,
+        (req == null || req.reason() == null ? "" : "reason: " + req.reason() + "; ") + ended + " session(s) ended", request);
+    return Map.of("ok", true, "sessionsEnded", ended);
   }
 
   /**
@@ -89,12 +107,13 @@ public class AdminUserController {
    */
   @PostMapping("/users/{id}/unban")
   @Transactional
-  public Map<String, Object> unban(@PathVariable Long id) {
+  public Map<String, Object> unban(@PathVariable Long id, Authentication auth, HttpServletRequest request) {
     AppUser u = findOrThrow(id);
     u.setBanned(false);
     u.setBannedAt(null);
     u.setBannedReason(null);
     repo.save(u);
+    audit(auth, "ADMIN_USER_UNBANNED", u, null, request);
     return Map.of("ok", true);
   }
 
@@ -107,8 +126,10 @@ public class AdminUserController {
    */
   @PostMapping("/users/{id}/delete")
   @Transactional
-  public Map<String, Object> deleteUser(@PathVariable Long id) {
-    if (!repo.existsById(id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found");
+  public Map<String, Object> deleteUser(@PathVariable Long id, Authentication auth, HttpServletRequest request) {
+    AppUser u = findOrThrow(id);
+    int ended = SessionRegistryService.invalidateUser(u.getEmail());
+    audit(auth, "ADMIN_USER_DELETED", u, ended + " session(s) ended", request);
     repo.deleteById(id);
     return Map.of("ok", true);
   }
@@ -126,8 +147,10 @@ public class AdminUserController {
    */
   @PostMapping("/users/{id}/update")
   @Transactional
-  public Map<String, Object> updateUser(@PathVariable Long id, @RequestBody UpdateUserRequest req) {
+  public Map<String, Object> updateUser(@PathVariable Long id, @RequestBody UpdateUserRequest req,
+      Authentication auth, HttpServletRequest request) {
     AppUser u = findOrThrow(id);
+    String before = "name=" + u.getDisplayName() + ", email=" + u.getEmail();
     if (req.displayName() != null) u.setDisplayName(req.displayName());
     if (req.email() != null) {
       if (repo.existsByEmailIgnoreCase(req.email()) && !req.email().equalsIgnoreCase(u.getEmail())) {
@@ -136,6 +159,7 @@ public class AdminUserController {
       u.setEmail(req.email());
     }
     repo.save(u);
+    audit(auth, "ADMIN_USER_UPDATED", u, "was " + before, request);
     return Map.of("ok", true);
   }
 }

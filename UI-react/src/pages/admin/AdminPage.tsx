@@ -2,7 +2,7 @@ import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 
 import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { useLogout } from '@/hooks/useLogout';
-import { adminGet, adminPost, healthOk } from '@/lib/adminApi';
+import { adminGet, adminPost, adminPostResponse, healthOk } from '@/lib/adminApi';
 import { assetUrl } from '@/lib/assets';
 import { AdminDataTable, type AdminColumn } from './AdminDataTable';
 import { money, num, signedMoney, when } from './format';
@@ -659,19 +659,25 @@ function TxTab({ txs, accounts, usersById, onChanged }: { txs: AdminTx[]; accoun
     setBusy(id);
     setDecideError('');
     try {
-      const res = await fetch(`/api/admin/transactions/${id}/decide`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision }),
-      });
+      const res = await adminPostResponse(`/transactions/${id}/decide`, { decision });
       if (!res.ok) {
-        setDecideError('This payout does not fit the cash on the account anymore.');
+        let err = '';
+        try {
+          const body = (await res.json()) as { error?: string };
+          err = body.error || '';
+        } catch { /* keep empty */ }
+        setDecideError(
+          err === 'insufficient_funds' || err === 'withdrawal_would_trigger_margin_call'
+            ? 'This payout does not fit the cash on the account anymore.'
+            : err === 'not_pending'
+              ? 'This request is no longer waiting — refresh the list.'
+              : 'Could not update this request. Refresh and try again.',
+        );
         return;
       }
       onChanged();
     } catch {
-      setDecideError('This payout does not fit the cash on the account anymore.');
+      setDecideError('Could not update this request. Refresh and try again.');
     } finally {
       setBusy(null);
     }
@@ -688,7 +694,7 @@ function TxTab({ txs, accounts, usersById, onChanged }: { txs: AdminTx[]; accoun
       <p className="text-muted admin-help">
         A withdrawal stays pending until you approve it. The cash leaves the account only then. Posted commissions are the cash that was actually taken. Older commission rows are the archive and can differ.
       </p>
-      {decideError ? <p className="text-muted admin-help">{decideError}</p> : null}
+      {decideError ? <p className="admin-help" style={{ color: 'var(--red)' }}>{decideError}</p> : null}
       <AdminDataTable
         rows={txs}
         rowKey={(tx) => tx.id}

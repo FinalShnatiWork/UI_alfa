@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
-import { useToast } from '@/hooks/useToast';
 import { useLogout } from '@/hooks/useLogout';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
+import { AccountValueChart } from '@/components/AccountValueChart';
 import { useBrokerOverview, usePositions, useNotifications, useLivePrices, useTradeHistory } from '@/hooks/useApi';
-import { getContractSize } from '@/lib/api';
+import { livePriceFor, positionPnl } from '@/lib/tradeUtils';
 import { fmtMoney, fmtNumber, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
 
 const fmtPnl = (n: unknown) => fmtNumber(n, 2);
@@ -36,11 +36,9 @@ function fmtPrice(n: unknown): string {
  */
 export function DashboardPage() {
   const { t } = useI18n();
-  const toast = useToast();
-  const navigate = useNavigate();
   const { logout, loggingOut } = useLogout();
 
-  const { data: overview, isLoading: overviewLoading, error: overviewError } = useBrokerOverview();
+  const { data: overview, isLoading: overviewLoading } = useBrokerOverview();
   const { data: positionsData, isLoading: positionsLoading } = usePositions();
   const { data: notificationsData, isLoading: notifsLoading } = useNotifications();
   const { data: historyData } = useTradeHistory();
@@ -54,13 +52,6 @@ export function DashboardPage() {
     document.title = t('titles.dashboard');
   }, [t]);
 
-  useEffect(() => {
-    if (overviewError && (overviewError as { status?: number })?.status === 401) {
-      toast.show(t('alerts.authNeedLogin'), { variant: 'warning' });
-      setTimeout(() => navigate('/login'), 800);
-    }
-  }, [overviewError, navigate, t, toast]);
-
 
   const currency = overview?.currency || 'USD';
   const rawBalance = overview ? Number(overview.balance ?? 0) : 0;
@@ -69,16 +60,8 @@ export function DashboardPage() {
   const notifications = Array.isArray(notificationsData) ? notificationsData.slice(0, 5) : [];
   const positions = Array.isArray(positionsData) ? positionsData : [];
 
-  // Calculate live unrealized P/L from open positions using real-time prices
-  const livePnl = positions.reduce((sum, p) => {
-    const qty = Math.abs(Number(p.quantity ?? 0));
-    if (!qty) return sum;
-    const avg = Number(p.avgPrice ?? 0);
-    const live = livePrices[p.symbolCode.toUpperCase()] ?? livePrices[p.symbolCode];
-    if (!live) return sum;
-    const factor = p.side === 'SHORT' ? -1 : 1;
-    return sum + (live - avg) * qty * factor * getContractSize(p.symbolCode);
-  }, 0);
+  const pnlOf = (p: (typeof positions)[number]) => positionPnl(p, livePriceFor(livePrices, p.symbolCode));
+  const livePnl = positions.reduce((sum, p) => sum + pnlOf(p), 0);
 
   const history = Array.isArray(historyData) ? historyData : [];
 
@@ -100,10 +83,12 @@ export function DashboardPage() {
   }, 0);
 
   const liveEquity = rawBalance + livePnl;
-  const backendFreeMargin = Number(overview?.freeMargin ?? rawBalance);
+  const pendingOut = overview ? Number(overview.pendingWithdrawal ?? 0) : 0;
+  const backendFreeMargin = Number(overview?.freeMargin ?? (rawBalance - pendingOut));
   const liveFreeMargin = backendFreeMargin;
 
   const balance = overview ? fmtMoney(rawBalance, currency) : '—';
+  const pendingOutLabel = pendingOut > 0 ? fmtMoney(pendingOut, currency) : '';
   const equity = overview ? fmtMoney(liveEquity, currency) : '—';
   const marginUsed = overview ? fmtMoney(rawMarginUsed, currency) : '—';
   const freeMargin = overview ? fmtMoney(liveFreeMargin, currency) : '—';
@@ -145,6 +130,11 @@ export function DashboardPage() {
                   {t('dashboard.balance')}
                 </div>
                 <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}>{balance}</div>
+                {pendingOut > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--warning, #f59e0b)', marginTop: 6 }}>
+                    {t('dashboard.pendingOut', { amount: pendingOutLabel })}
+                  </div>
+                )}
               </div>
               <div className="card stat-card">
                 <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
@@ -294,6 +284,8 @@ export function DashboardPage() {
           </div>
         )}
 
+        {!isLoading && <AccountValueChart />}
+
         {/* ── Quick Actions + Alerts ── */}
         <div className="grid-2 mb-20" style={{ gridTemplateColumns: '2fr 1fr' }}>
 
@@ -319,59 +311,15 @@ export function DashboardPage() {
             {positionsLoading ? (
               <SkeletonCard rows={2} height={80} />
             ) : (() => {
-              const totalUnrealized = positions.reduce((sum, p) => {
-                const liveP = livePrices[p.symbolCode.toUpperCase()];
-                const qty = Number(p.quantity ?? 0);
-                const avg = Number(p.avgPrice ?? 0);
-                if (liveP) {
-                  const factor = p.side === 'SHORT' ? -1 : 1;
-                  return sum + (liveP - avg) * qty * factor * getContractSize(p.symbolCode);
-                }
-                return sum + Number(p.unrealizedPnl ?? 0);
-              }, 0);
-
+              const totalUnrealized = livePnl;
               const best = positions.length > 0
-                ? positions.reduce((a, b) => {
-                    const liveA = livePrices[a.symbolCode.toUpperCase()];
-                    const liveB = livePrices[b.symbolCode.toUpperCase()];
-                    const factorA = a.side === 'SHORT' ? -1 : 1;
-                    const factorB = b.side === 'SHORT' ? -1 : 1;
-                    const pnlA = liveA
-                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA * getContractSize(a.symbolCode)
-                      : Number(a.unrealizedPnl ?? 0);
-                    const pnlB = liveB
-                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB * getContractSize(b.symbolCode)
-                      : Number(b.unrealizedPnl ?? 0);
-                    return pnlA > pnlB ? a : b;
-                  })
+                ? positions.reduce((a, b) => (pnlOf(a) > pnlOf(b) ? a : b))
                 : null;
-
               const worst = positions.length > 0
-                ? positions.reduce((a, b) => {
-                    const liveA = livePrices[a.symbolCode.toUpperCase()];
-                    const liveB = livePrices[b.symbolCode.toUpperCase()];
-                    const factorA = a.side === 'SHORT' ? -1 : 1;
-                    const factorB = b.side === 'SHORT' ? -1 : 1;
-                    const pnlA = liveA
-                      ? (liveA - Number(a.avgPrice ?? 0)) * Number(a.quantity ?? 0) * factorA * getContractSize(a.symbolCode)
-                      : Number(a.unrealizedPnl ?? 0);
-                    const pnlB = liveB
-                      ? (liveB - Number(b.avgPrice ?? 0)) * Number(b.quantity ?? 0) * factorB * getContractSize(b.symbolCode)
-                      : Number(b.unrealizedPnl ?? 0);
-                    return pnlA < pnlB ? a : b;
-                  })
+                ? positions.reduce((a, b) => (pnlOf(a) < pnlOf(b) ? a : b))
                 : null;
-
-              const bestPnl = best
-                ? (livePrices[best.symbolCode.toUpperCase()]
-                    ? (livePrices[best.symbolCode.toUpperCase()] - Number(best.avgPrice ?? 0)) * Number(best.quantity ?? 0) * (best.side === 'SHORT' ? -1 : 1) * getContractSize(best.symbolCode)
-                    : Number(best.unrealizedPnl ?? 0))
-                : 0;
-              const worstPnl = worst
-                ? (livePrices[worst.symbolCode.toUpperCase()]
-                    ? (livePrices[worst.symbolCode.toUpperCase()] - Number(worst.avgPrice ?? 0)) * Number(worst.quantity ?? 0) * (worst.side === 'SHORT' ? -1 : 1) * getContractSize(worst.symbolCode)
-                    : Number(worst.unrealizedPnl ?? 0))
-                : 0;
+              const bestPnl = best ? pnlOf(best) : 0;
+              const worstPnl = worst ? pnlOf(worst) : 0;
 
               return (
                 <>
@@ -648,12 +596,8 @@ export function DashboardPage() {
             ) : (
               positions.map((p) => {
                 const qty = Math.abs(Number(p.quantity ?? 0));
-                const unrealized = Number(p.unrealizedPnl ?? 0);
-                const livePrice = livePrices[p.symbolCode.toUpperCase()];
-                const livePnl = livePrice && p.avgPrice
-                  ? (p.side === 'SHORT' ? -1 : 1) * (livePrice - Number(p.avgPrice)) * qty * getContractSize(p.symbolCode)
-                  : unrealized;
-                const pnlPos = livePnl;
+                const livePrice = livePriceFor(livePrices, p.symbolCode);
+                const pnlPos = pnlOf(p);
                 return (
                   <tr key={p.id}>
                     <td className="font-bold">{p.symbolCode}</td>

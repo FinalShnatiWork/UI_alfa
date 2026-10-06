@@ -218,26 +218,8 @@ public class OrderExecutionService {
     return false;
   }
 
-  /**
-   * Recalculates equity as cash balance + live floating P/L (prepaid-margin model).
-   * Same definition as {@link BrokerApiController} overview equity / Dashboard.
-   */
   private BigDecimal recalcEquity(TradingAccount ta) {
-    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    BigDecimal totalUnrealized = BigDecimal.ZERO;
-    for (Position p : positions) {
-      try {
-        double live = priceService.getLivePrice(p.getSymbolCode());
-        if (live <= 0) {
-          totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
-          continue;
-        }
-        totalUnrealized = totalUnrealized.add(BrokerApiController.liveUnrealizedPnl(p, BigDecimal.valueOf(live)));
-      } catch (Exception e) {
-        totalUnrealized = totalUnrealized.add(p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl());
-      }
-    }
-    return ta.getBalance().add(totalUnrealized);
+    return AccountEquity.equity(ta, positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
   }
 
   private void checkPositionsSlTp() {

@@ -8,9 +8,11 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiGet, onUnauthorized } from '@/lib/api';
+import { getLang, translate } from '@/lib/i18n';
+import { useToast } from '@/hooks/useToast';
 import type { AuthMeResponse } from '@/types/api';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
@@ -35,7 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<AuthMeResponse | null>(null);
   const navigate = useNavigate();
-  const registeredRef = useRef(false);
+  const location = useLocation();
+  const toast = useToast();
   const queryClient = useQueryClient();
 
   /**
@@ -65,20 +68,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clearUser]);
 
-  // Register 401 handler once
+  // navigate changes identity on every route change; read it through a ref so the 401
+  // handler below stays registered instead of being torn down after the first navigation.
+  const statusRef = useRef<AuthStatus>(status);
+  const pathRef = useRef(location.pathname);
+  const navigateRef = useRef(navigate);
   useEffect(() => {
-    if (registeredRef.current) return;
-    registeredRef.current = true;
+    statusRef.current = status;
+    pathRef.current = location.pathname;
+    navigateRef.current = navigate;
+  });
+
+  // Only a session that was actually signed in can "expire"; a guest's /api/auth/me 401
+  // must not bounce them off public pages (ProtectedRoute handles private ones).
+  useEffect(() => {
     const handler = () => {
+      const wasSignedIn = statusRef.current === 'authenticated';
+      statusRef.current = 'unauthenticated';
       clearUser();
-      navigate('/login', { replace: true });
+      if (!wasSignedIn) return;
+      toast.show(translate(getLang(), 'alerts.sessionExpired'), { variant: 'warning', duration: 6000 });
+      navigateRef.current('/login', { replace: true, state: { from: { pathname: pathRef.current } } });
     };
     onUnauthorized.push(handler);
     return () => {
       const idx = onUnauthorized.indexOf(handler);
       if (idx !== -1) onUnauthorized.splice(idx, 1);
     };
-  }, [clearUser, navigate]);
+  }, [clearUser, toast]);
 
   // Check auth on mount
   useEffect(() => {

@@ -57,7 +57,8 @@ public class HeaderSessionFilter extends OncePerRequestFilter {
       return;
     }
 
-    // 2. Extract Session ID from custom headers or parameters
+    // 2. Extract Session ID from headers only. A ?sessionId= query parameter would end up in
+    // browser history, proxy logs and Referer headers, so it is deliberately not accepted.
     String requestedSessionId = request.getHeader(SESSION_HEADER);
     if (requestedSessionId == null || requestedSessionId.isBlank()) {
       requestedSessionId = request.getHeader(AUTH_TOKEN_HEADER);
@@ -66,12 +67,6 @@ public class HeaderSessionFilter extends OncePerRequestFilter {
       String auth = request.getHeader("Authorization");
       if (auth != null && auth.startsWith("Bearer ")) {
         requestedSessionId = auth.substring(7).trim();
-      }
-    }
-    if (requestedSessionId == null || requestedSessionId.isBlank()) {
-      String querySid = request.getParameter("sessionId");
-      if (querySid != null && !querySid.isBlank()) {
-        requestedSessionId = querySid.trim();
       }
     }
 

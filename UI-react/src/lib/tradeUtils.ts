@@ -4,8 +4,27 @@
  * to produce a flat list of completed round-trip trades.
  */
 
-import type { BrokerOrder } from '@/types/api';
+import type { BrokerOrder, Position } from '@/types/api';
 import { getContractSize } from '@/lib/api';
+
+export function livePriceFor(prices: Record<string, number>, symbol: string): number | undefined {
+  const p = prices[symbol.toUpperCase()] ?? prices[symbol];
+  return p && p > 0 ? p : undefined;
+}
+
+/**
+ * Floating P/L of an open position at the live mid (same basis as the server's equity).
+ * Without a live price, falls back to the server's last unrealizedPnl.
+ */
+export function positionPnl(
+  p: Pick<Position, 'symbolCode' | 'side' | 'quantity' | 'avgPrice' | 'unrealizedPnl'>,
+  livePrice: number | undefined,
+): number {
+  const avg = Number(p.avgPrice ?? 0);
+  if (!livePrice || !avg) return Number(p.unrealizedPnl ?? 0);
+  const qty = Math.abs(Number(p.quantity ?? 0));
+  return (p.side === 'SHORT' ? -1 : 1) * (livePrice - avg) * qty * getContractSize(p.symbolCode);
+}
 
 /** Same split as backend TradingFees.isCrypto. */
 export function isCryptoSymbol(symbol: string): boolean {
@@ -88,20 +107,18 @@ export function tsMs(iso?: string): number {
 
 /**
  * Pairs a flat list of BrokerOrders into completed round-trip trades.
- * Closing orders (those with realizedPnl or openPrice set) are matched to
- * their corresponding opening order FIFO by symbol.
+ * Closing orders (those that carry the position's open price or point at the position) are
+ * matched to their corresponding opening order FIFO by symbol. Netting fills write
+ * realizedPnl = 0 on opening orders too, so realizedPnl alone does not mark a close.
  */
 export function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
   const sorted = [...orders].sort(
     (a, b) => tsMs(a.filledAt || a.createdAt) - tsMs(b.filledAt || b.createdAt)
   );
 
-  const closing = sorted.filter(
-    (o) => o.realizedPnl != null || o.openPrice != null
-  );
-  const opening = sorted.filter(
-    (o) => o.realizedPnl == null && o.openPrice == null
-  );
+  const isClosing = (o: BrokerOrder) => o.openPrice != null || o.closesPositionId != null;
+  const closing = sorted.filter(isClosing);
+  const opening = sorted.filter((o) => !isClosing(o));
 
   const usedOpeningIds = new Set<number>();
   const pairs: PairedTrade[] = [];
@@ -124,8 +141,17 @@ export function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
       usedOpeningIds.add(match.id);
     }
 
-    const openCommission = Number(match?.commission ?? 0);
-    const closeCommission = Number(sell.commission ?? 0);
+    // realizedPnl = gross − open fee − close fee, so with both prices the round trip's fees
+    // follow exactly from the close itself; FIFO matching by symbol can pick an opening
+    // order of a different size and is only the fallback.
+    let commission = Number(match?.commission ?? 0) + Number(sell.commission ?? 0);
+    const qty = Number(sell.quantity ?? 0);
+    const open = Number(openPrice ?? 0);
+    const close = Number(sell.entryPrice ?? 0);
+    if (sell.realizedPnl != null && open > 0 && close > 0 && qty > 0) {
+      const gross = (sell.side === 'SELL' ? 1 : -1) * (close - open) * qty * getContractSize(sell.symbolCode);
+      commission = Math.max(0, gross - Number(sell.realizedPnl));
+    }
 
     pairs.push({
       id: sell.id,
@@ -138,7 +164,7 @@ export function pairOrders(orders: BrokerOrder[]): PairedTrade[] {
       stopLoss: sell.stopLoss,
       takeProfit: sell.takeProfit,
       realizedPnl: sell.realizedPnl,
-      commission: (openCommission + closeCommission).toFixed(2),
+      commission: commission.toFixed(2),
     });
   }
 

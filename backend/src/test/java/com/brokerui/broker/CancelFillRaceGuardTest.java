@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,6 +41,7 @@ class CancelFillRaceGuardTest {
   private MarketPriceService priceService;
   private BrokerApiController controller;
   private OrderExecutionService executionService;
+  private AuditLogService auditLogService;
 
   private AppUser user;
   private TradingAccount ta;
@@ -58,7 +60,7 @@ class CancelFillRaceGuardTest {
     AccountTransactionRepository txRepo = mock(AccountTransactionRepository.class);
     UserPreferenceRepository preferenceRepo = mock(UserPreferenceRepository.class);
     MT5IntegrationService mt5Service = mock(MT5IntegrationService.class);
-    AuditLogService auditLogService = mock(AuditLogService.class);
+    auditLogService = mock(AuditLogService.class);
     NNPredictorClient nnPredictorClient = mock(NNPredictorClient.class);
 
     MarginLoanLedgerRepository ledgerRepo = mock(MarginLoanLedgerRepository.class);
@@ -109,11 +111,12 @@ class CancelFillRaceGuardTest {
     when(orderRepo.findByIdForUpdate(42L)).thenReturn(Optional.of(order));
 
     BigDecimal balanceBefore = ta.getBalance();
-    ResponseEntity<?> resp = controller.cancelOrder(auth, 42L);
+    ResponseEntity<?> resp = controller.cancelOrder(auth, 42L, null);
 
     assertEquals(400, resp.getStatusCode().value());
     assertEquals(0, ta.getBalance().compareTo(balanceBefore), "balance must stay unchanged");
     verify(marginLoanService, never()).repaySettlementOrBorrow(any(), any());
+    verify(auditLogService, never()).log(any(), eq("ORDER_CANCELLED"), any(), any());
   }
 
   @Test
@@ -121,10 +124,11 @@ class CancelFillRaceGuardTest {
     BrokerOrder order = pendingBuy(43L);
     when(orderRepo.findByIdForUpdate(43L)).thenReturn(Optional.of(order));
 
-    ResponseEntity<?> resp = controller.cancelOrder(auth, 43L);
+    ResponseEntity<?> resp = controller.cancelOrder(auth, 43L, null);
 
     assertEquals(200, resp.getStatusCode().value());
     assertEquals("CANCELLED", order.getStatus());
+    verify(auditLogService).log(eq(user), eq("ORDER_CANCELLED"), contains("#43"), any());
     // reserved = 100000 * 0.01 * 1 / 100 = 10
     verify(marginLoanService).repaySettlementOrBorrow(eq(ta),
         argThat(a -> a != null && a.compareTo(new BigDecimal("10")) == 0));

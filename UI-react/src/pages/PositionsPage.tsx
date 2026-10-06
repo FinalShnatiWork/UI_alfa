@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiPostJson, getContractSize } from '@/lib/api';
+import { apiPostJson } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
@@ -8,7 +7,7 @@ import { SkeletonRow } from '@/components/Skeleton';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder, useOneClickTrading, useBrokerOverview } from '@/hooks/useApi';
 import type { Position, BrokerOrder } from '@/types/api';
-import { pairOrders } from '@/lib/tradeUtils';
+import { livePriceFor, pairOrders, positionPnl } from '@/lib/tradeUtils';
 import { fmtDateTime, fmtNumber, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
 
 type Tab = 'open' | 'closed' | 'pending';
@@ -37,7 +36,6 @@ export function PositionsPage() {
   const { data: overview } = useBrokerOverview();
   const currency = overview?.currency || 'USD';
   const toast = useToast();
-  const navigate = useNavigate();
 
   const [tab, setTab] = useState<Tab>('open');
   const [search, setSearch] = useState('');
@@ -45,7 +43,7 @@ export function PositionsPage() {
   const [confirm, setConfirm] = useState<{ message: string; run: () => void } | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
 
-  const { data: positionsData, isLoading, error } = usePositions();
+  const { data: positionsData, isLoading } = usePositions();
   const { data: historyData, isLoading: histLoading } = useTradeHistory();
   const { data: pendingData, isLoading: pendingLoading } = usePendingOrders();
   const { mutateAsync: cancelOrder } = useCancelOrder();
@@ -53,13 +51,6 @@ export function PositionsPage() {
   const [oneClick] = useOneClickTrading();
 
   useEffect(() => { document.title = t('titles.positions'); }, [t]);
-
-  useEffect(() => {
-    if (error && (error as { status?: number })?.status === 401) {
-      toast.show(t('alerts.authNeedLogin'), { variant: 'warning' });
-      setTimeout(() => navigate('/login'), 1500);
-    }
-  }, [error, navigate, t, toast]);
 
   const positions = Array.isArray(positionsData) ? positionsData : [];
   const activePositions = positions.filter((p) => Number(p.quantity ?? 0) !== 0);
@@ -192,8 +183,8 @@ export function PositionsPage() {
                 filteredOpen.map((p) => {
                   const qty = Math.abs(Number(p.quantity ?? 0));
                   const avgPrice = Number(p.avgPrice ?? 0);
-                  const livePrice = livePrices[p.symbolCode.toUpperCase()];
-                  const pnl = livePrice != null ? (p.side === 'SHORT' ? (avgPrice - livePrice) * qty * getContractSize(p.symbolCode) : (livePrice - avgPrice) * qty * getContractSize(p.symbolCode)) : null;
+                  const livePrice = livePriceFor(livePrices, p.symbolCode);
+                  const pnl = positionPnl(p, livePrice);
                   const isClosing = closing === p.id;
                   return (
                     <tr key={p.id}>
@@ -209,7 +200,7 @@ export function PositionsPage() {
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(avgPrice)}</td>
                       <td className="dir-ltr" style={{ textAlign: 'right' }}>
                         {livePrice != null ? (
-                          <span className={`font-bold ${pnl != null && pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                          <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
                             {fmtPrice(livePrice)}
                           </span>
                         ) : (
@@ -217,13 +208,9 @@ export function PositionsPage() {
                         )}
                       </td>
                         <td className="dir-ltr" style={{ textAlign: 'right' }}>
-                          {pnl != null ? (
-                            <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                              {fmtSignedMoney(pnl, currency)}
-                            </span>
-                          ) : (
-                            <span className="text-muted">—</span>
-                          )}
+                          <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                            {fmtSignedMoney(pnl, currency)}
+                          </span>
                         </td>
                       <td style={{ textAlign: 'center' }}>
                         <button
@@ -242,14 +229,8 @@ export function PositionsPage() {
               )}
             </tbody>
             {filteredOpen.length > 0 && (() => {
-              const totalPnl = filteredOpen.reduce((sum, p) => {
-                const qty = Math.abs(Number(p.quantity ?? 0));
-                const avg = Number(p.avgPrice ?? 0);
-                const live = livePrices[p.symbolCode.toUpperCase()];
-                if (live == null) return sum;
-                const pnl = p.side === 'SHORT' ? (avg - live) * qty * getContractSize(p.symbolCode) : (live - avg) * qty * getContractSize(p.symbolCode);
-                return sum + pnl;
-              }, 0);
+              const totalPnl = filteredOpen.reduce(
+                (sum, p) => sum + positionPnl(p, livePriceFor(livePrices, p.symbolCode)), 0);
               const pnlColor = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
               return (
                 <tfoot>

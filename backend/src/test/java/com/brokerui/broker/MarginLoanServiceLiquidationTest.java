@@ -7,9 +7,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.brokerui.broker.netting.NettingService;
 import com.brokerui.market.MarketPriceService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -19,9 +23,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * Regression tests for the liquidation debt write-off fix in {@link MarginLoanService}.
+ * They run the same pick-next-position and write-off steps as the live path; only the close
+ * itself is done at market instead of through the internal book.
  * <p>
  * Bug: before the fix, {@code liquidateAccount()} wrote off ANY remaining debt to zero once
  * the loop finished, even when the loop stopped early because the margin level had already
@@ -61,6 +68,8 @@ class MarginLoanServiceLiquidationTest {
     when(accountRepo.findByIdForUpdate(anyLong())).thenReturn(Optional.of(ta));
     when(positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(anyLong()))
         .thenAnswer(inv -> new ArrayList<>(livePositions));
+    when(positionRepo.findByIdForUpdate(anyLong())).thenAnswer(inv -> livePositions.stream()
+        .filter(p -> p.getId().equals(inv.getArgument(0))).findFirst());
     doAnswer(inv -> {
       livePositions.remove((Position) inv.getArgument(0));
       return null;
@@ -71,8 +80,11 @@ class MarginLoanServiceLiquidationTest {
     });
   }
 
+  private static long nextPositionId = 1;
+
   private static Position position(String symbol, String side, BigDecimal qty, BigDecimal avg) {
     Position p = new Position();
+    ReflectionTestUtils.setField(p, "id", nextPositionId++);
     p.setSymbolCode(symbol);
     p.setSide(side);
     p.setQuantity(qty);
@@ -165,6 +177,56 @@ class MarginLoanServiceLiquidationTest {
     assertEquals(2, livePositions.size(), "positions must stay open when prices are unavailable");
     assertEquals(0, ta.getBorrowedBalance().compareTo(new BigDecimal("50")),
         "debt must NOT be forgiven while positions remain due to missing prices — got " + ta.getBorrowedBalance());
+  }
+
+  @Test
+  void liveBookPath_closeStillWaiting_stopsWithoutWritingOffDebt() {
+    Position posA = position("BTCUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    Position posB = position("ETHUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    TradingAccount ta = account(BigDecimal.ZERO, new BigDecimal("80"), 100);
+    setUp(ta, List.of(posA, posB));
+    livePrices.put("BTCUSD", 10.0);
+    livePrices.put("ETHUSD", 10.0);
+
+    NettingService netting = mock(NettingService.class);
+    when(netting.offerClose(anyLong(), anyString())).thenReturn(
+        new NettingService.Result(1L, "PENDING_NET", BigDecimal.ONE, BigDecimal.ZERO,
+            BigDecimal.ZERO, BigDecimal.ZERO, null, null, null, 0));
+    ReflectionTestUtils.setField(service, "nettingService", netting);
+
+    service.liquidateAccount(1L);
+
+    verify(netting, times(1)).offerClose(anyLong(), eq("LIQUIDATION"));
+    assertEquals(2, livePositions.size(), "nothing may close directly while the book is running");
+    assertEquals(0, ta.getBorrowedBalance().compareTo(new BigDecimal("80")),
+        "debt stays while a close is still waiting — got " + ta.getBorrowedBalance());
+  }
+
+  @Test
+  void liveBookPath_filledCloses_continueUntilNothingLeft_thenWriteOff() {
+    Position posA = position("BTCUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    Position posB = position("ETHUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));
+    TradingAccount ta = account(BigDecimal.ZERO, new BigDecimal("80"), 100);
+    setUp(ta, List.of(posA, posB));
+    livePrices.put("BTCUSD", 10.0);
+    livePrices.put("ETHUSD", 20.0);
+
+    NettingService netting = mock(NettingService.class);
+    when(netting.offerClose(anyLong(), anyString())).thenAnswer(inv -> {
+      Long id = inv.getArgument(0);
+      livePositions.removeIf(p -> p.getId().equals(id));
+      return new NettingService.Result(1L, "FILLED", BigDecimal.ONE, BigDecimal.ONE,
+          BigDecimal.ONE, BigDecimal.ZERO, null, "INTERNAL", null, 1);
+    });
+    ReflectionTestUtils.setField(service, "nettingService", netting);
+
+    service.liquidateAccount(1L);
+
+    verify(netting, times(2)).offerClose(anyLong(), eq("LIQUIDATION"));
+    assertTrue(livePositions.isEmpty());
+    assertEquals(0, ta.getBorrowedBalance().compareTo(BigDecimal.ZERO), "unpayable debt is written off once nothing is open");
+    assertEquals(0, ta.getEquity().compareTo(ta.getBalance()),
+        "stored equity must be balance + floating P/L, not the margin-level collateral");
   }
 
   @Test

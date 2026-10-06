@@ -17,6 +17,8 @@ public record BrokerOverviewDto(
     BigDecimal interestAccruedTotal,
     BigDecimal commissionPaidTotal,
     BigDecimal dailyInterestRate,
-    BigDecimal interestOnOpenDebt) {}
+    BigDecimal interestOnOpenDebt,
+    BigDecimal settledValue,
+    BigDecimal pendingWithdrawal) {}
 
 

@@ -243,8 +243,7 @@ public class MarginLoanService {
   public BigDecimal computeMarginLevel(TradingAccount ta) {
     BigDecimal debt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
     if (debt.compareTo(BigDecimal.ZERO) <= 0) return null;
-    BigDecimal equity = liveEquity(ta);
-    return equity.divide(debt, 4, RoundingMode.HALF_UP);
+    return collateral(ta).divide(debt, 4, RoundingMode.HALF_UP);
   }
 
   /**
@@ -256,57 +255,21 @@ public class MarginLoanService {
   public BigDecimal simulateMarginLevelAfterWithdrawal(TradingAccount ta, BigDecimal cashAmount) {
     BigDecimal debt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
     if (debt.compareTo(BigDecimal.ZERO) <= 0) return null;
-    BigDecimal equityAfter = liveEquity(ta).subtract(cashAmount == null ? BigDecimal.ZERO : cashAmount);
+    BigDecimal equityAfter = collateral(ta).subtract(cashAmount == null ? BigDecimal.ZERO : cashAmount);
     return equityAfter.divide(debt, 4, RoundingMode.HALF_UP);
   }
 
-  /**
-   * Computes the account's total liquidation value: cash balance plus, for every open
-   * position, the margin that would be released on close plus its unrealized P/L.
-   * <p>
-   * NOTE: unlike {@code recalcEquity()} elsewhere in this codebase, this intentionally adds
-   * back the margin locked into each position. Here, {@code balance} already has the margin
-   * subtracted when a position is opened (see {@code BrokerApiController#placeOrder}), so a
-   * plain {@code balance + unrealizedPnL} would understate the real collateral backing the
-   * credit line by the full margin amount — making every leveraged trade look like an
-   * instant margin call. This method reflects what the account would actually be worth if
-   * every position were closed right now, which is the correct basis for margin level.
-   */
-  private BigDecimal liveEquity(TradingAccount ta) {
-    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-    BigDecimal collateral = BigDecimal.ZERO;
-    for (Position p : positions) {
-      BigDecimal contractSize = BrokerApiController.getContractSize(p.getSymbolCode());
-      BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
-      BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
-      BigDecimal marginLocked = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
-      // A missing quote must never drop the position out of the collateral base: doing so
-      // understated equity by the whole position and could margin-call a healthy account on
-      // nothing worse than a price-feed blip. floatingPnl() falls back to the stored value.
-      collateral = collateral.add(marginLocked).add(floatingPnl(p));
-    }
-    return ta.getBalance().add(collateral);
+  private List<Position> openPositions(TradingAccount ta) {
+    return positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
   }
 
-  /**
-   * Floating P/L for a position at its live quote, falling back to the last value stored on
-   * the position when no quote is available.
-   *
-   * @param p the open position
-   * @return signed floating P/L
-   */
+  /** Margin-level basis: see {@link AccountEquity#collateral}. */
+  private BigDecimal collateral(TradingAccount ta) {
+    return AccountEquity.collateral(ta, openPositions(ta), priceService);
+  }
+
   private BigDecimal floatingPnl(Position p) {
-    try {
-      double live = priceService.getLivePrice(p.getSymbolCode());
-      if (live > 0) {
-        return BrokerApiController.liveUnrealizedPnl(p, BigDecimal.valueOf(live));
-      }
-    } catch (Exception e) {
-      log.warn("[MarginLoan] No live quote for {} — using last stored floating P/L: {}",
-          p.getSymbolCode(), e.getMessage());
-    }
-    return p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl();
+    return AccountEquity.floatingPnl(p, priceService);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -391,23 +354,35 @@ public class MarginLoanService {
       BigDecimal level = computeMarginLevel(ref);
       if (level == null || level.compareTo(LIQUIDATION_LEVEL) >= 0) continue;
       try {
-        if (nettingService == null) {
-          self.liquidateAccount(ref.getId());
-          continue;
-        }
-        // One position at a time. A close that is still waiting blocks the next one,
-        // so a recovery after the first fill is not overrun by closing everything.
-        while (true) {
-          Long posId = self.nextLiquidationPosition(ref.getId());
-          if (posId == null || posId < 0) break;
-          NettingService.Result result = nettingService.offerClose(posId, "LIQUIDATION");
-          if (result == null || !"FILLED".equals(result.status())) break;
-        }
-        self.finishLiquidation(ref.getId());
+        liquidateAccount(ref.getId());
       } catch (Exception e) {
         log.error("[MarginLoan] Failed to liquidate account #{}: {}", ref.getId(), e.getMessage());
       }
     }
+  }
+
+  /**
+   * Force-closes the worst position, one at a time, until the margin level recovers or nothing
+   * closable is left, then writes off debt only if no position remains. Each step commits on its
+   * own, so a close still waiting on the internal book stops the loop instead of being overrun.
+   *
+   * @param accountId the trading account to liquidate
+   */
+  public void liquidateAccount(Long accountId) {
+    MarginLoanService tx = self != null ? self : this;
+    while (true) {
+      Long posId = tx.nextLiquidationPosition(accountId);
+      if (posId == null || posId < 0) break;
+      boolean closed;
+      if (nettingService != null) {
+        NettingService.Result result = nettingService.offerClose(posId, "LIQUIDATION");
+        closed = result != null && "FILLED".equals(result.status());
+      } else {
+        closed = tx.closeAtMarketForLiquidation(accountId, posId);
+      }
+      if (!closed) break;
+    }
+    tx.finishLiquidation(accountId);
   }
 
   /**
@@ -457,117 +432,71 @@ public class MarginLoanService {
           "Liquidation complete — residual debt written off");
       ta.setBorrowedBalance(BigDecimal.ZERO);
       stopInterestClockIfRepaid(ta);
-      ta.setEquity(liveEquity(ta));
+      ta.setEquity(AccountEquity.equity(ta, stillOpen, priceService));
       accountRepo.save(ta);
       auditLogService.log(ta.getUser(), "LIQUIDATION", "residual debt written off after positions closed", null);
     }
   }
 
   /**
-   * Force-closes every open position on the account (largest loss first) and applies the
-   * proceeds to the debt until the margin level recovers, or all positions are closed.
-   * Any residual un-payable debt is written off so the account doesn't get stuck.
+   * Closes one position at the live price for a liquidation when the internal book is not
+   * running. Same lock order as every other close: account first, then position.
    *
-   * @param accountId the trading account to liquidate
+   * @return false when the position is gone or has no live quote
    */
   @Transactional
-  public void liquidateAccount(Long accountId) {
+  public boolean closeAtMarketForLiquidation(Long accountId, Long posId) {
     TradingAccount ta = accountRepo.findByIdForUpdate(accountId).orElse(null);
-    if (ta == null) return;
-    if (ta.getBorrowedBalance() == null || ta.getBorrowedBalance().compareTo(BigDecimal.ZERO) <= 0) return;
+    if (ta == null) return false;
+    Position pos = positionRepo.findByIdForUpdate(posId).orElse(null);
+    if (pos == null) return false;
 
-    // Re-evaluate under the row lock. The scheduler's pre-check used a stale unlocked snapshot
-    // and could force-close an account that had already recovered (or miss one that hadn't).
-    BigDecimal lockedLevel = computeMarginLevel(ta);
-    if (lockedLevel == null || lockedLevel.compareTo(LIQUIDATION_LEVEL) >= 0) return;
-
-    List<Position> positions = new ArrayList<>(positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()));
-    // One quote per position (cached in MarketPriceService), then a stable sort — calling
-    // getLivePrice inside the comparator used to hammer the feed and could throw
-    // "Comparison method violates its general contract".
-    positions.sort(Comparator.comparing(this::floatingPnl));
-
-    int closedCount = 0;
-    boolean recovered = false;
-    for (Position snapshot : positions) {
-      BigDecimal level = computeMarginLevel(ta);
-      if (level != null && level.compareTo(MARGIN_CALL_LEVEL) >= 0) { recovered = true; break; }
-
-      Position pos = snapshot.getId() == null
-          ? snapshot
-          : positionRepo.findByIdForUpdate(snapshot.getId()).orElse(null);
-      if (pos == null) continue;
-
-      double live;
-      try {
-        live = priceService.getLivePrice(pos.getSymbolCode());
-      } catch (Exception e) {
-        continue;
-      }
-      if (live <= 0) continue;
-
-      PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, BigDecimal.valueOf(live));
-
-      BrokerOrder order = new BrokerOrder();
-      order.setTradingAccount(ta);
-      order.setSymbolCode(pos.getSymbolCode());
-      order.setSide(close.closeSide());
-      order.setOrderType("MARKET");
-      order.setStatus("FILLED");
-      order.setQuantity(close.quantity());
-      order.setFilledAt(Instant.now());
-      order.setEntryPrice(close.closePrice());
-      order.setOpenPrice(close.avgPrice());
-      order.setOpenedAt(pos.getOpenedAt());
-      order.setRealizedPnl(close.netPnl());
-      commissionLedger.record(ta, order, close.closeCommission());
-      orderRepo.save(order);
-
-      positionRepo.delete(pos);
-      repaySettlementOrBorrow(ta, close.settlement());
-      closedCount++;
-
-      try {
-        Notification notif = new Notification();
-        notif.setUser(ta.getUser());
-        notif.setNotifType("LIQUIDATION");
-        notif.setTitle("notification.liquidation.title");
-        notif.setBody(String.format(java.util.Locale.US,
-            "{\"symbol\":\"%s\",\"qty\":\"%.4f\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",
-            pos.getSymbolCode(), close.quantity().doubleValue(), close.closePrice().doubleValue(),
-            close.netPnl().doubleValue()));
-        notificationRepo.save(notif);
-      } catch (Exception e) {
-        log.warn("[MarginLoan] Failed to push liquidation notification: {}", e.getMessage());
-      }
+    double live;
+    try {
+      live = priceService.getLivePrice(pos.getSymbolCode());
+    } catch (Exception e) {
+      return false;
     }
+    if (live <= 0) return false;
 
-    // Only write off remaining debt when every position has actually been liquidated and
-    // the debt is truly unpayable. Do NOT forgive debt when:
-    //  - the loop stopped early because margin level recovered (`recovered`), or
-    //  - positions still remain (e.g. live prices were unavailable and we `continue`d) —
-    //    otherwise a temporary quote outage would erase the client's credit-line debt
-    //    while their positions are still open.
-    BigDecimal remainingDebt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
-    List<Position> stillOpen = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    boolean positionsRemain = stillOpen != null && !stillOpen.isEmpty();
-    if (remainingDebt.compareTo(BigDecimal.ZERO) > 0 && !recovered && !positionsRemain) {
-      writeLedger(ta, "LIQUIDATION", remainingDebt, "Liquidation complete — " + closedCount
-          + " position(s) closed; residual debt written off");
-      ta.setBorrowedBalance(BigDecimal.ZERO);
-      stopInterestClockIfRepaid(ta);
-    } else if (closedCount > 0 && recovered) {
-      writeLedger(ta, "LIQUIDATION", BigDecimal.ZERO, "Liquidation complete — " + closedCount
-          + " position(s) closed; margin level recovered");
-    } else if (closedCount > 0 && positionsRemain) {
-      writeLedger(ta, "LIQUIDATION", BigDecimal.ZERO, "Liquidation incomplete — " + closedCount
-          + " position(s) closed, " + stillOpen.size() + " remain (prices unavailable?); debt kept");
-    }
+    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, BigDecimal.valueOf(live));
 
-    ta.setEquity(liveEquity(ta));
+    BrokerOrder order = new BrokerOrder();
+    order.setTradingAccount(ta);
+    order.setSymbolCode(pos.getSymbolCode());
+    order.setSide(close.closeSide());
+    order.setOrderType("MARKET");
+    order.setStatus("FILLED");
+    order.setQuantity(close.quantity());
+    order.setFilledAt(Instant.now());
+    order.setEntryPrice(close.closePrice());
+    order.setOpenPrice(close.avgPrice());
+    order.setOpenedAt(pos.getOpenedAt());
+    order.setRealizedPnl(close.netPnl());
+    commissionLedger.record(ta, order, close.closeCommission());
+    orderRepo.save(order);
+
+    positionRepo.delete(pos);
+    repaySettlementOrBorrow(ta, close.settlement());
+    ta.setEquity(AccountEquity.equity(ta, openPositions(ta), priceService));
     accountRepo.save(ta);
 
+    try {
+      Notification notif = new Notification();
+      notif.setUser(ta.getUser());
+      notif.setNotifType("LIQUIDATION");
+      notif.setTitle("notification.liquidation.title");
+      notif.setBody(String.format(java.util.Locale.US,
+          "{\"symbol\":\"%s\",\"qty\":\"%.4f\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",
+          pos.getSymbolCode(), close.quantity().doubleValue(), close.closePrice().doubleValue(),
+          close.netPnl().doubleValue()));
+      notificationRepo.save(notif);
+    } catch (Exception e) {
+      log.warn("[MarginLoan] Failed to push liquidation notification: {}", e.getMessage());
+    }
     auditLogService.log(ta.getUser(), "LIQUIDATION",
-        closedCount + " position(s) force-closed due to margin call", null);
+        pos.getSymbolCode() + " force-closed due to margin call", null);
+    return true;
   }
+
 }

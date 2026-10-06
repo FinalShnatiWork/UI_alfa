@@ -15,6 +15,11 @@ import com.brokerui.broker.MT5ConnectionManager;
 import com.brokerui.broker.MarginLoanLedger;
 import com.brokerui.broker.MarginLoanLedgerRepository;
 import com.brokerui.broker.MarginLoanService;
+import com.brokerui.broker.AuditLogService;
+import com.brokerui.user.AppUser;
+import com.brokerui.user.AppUserRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.core.Authentication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.boot.SpringApplication;
 import org.springframework.http.HttpStatus;
@@ -55,6 +60,8 @@ public class AdminTradeController {
   private final ApplicationContext applicationContext;
   private final MarginLoanLedgerRepository marginLedgerRepo;
   private final MarginLoanService marginLoanService;
+  private final AuditLogService auditLogService;
+  private final AppUserRepository userRepo;
 
   /**
    * Constructs the AdminTradeController with required repositories and services.
@@ -70,13 +77,17 @@ public class AdminTradeController {
    * @param applicationContext the Spring application context
    * @param marginLedgerRepo the repository for margin credit line ledger entries
    * @param marginLoanService the margin credit line service (interest/liquidation)
+   * @param auditLogService records which admin changed what
+   * @param userRepo resolves the acting admin for the audit log
    */
   public AdminTradeController(BrokerOrderRepository orderRepo, PositionRepository positionRepo,
         TradingAccountRepository accountRepo, AccountTransactionRepository transactionRepo,
         KycCaseRepository kycRepo, NotificationRepository notifRepo,
         AuditLogRepository auditRepo, MT5ConnectionManager mt5ConnectionManager,
         ApplicationContext applicationContext, MarginLoanLedgerRepository marginLedgerRepo,
-        MarginLoanService marginLoanService) {
+        MarginLoanService marginLoanService, AuditLogService auditLogService, AppUserRepository userRepo) {
+    this.auditLogService = auditLogService;
+    this.userRepo = userRepo;
     this.orderRepo = orderRepo;
     this.positionRepo = positionRepo;
     this.accountRepo = accountRepo;
@@ -90,6 +101,17 @@ public class AdminTradeController {
     this.marginLoanService = marginLoanService;
   }
 
+  /** Logs under the acting admin; the affected account is named in the detail. */
+  private void audit(Authentication auth, String action, String detail, HttpServletRequest request) {
+    AppUser admin = auth == null ? null : userRepo.findByEmailIgnoreCase(auth.getName()).orElse(null);
+    auditLogService.log(admin, action, detail, request);
+  }
+
+  private static String accountLabel(TradingAccount ta) {
+    AppUser owner = ta.getUser();
+    return "account #" + ta.getId() + (owner == null ? "" : " (" + owner.getEmail() + ")");
+  }
+
   /**
    * Gracefully shuts down the JVM after a short delay.
    * The OS process manager (or the .bat start script) should relaunch it.
@@ -98,7 +120,8 @@ public class AdminTradeController {
    * @return a map confirming the restart action has been initiated
    */
   @PostMapping("/server/restart")
-  public Map<String, String> restartServer() {
+  public Map<String, String> restartServer(Authentication auth, HttpServletRequest request) {
+    audit(auth, "ADMIN_SERVER_RESTART", "server restart requested", request);
     Thread restartThread = new Thread(() -> {
       try {
         Thread.sleep(500); // give response time to flush
@@ -209,7 +232,8 @@ public class AdminTradeController {
    * @return a map confirming the job ran
    */
   @PostMapping("/margin-loans/run-interest")
-  public Map<String, Object> runInterestNow() {
+  public Map<String, Object> runInterestNow(Authentication auth, HttpServletRequest request) {
+    audit(auth, "ADMIN_RUN_INTEREST", "daily interest charged now on every indebted account", request);
     marginLoanService.accrueDailyInterest();
     return Map.of("ok", true);
   }
@@ -221,7 +245,8 @@ public class AdminTradeController {
    * @return a map confirming the job ran
    */
   @PostMapping("/margin-loans/run-liquidation-check")
-  public Map<String, Object> runLiquidationCheckNow() {
+  public Map<String, Object> runLiquidationCheckNow(Authentication auth, HttpServletRequest request) {
+    audit(auth, "ADMIN_RUN_LIQUIDATION_CHECK", "liquidation check run now", request);
     marginLoanService.checkLiquidations();
     return Map.of("ok", true);
   }
@@ -248,7 +273,8 @@ public class AdminTradeController {
    */
   @PostMapping("/transactions/{id}/decide")
   @Transactional
-  public ResponseEntity<?> decideTransaction(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+  public ResponseEntity<?> decideTransaction(@PathVariable Long id, @RequestBody Map<String, Object> body,
+      Authentication auth, HttpServletRequest request) {
     String decision = body == null || body.get("decision") == null
         ? ""
         : String.valueOf(body.get("decision")).trim().toUpperCase();
@@ -270,6 +296,8 @@ public class AdminTradeController {
       tx.setStatus("REJECTED");
       tx.setProcessedAt(Instant.now());
       transactionRepo.save(tx);
+      audit(auth, "ADMIN_WITHDRAWAL_REJECTED",
+          "withdrawal #" + tx.getId() + " " + tx.getAmount() + " " + ta.getCurrency() + " for " + accountLabel(ta), request);
       return ResponseEntity.ok(Map.of("ok", true, "status", "REJECTED", "newBalance", ta.getBalance()));
     }
     if (ta.getBalance().compareTo(tx.getAmount()) < 0) {
@@ -286,6 +314,9 @@ public class AdminTradeController {
     tx.setStatus("APPROVED");
     tx.setProcessedAt(Instant.now());
     transactionRepo.save(tx);
+    audit(auth, "ADMIN_WITHDRAWAL_APPROVED",
+        "withdrawal #" + tx.getId() + " " + tx.getAmount() + " " + ta.getCurrency() + " paid from " + accountLabel(ta)
+            + "; balance now " + ta.getBalance(), request);
     return ResponseEntity.ok(Map.of("ok", true, "status", "APPROVED", "newBalance", ta.getBalance()));
   }
 
@@ -404,7 +435,8 @@ public class AdminTradeController {
    */
   @PostMapping("/accounts/{id}/balance")
   @org.springframework.transaction.annotation.Transactional
-  public Map<String, Object> updateBalance(@PathVariable Long id, @RequestBody UpdateBalanceRequest req) {
+  public Map<String, Object> updateBalance(@PathVariable Long id, @RequestBody UpdateBalanceRequest req,
+      Authentication auth, HttpServletRequest request) {
       if (req.balance() == null || req.balance().compareTo(BigDecimal.ZERO) < 0) {
         throw new org.springframework.web.server.ResponseStatusException(
             org.springframework.http.HttpStatus.BAD_REQUEST, "balance must be non-negative");
@@ -412,9 +444,13 @@ public class AdminTradeController {
       var acc = accountRepo.findByIdForUpdate(id)
           .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
+      BigDecimal before = acc.getBalance();
       acc.setBalance(req.balance());
-      acc.setEquity(req.balance());
+      acc.setEquity(storedEquity(acc));
+      acc.setFreeMargin(acc.getBalance());
       accountRepo.save(acc);
+      audit(auth, "ADMIN_BALANCE_SET",
+          accountLabel(acc) + " balance " + before + " -> " + req.balance() + " " + acc.getCurrency(), request);
       return Map.of("ok", true);
   }
 
@@ -429,10 +465,12 @@ public class AdminTradeController {
    */
   @PostMapping("/accounts/{id}/loan")
   @org.springframework.transaction.annotation.Transactional
-  public Map<String, Object> updateLoan(@PathVariable Long id, @RequestBody UpdateLoanRequest req) {
+  public Map<String, Object> updateLoan(@PathVariable Long id, @RequestBody UpdateLoanRequest req,
+      Authentication auth, HttpServletRequest request) {
       var acc = accountRepo.findByIdForUpdate(id)
           .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
+      BigDecimal debtBefore = acc.getBorrowedBalance();
       BigDecimal newBorrowed = (req != null && req.borrowedBalance() != null) ? req.borrowedBalance() : new BigDecimal("3500.00");
       acc.setBorrowedBalance(newBorrowed);
       if (acc.getInterestAccruedTotal() == null || acc.getInterestAccruedTotal().compareTo(BigDecimal.ZERO) == 0) {
@@ -449,6 +487,8 @@ public class AdminTradeController {
       entry.setBalanceAfter(acc.getBalance());
       entry.setNote("Manual margin loan activation for demo");
       marginLedgerRepo.save(entry);
+      audit(auth, "ADMIN_DEBT_SET",
+          accountLabel(acc) + " debt " + debtBefore + " -> " + newBorrowed + " " + acc.getCurrency(), request);
 
       return Map.of("ok", true, "borrowedBalance", acc.getBorrowedBalance());
   }

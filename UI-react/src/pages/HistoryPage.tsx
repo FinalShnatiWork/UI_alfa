@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
-import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
 import { useBrokerOverview, useTradeHistory } from '@/hooks/useApi';
 import type { BrokerOrder } from '@/types/api';
 import { pairOrders, tsMs as ts } from '@/lib/tradeUtils';
 import type { PairedTrade } from '@/lib/tradeUtils';
-import { fmtDateTime, fmtMoney, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
+import { fmtCsvDateTime, fmtDateTime, fmtMoney, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
+import { downloadCsv } from '@/lib/csv';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -33,27 +32,50 @@ function fmtPl(n: unknown, currency: string): string {
   return n == null ? '—' : fmtSignedMoney(n, currency);
 }
 
-function exportCsv(trades: PairedTrade[], currency: string, locale: string) {
-  const headers = ['#', 'Symbol', 'Volume', 'Open Time', 'Open Price', 'Close Time', 'Close Price', 'S/L', 'T/P', 'Commission', 'P/L'];
-  const rows = trades.map((t) => [
-    t.id, t.symbolCode, fmtQty(t.quantity),
-    fmtTime(t.openTime, locale), fmtPrice(t.openPrice),
-    fmtTime(t.closeTime, locale), fmtPrice(t.closePrice),
-    fmtPrice(t.stopLoss), fmtPrice(t.takeProfit),
-    t.commission != null ? `−${fmtMoney(t.commission, currency)}` : '',
-    t.realizedPnl != null ? fmtPl(t.realizedPnl, currency) : '',
-  ]);
-  const csv = [headers, ...rows]
-    .map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `history-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+function numOrBlank(value: unknown, keepZero = false): number | '' {
+  if (value == null || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n) || (!keepZero && n === 0)) return '';
+  return n;
 }
+
+function exportCsv(trades: PairedTrade[], t: (key: string) => string) {
+  const headers = [
+    '#',
+    t('table.symbol'),
+    t('history.volume'),
+    t('history.openTime'),
+    t('table.openPrice'),
+    t('history.closeTime'),
+    t('history.closePrice'),
+    t('table.stopLoss'),
+    t('table.takeProfit'),
+    t('history.commission'),
+    t('table.pl'),
+  ];
+  const rows = trades.map((t) => [
+    t.id,
+    t.symbolCode,
+    numOrBlank(t.quantity, true),
+    fmtCsvDateTime(t.openTime),
+    numOrBlank(t.openPrice),
+    fmtCsvDateTime(t.closeTime),
+    numOrBlank(t.closePrice),
+    numOrBlank(t.stopLoss),
+    numOrBlank(t.takeProfit),
+    numOrBlank(t.commission, true),
+    t.realizedPnl != null ? numOrBlank(t.realizedPnl, true) : '',
+  ]);
+  downloadCsv('history', headers, rows);
+}
+
+interface HistoryFilter {
+  from: string;
+  to: string;
+  symbol: string;
+}
+
+const NO_FILTER: HistoryFilter = { from: '', to: '', symbol: '' };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -67,53 +89,43 @@ function exportCsv(trades: PairedTrade[], currency: string, locale: string) {
  */
 export function HistoryPage() {
   const { t, lang } = useI18n();
-  const toast = useToast();
-  const navigate = useNavigate();
-
-  const [filtered, setFiltered] = useState<PairedTrade[]>([]);
+  const [filter, setFilter] = useState<HistoryFilter>(NO_FILTER);
 
   const dateFromRef = useRef<HTMLInputElement>(null);
   const dateToRef = useRef<HTMLInputElement>(null);
   const symbolRef = useRef<HTMLInputElement>(null);
 
-  const { data: overview, error: overviewError } = useBrokerOverview();
+  const { data: overview } = useBrokerOverview();
   const { data: historyData, isLoading } = useTradeHistory();
 
   const currency = overview?.currency || 'USD';
 
   useEffect(() => { document.title = t('titles.history'); }, [t]);
 
-  useEffect(() => {
-    if (overviewError && (overviewError as { status?: number })?.status === 401) {
-      toast.show(t('alerts.authNeedLogin'), { variant: 'warning' });
-      setTimeout(() => navigate('/login'), 800);
-    }
-  }, [overviewError, navigate, t, toast]);
-
   const allOrders: BrokerOrder[] = Array.isArray(historyData) ? historyData : [];
   const allPairs = pairOrders(allOrders);
 
-  useEffect(() => {
-    setFiltered(allPairs);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyData]);
+  const symFilter = filter.symbol.trim().toUpperCase();
+  const fromMs = filter.from ? new Date(filter.from).getTime() : null;
+  const toMs = filter.to ? new Date(filter.to + 'T23:59:59').getTime() : null;
+  const filtered = allPairs.filter((o) =>
+    (fromMs == null || ts(o.closeTime) >= fromMs)
+    && (toMs == null || ts(o.closeTime) <= toMs)
+    && (!symFilter || o.symbolCode.toUpperCase().includes(symFilter)));
 
   function applyFilters() {
-    let result = [...allPairs];
-    const from = dateFromRef.current?.value;
-    const to = dateToRef.current?.value;
-    const sym = symbolRef.current?.value.trim().toUpperCase();
-    if (from) result = result.filter((o) => ts(o.closeTime) >= new Date(from).getTime());
-    if (to) result = result.filter((o) => ts(o.closeTime) <= new Date(to + 'T23:59:59').getTime());
-    if (sym) result = result.filter((o) => o.symbolCode.toUpperCase().includes(sym));
-    setFiltered(result);
+    setFilter({
+      from: dateFromRef.current?.value ?? '',
+      to: dateToRef.current?.value ?? '',
+      symbol: symbolRef.current?.value ?? '',
+    });
   }
 
   function handleReset() {
     if (dateFromRef.current) dateFromRef.current.value = '';
     if (dateToRef.current) dateToRef.current.value = '';
     if (symbolRef.current) symbolRef.current.value = '';
-    setFiltered(allPairs);
+    setFilter(NO_FILTER);
   }
 
   // Stats
@@ -185,8 +197,8 @@ export function HistoryPage() {
               <button type="button" className="btn btn-outline-dark" style={{ padding: '7px 12px', fontSize: '0.85rem' }} onClick={handleReset}>
                 {t('history.reset')}
               </button>
-              <button type="button" className="btn btn-outline-dark" style={{ padding: '7px 12px', fontSize: '0.85rem' }} onClick={() => exportCsv(filtered, currency, lang)}>
-                CSV ↓
+              <button type="button" className="btn btn-outline-dark" style={{ padding: '7px 12px', fontSize: '0.85rem' }} onClick={() => exportCsv(filtered, t)}>
+                Excel
               </button>
             </div>
           </div>

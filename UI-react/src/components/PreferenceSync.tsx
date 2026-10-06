@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
-import { persistLang } from '@/lib/i18n';
+import { getLang, persistLang } from '@/lib/i18n';
 import { usePreferences } from '@/hooks/useApi';
 import type { Lang } from '@/types/api';
 
@@ -47,14 +47,10 @@ export function PreferenceSync({ children }: { children: ReactNode }) {
     if (!prefs) return;
 
     // Always apply from DB so different users don't bleed into each other's settings.
-    // If the user has no saved preference, fall back to safe defaults.
-    if (prefs.lang && ALLOWED_LANGS.has(prefs.lang)) {
-      persistLang(prefs.lang as Lang);
-      setLang(prefs.lang as Lang);
-    } else {
-      persistLang('en');
-      setLang('en');
-    }
+    // Without a saved language, keep the one the visitor already picked before logging in.
+    const lang = prefs.lang && ALLOWED_LANGS.has(prefs.lang) ? (prefs.lang as Lang) : getLang();
+    persistLang(lang);
+    setLang(lang);
 
     if (prefs.theme && ALLOWED_THEMES.has(prefs.theme)) {
       applyTheme(prefs.theme as Theme);
