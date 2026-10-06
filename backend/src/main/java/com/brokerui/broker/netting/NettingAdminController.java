@@ -390,7 +390,8 @@ public class NettingAdminController {
     long i5 = num(em.createNativeQuery(
         "SELECT COUNT(*) FROM broker_order WHERE internal_qty + external_qty <> filled_qty OR filled_qty > quantity OR filled_qty < 0").getSingleResult());
     long i6 = num(em.createNativeQuery(
-        "SELECT COUNT(*) FROM broker_order WHERE routing IN ('INTERNAL','EXTERNAL','SPLIT') AND filled_qty > 0 AND commission <= 0").getSingleResult());
+        "SELECT COUNT(*) FROM broker_order WHERE routing IN ('INTERNAL','EXTERNAL','SPLIT') AND filled_qty > 0 AND commission <= 0"
+            + " AND NOT (order_type = 'CLOSE' AND routing = 'INTERNAL')").getSingleResult());
     Object[] i7row = (Object[]) em.createNativeQuery(
         "SELECT (SELECT COALESCE(SUM(quantity),0) FROM internal_match), "
             + "(SELECT COALESCE(SUM(internal_qty),0) FROM broker_order WHERE side='BUY'), "
@@ -402,7 +403,7 @@ public class NettingAdminController {
     out.put("I3_house_net_exposure_zero", inv(i3, "symbols where netted BUY qty != netted SELL qty: " + exposure));
     out.put("I4_no_self_or_sim_sim", inv(i4, "self-matches or computer-vs-computer matches"));
     out.put("I5_quantity_accounting", inv(i5, "orders where internal+external != filled or filled > quantity"));
-    out.put("I6_commission_charged", inv(i6, "netting-era filled orders without commission"));
+    out.put("I6_commission_charged", inv(i6, "netting-era filled orders without commission (an internal close may be 0 under the 20% profit cap)"));
     out.put("I7_every_internal_unit_has_a_real_counterparty", inv(i7ok ? 0 : 1,
         "match qty " + m.toPlainString() + " / BUY internal " + b.toPlainString() + " / SELL internal " + s.toPlainString()));
     boolean all = i1 == 0 && i2 == 0 && i3 == 0 && i4 == 0 && i5 == 0 && i6 == 0 && i7ok;

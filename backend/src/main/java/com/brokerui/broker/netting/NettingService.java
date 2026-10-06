@@ -77,6 +77,7 @@ public class NettingService {
   public static final String FUNDS_SKIP = "FUNDS_SKIP";
   public static final String ORDER_REJECTED = "ORDER_REJECTED";
   public static final String MATCHED = "MATCHED";
+  public static final String CLOSE_TARGET_GONE = "CLOSE_TARGET_GONE";
 
   private final BrokerOrderRepository orderRepo;
   private final TradingAccountRepository accountRepo;
@@ -242,6 +243,20 @@ public class NettingService {
       }
       BigDecimal qty = f.qty().min(in.remainingQty()).min(r.remainingQty());
       if (qty.signum() <= 0) continue;
+      // Both legs are checked before either is booked, so a cross is never half-recorded.
+      if (!booking.closeTargetAlive(in)) {
+        in.setStatus(CANCELLED);
+        in.setNetDeadline(null);
+        pending.event(in.getId(), r.getId(), CLOSE_TARGET_GONE, "position to close no longer exists");
+        break;
+      }
+      if (!booking.closeTargetAlive(r)) {
+        r.setStatus(CANCELLED);
+        r.setNetDeadline(null);
+        orderRepo.save(r);
+        pending.event(in.getId(), r.getId(), CLOSE_TARGET_GONE, "resting close has no position left");
+        continue;
+      }
       if (!booking.canBook(in, inTa, qty, q.mid(), true)) {
         pending.event(in.getId(), r.getId(), FUNDS_SKIP, "incoming account cannot fund an internal fill");
         break;

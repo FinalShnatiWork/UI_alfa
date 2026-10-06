@@ -566,7 +566,7 @@ export function DashboardPage() {
                   let displayBody = n.body;
                   try {
                     const data = JSON.parse(n.body);
-                    const bodyKey = n.title.replace('.title', '.body');
+                    const bodyKey = n.title.replace(/\.[^.]+$/, '.body');
                     let bodyTemplate = t(bodyKey) || bodyKey;
                     if (data.side) {
                       data.side = t(`badge.${data.side.toLowerCase()}`) || data.side;

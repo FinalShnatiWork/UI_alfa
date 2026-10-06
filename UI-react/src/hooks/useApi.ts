@@ -285,6 +285,18 @@ export function useSavePreferences() {
 }
 
 /**
+ * One-click trading preference. Off by default: every order and close asks for confirmation.
+ *
+ * @returns current flag and a setter that persists it
+ */
+export function useOneClickTrading(): [boolean, (v: boolean) => void] {
+  const { data: prefs } = usePreferences();
+  const { mutate: savePrefs } = useSavePreferences();
+  const enabled = prefs?.oneClickTrading === 'true';
+  return [enabled, (v: boolean) => savePrefs({ oneClickTrading: String(v) })];
+}
+
+/**
  * Custom hook to deposit or withdraw funds.
  *
  * @returns React Query mutation wrapper object

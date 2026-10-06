@@ -5,7 +5,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { SkeletonRow } from '@/components/Skeleton';
-import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder } from '@/hooks/useApi';
+import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder, useOneClickTrading } from '@/hooks/useApi';
 import type { Position, BrokerOrder } from '@/types/api';
 import { pairOrders } from '@/lib/tradeUtils';
 
@@ -86,6 +86,7 @@ export function PositionsPage() {
   const { data: pendingData, isLoading: pendingLoading } = usePendingOrders();
   const { mutateAsync: cancelOrder } = useCancelOrder();
   const invalidateAfterTrade = useInvalidateAfterTrade();
+  const [oneClick] = useOneClickTrading();
 
   useEffect(() => { document.title = t('titles.positions'); }, [t]);
 
@@ -137,7 +138,7 @@ export function PositionsPage() {
         toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {
-        toast.show(`Error: ${data.error ?? ''}`, { variant: 'error' });
+        toast.show(t('alerts.closeFail'), { variant: 'error' });
       }
     } catch {
       toast.show(t('alerts.closeFail'), { variant: 'error' });
@@ -268,7 +269,7 @@ export function PositionsPage() {
                           className="btn btn-danger"
                           style={{ padding: '6px 12px', fontSize: '0.8rem' }}
                           disabled={isClosing}
-                          onClick={() => setConfirm({ position: p })}
+                          onClick={() => { if (oneClick) void closePosition(p); else setConfirm({ position: p }); }}
                         >
                           {isClosing ? t('common.closing') : t('common.close')}
                         </button>

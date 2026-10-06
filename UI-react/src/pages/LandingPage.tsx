@@ -86,19 +86,19 @@ export function LandingPage() {
       <div className="container text-center" style={{ padding: '0 20px 60px' }}>
         <div className="stats-grid grid-3 card">
           <div className="stat-card">
-            <div className="value text-primary">200+</div>
+            <div className="value text-primary">14</div>
             <div className="label" style={{ color: 'var(--text-secondary)' }}>
               {t('landing.assets')}
             </div>
           </div>
           <div className="stat-card">
-            <div className="value text-primary">0.0</div>
+            <div className="value text-primary" dir="ltr">0.015%</div>
             <div className="label" style={{ color: 'var(--text-secondary)' }}>
               {t('landing.spread')}
             </div>
           </div>
           <div className="stat-card">
-            <div className="value text-primary">1:500</div>
+            <div className="value text-primary" dir="ltr">1:100</div>
             <div className="label" style={{ color: 'var(--text-secondary)' }}>
               {t('landing.leverage')}
             </div>

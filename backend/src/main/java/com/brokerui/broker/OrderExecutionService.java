@@ -117,9 +117,9 @@ public class OrderExecutionService {
 
     String symbolCode = order.getSymbolCode();
     Symbol sym = symbolRepo.findByCode(symbolCode).orElse(null);
-    if (sym == null || !sym.isEnabled()) {
-      order.setStatus("REJECTED");
-      orderRepo.save(order);
+    // A close must still go through on a disabled symbol, otherwise the position is stuck.
+    if ((sym == null || !sym.isEnabled()) && !"CLOSE".equalsIgnoreCase(order.getOrderType())) {
+      rejectAndRefund(order);
       return;
     }
 
@@ -161,6 +161,25 @@ public class OrderExecutionService {
     }
     // Internal book first, then the remainder (external now, or wait as PENDING_NET for LIMITs).
     nettingService.executeLocked(order, last);
+  }
+
+  /** Rejects an open order and returns whatever is still reserved for it, same as a cancel. */
+  private void rejectAndRefund(BrokerOrder order) {
+    TradingAccount ta = order.getTradingAccount() == null ? null
+        : accountRepo.findByIdForUpdate(order.getTradingAccount().getId()).orElse(null);
+    if (ta != null) {
+      BigDecimal refund = com.brokerui.broker.netting.FillBooking.outstandingReserve(order, ta);
+      if (refund.compareTo(BigDecimal.ZERO) > 0) {
+        marginLoanService.repaySettlementOrBorrow(ta, refund);
+        ta.setEquity(recalcEquity(ta));
+        ta.setFreeMargin(ta.getBalance());
+        accountRepo.save(ta);
+      }
+    }
+    order.setReserveRemaining(BigDecimal.ZERO);
+    order.setStatus("REJECTED");
+    order.setNetDeadline(null);
+    orderRepo.save(order);
   }
 
   private static boolean isOpen(String status) {

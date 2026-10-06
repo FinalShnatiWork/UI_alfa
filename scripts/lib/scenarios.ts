@@ -326,9 +326,18 @@ const scenarios = [
       const rb = await ctx.B.closeAll(ctx.sym);
       await ctx.refresh();
       ctx.check('all closes succeeded', [...ra, ...rb].every((r) => r.ok), JSON.stringify([...ra, ...rb].filter((r) => !r.ok)));
-      const pa = (await ctx.A.positions()).filter((p) => p.symbolCode === ctx.sym);
-      const pb = (await ctx.B.positions()).filter((p) => p.symbolCode === ctx.sym);
-      ctx.check('A and B are flat', pa.length === 0 && pb.length === 0, `A=${pa.length} B=${pb.length}`);
+      const open = async () => ({
+        a: (await ctx.A.positions()).filter((p) => p.symbolCode === ctx.sym).length,
+        b: (await ctx.B.positions()).filter((p) => p.symbolCode === ctx.sym).length,
+      });
+      // A close rests in the book for up to limitWaitMs before it goes to the venue.
+      const flat = await ctx.waitFor(async () => {
+        const n = await open();
+        return n.a === 0 && n.b === 0 ? n : null;
+      }, 25000, 'A and B positions closed');
+      await ctx.refresh();
+      const left = flat || (await open());
+      ctx.check('A and B are flat', !!flat, `A=${left.a} B=${left.b}`);
       const inv = await ctx.admin.invariants();
       ctx.check('house net exposure is 0 on every symbol (I3)', inv.I3_house_net_exposure_zero.pass, inv.I3_house_net_exposure_zero.meaning);
     },

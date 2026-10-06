@@ -116,8 +116,8 @@ const defaultNotifications = [
   {
     id: 1,
     notifType: "INFO",
-    title: "ברוך הבא לתיק העבודות!",
-    body: "זהו ממשק דמו אינטראקטיבי מלא הפועל ישירות בדפדפן (Client-Side).",
+    title: "notification.demoWelcome.title",
+    body: "notification.demoWelcome.body",
     readAt: null,
     createdAt: new Date().toISOString()
   }
@@ -197,7 +197,7 @@ export function getContractSize(symbol: string): number {
   const sym = symbol.toUpperCase();
   if (sym.includes('BTC')) return 1;
   if (sym.includes('ETH')) return 1;
-  if (sym.includes('SOL')) return 100;
+  if (sym.includes('SOL')) return 1;
   if (sym.includes('XRP')) return 1000;
   if (sym.includes('XAU')) return 100;
   if (sym.includes('XAG')) return 5000;
@@ -449,7 +449,7 @@ async function mockGet(path: string): Promise<any> {
     return {
       id: 1,
       email: localStorage.getItem('mock_user_email') || 'demo@tradeadge.com',
-      displayName: localStorage.getItem('mock_user_name') || 'דוד פורטפוליו',
+      displayName: localStorage.getItem('mock_user_name') || 'Demo Trader',
       role: 'USER',
       createdAt: new Date().toISOString()
     };
@@ -633,7 +633,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
     
     if (orderType === 'MARKET') {
       if (balance < cost) {
-        return new Response(JSON.stringify({ ok: false, error: 'יתרה לא מספקת' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ ok: false, error: 'insufficient_funds' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
       
       let newBalance = balance - cost;
@@ -696,12 +696,12 @@ async function mockPost(path: string, body: any): Promise<Response> {
       const stopPriceVal = orderReq.stopPrice ? parseFloat(orderReq.stopPrice.toString()) : 0;
       const reservePrice = limitPriceVal > 0 ? limitPriceVal : (stopPriceVal > 0 ? stopPriceVal : 0);
       if (reservePrice <= 0) {
-        return new Response(JSON.stringify({ ok: false, error: 'מחיר יעד נדרש להוראה עתידית' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ ok: false, error: 'limit_price_required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
       
       const reserved = reservePrice * quantity;
       if (balance < reserved) {
-        return new Response(JSON.stringify({ ok: false, error: 'יתרה לא מספקת להוראה עתידית' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ ok: false, error: 'insufficient_funds' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
       overview.balance = balance - reserved;
@@ -809,7 +809,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
 
       return new Response(JSON.stringify({ ok: true, closePnl: pnl.toFixed(2) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    return new Response(JSON.stringify({ ok: false, error: 'פוזיציה לא נמצאה' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: false, error: 'position_not_found' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
   if (path.includes('/cancel')) {
@@ -842,7 +842,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
       
       return new Response(JSON.stringify({ ok: true, newBalance: overview.balance.toFixed(2) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    return new Response(JSON.stringify({ ok: false, error: 'הוראה לא נמצאה' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: false, error: 'order_not_found' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
   if (path.includes('/api/broker/preferences')) {

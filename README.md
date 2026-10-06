@@ -13,7 +13,7 @@ Full-stack trading platform: Spring Boot (Java) + React (TypeScript) + PostgreSQ
 | Node.js | 18+ | https://nodejs.org |
 | Docker Desktop | latest | https://docker.com/products/docker-desktop |
 
-> **First time setup?** Run `install-requirements.bat` to install Node.js and Java automatically via winget.
+Maven does not have to be installed separately: `backend/mvnw.cmd` downloads it.
 
 ---
 
@@ -37,8 +37,9 @@ To stop everything: double-click **`kill-server.bat`**
 ```bash
 git clone https://github.com/FinalShnatiWork/UI_alfa.git
 cd UI_alfa
-git checkout feat/unify-react-ts
 ```
+
+`main` is the stable branch, `develop` is the working one.
 
 ### 2. Start the database (Docker)
 
@@ -51,14 +52,16 @@ docker compose up -d
 
 ```bash
 cd backend
-mvn spring-boot:run
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=postgres"
 ```
 
 Wait for: `Started BackendApplication in XX seconds`
 
-> On first run, Flyway applies migrations V1–V33.
+> On first run, Flyway applies migrations V1–V36.
 > V32 adds netting (internal matches, the computer accounts, legacy routing).
 > V33 restates the venue fee an internal match saved.
+> V34 lets a close wait on the internal book, V35 sets the SOL contract size to 1 coin,
+> V36 allows only one working close order per position.
 > The seed data is users, accounts, positions, and trade history.
 
 Backend URL: http://localhost:8080
@@ -85,9 +88,12 @@ node nn_server.js
 ### 6. Open in browser
 
 - App: http://localhost:3001
-- Admin Hub: http://localhost:3001/admin (or `open-admin.bat`)
-- Netting console: http://localhost:3001/admin/netting
-- Demo with two users: run `test-dual-users.bat`
+- Admin Hub: http://localhost:3001/#/admin
+- Netting console: http://localhost:3001/#/admin/netting
+
+The app uses hash routing, so every page address has `/#/` in it.
+
+The GitHub Pages copy (https://finalshnatiwork.github.io/UI_alfa/) has no server behind it: it runs a demo mode inside the browser, with its own fake data and no admin.
 
 ---
 
@@ -99,7 +105,10 @@ node nn_server.js
 | netting.a@broker.local | Netting123! | User |
 | netting.b@broker.local | Netting123! | User |
 
-`demo@broker.local` is in the database, but the password is the one already stored there. A brand-new empty database creates that user with `demo123` only when the email is missing. `admin1234` and `demo1234` are not the passwords. The admin password above is the default (`BROKER_ADMIN_PASSWORD`, otherwise `1234`) and it is what this database accepts. Admin pages do not ask for a login: they are limited to localhost.
+- **Admin.** An empty database creates the admin with `1234`. A password changed later in Settings survives restarts. To reset it, start the backend with `BROKER_ADMIN_PASSWORD` set.
+- **Admin pages** need an ADMIN login and are also limited to requests from this computer.
+- **`demo@broker.local`** gets `demo123` only on an empty database. An existing database keeps its stored password.
+- **The two netting users** are created by the netting test on its first run.
 
 ---
 
@@ -114,7 +123,7 @@ UI_alfa/
 │       ├── java/com/brokerui/      # Java source code
 │       └── resources/
 │           ├── application.yml
-│           └── db/migration/       # Flyway SQL migrations (V1–V33)
+│           └── db/migration/       # Flyway SQL migrations (V1–V36)
 ├── UI-react/                       # React + TypeScript (Vite) — trading UI and admin hub
 │   ├── src/
 │   │   ├── pages/                  # Page components (incl. pages/admin)
@@ -123,13 +132,12 @@ UI_alfa/
 │   │   └── locales.json            # i18n (EN / RU / HE)
 │   └── package.json
 ├── buysellmodel/                   # NN training (Node). Inference is proxied through Spring.
-├── scripts/                        # Typed netting e2e (`npx tsx scripts/netting_e2e.ts`)
+├── scripts/                        # Netting e2e test and visual demo (TypeScript)
 ├── system_documentation/           # Architecture notes
+├── .github/workflows/ci.yml        # CI: frontend build + backend tests on every push
 ├── start-project.bat               # Start core services
 ├── kill-server.bat                 # Stop all services
-├── build-prod.bat                  # Build production JAR
-├── open-admin.bat                  # Open React admin hub
-└── test-dual-users.bat             # Demo: two traders + admin simultaneously
+└── deploy-site.bat                 # Publish the browser-only demo to GitHub Pages
 ```
 
 ---
@@ -167,7 +175,7 @@ Every fill charges a commission (`TradingFees.java`). Crypto is 0.20% of notiona
 **Netting (client vs client / client vs computer)** — see `buysellmodel/NETTING_IMPLEMENTATION_PLAN.md`:
 - Every order first tries to **cross internally at the mid price** against an opposite order (another client, or "the computer" — simulated clients that quote around the mid). Both sides get the mid instead of paying the spread.
 - A cross is allowed only if the buyer accepts ≥ mid and the seller accepts ≤ mid (NBBO), never with yourself, never computer-vs-computer.
-- Whatever is left goes to the external market (MT5 if connected). A marketable LIMIT first waits `limit-wait-ms` (8 s) for an internal counterparty.
+- Whatever is left goes to the external market (MT5 if connected). A close or a marketable LIMIT first waits `limit-wait-ms` (5 s) for an internal counterparty.
 - The broker **never keeps a side**: it earns commission + the external fees it saved. The neural network runs in **shadow mode** only (recorded, never decides).
 - Settings: `broker.netting.*` in `backend/src/main/resources/application.yml` (turn the computer off with `sim.enabled: false`).
 
@@ -175,12 +183,19 @@ Admin Hub → **Overview** shows profit (the live tariff minus venue cost, plus 
 
 **Testing it** (the backend must be running for the live parts):
 
-| Double-click | What it does |
+| Command | What it does |
 |---|---|
-| `run-netting-tests.bat` | model + feature check, Java engine tests, then the 16 live scenarios (PASS/FAIL + report in `reports/`) |
-| `run-netting-visual.bat` | opens the React netting console at http://localhost:3001/admin/netting |
+| `cd backend` then `.\mvnw.cmd test` | Java unit tests: netting engine, fees, close math, credit line, stop validation |
+| `cd scripts` then `npm install` and `npx tsx netting_e2e.ts` | the live netting scenarios against the running backend (PASS/FAIL) |
+| open http://localhost:3001/#/admin/netting | the netting console in the admin hub |
 
 The test users `netting.a@broker.local` / `netting.b@broker.local` (password `Netting123!`) are created automatically on the first run.
+
+## Trading Safeguards
+
+- Every order opens a confirmation window with the volume, the expected price, margin, commission and the cash left after the trade. Closing a position asks too. **Settings → Trading → One-click trading** turns both off.
+- Stop Loss and Take Profit must sit on the right side of the price (BUY: SL below, TP above; SELL: the opposite). The form and the server both check it.
+- A close order cannot be cancelled once it is sent, whether it came from the client, a stop, a take profit or a liquidation.
 
 ---
 

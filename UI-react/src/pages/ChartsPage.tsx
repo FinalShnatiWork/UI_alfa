@@ -10,7 +10,9 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { LoanOfferModal, type LoanOfferDetails } from '@/components/LoanOfferModal';
-import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder } from '@/hooks/useApi';
+import { OrderConfirmModal, type OrderConfirmDetails } from '@/components/OrderConfirmModal';
+import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder, useOneClickTrading } from '@/hooks/useApi';
+import { SPREAD_RATE, stopsAreValid } from '@/lib/tradeUtils';
 
 import type { PlaceOrderResponse, ClosePositionResponse } from '@/types/api';
 
@@ -714,13 +716,42 @@ export function ChartsPage() {
   // which already runs its own 500ms jitter + 5s backend poll — same as PositionsPage.
 
   const [loanOffer, setLoanOffer] = useState<LoanOfferDetails | null>(null);
+  const [orderConfirm, setOrderConfirm] = useState<OrderConfirmDetails | null>(null);
+  const [closeConfirm, setCloseConfirm] = useState<{ id: number; symbol: string } | null>(null);
+  const [oneClick, setOneClick] = useOneClickTrading();
 
-  async function placeOrder(side: 'BUY' | 'SELL', acceptLoan = false) {
+  /** Validates the ticket, then either opens the confirmation window or sends straight away. */
+  function requestOrder(side: 'BUY' | 'SELL') {
     const qty = Number(volume);
     if (!symbol || !qty || qty <= 0) { toast.show(t('trading.errBadOrder'), { variant: 'warning' }); return; }
     if (orderType !== 'MARKET' && (!entryPrice || Number(entryPrice) <= 0)) {
       toast.show(t('trading.errEntryPriceRequired'), { variant: 'warning' }); return;
     }
+    const mid = livePrices[symbol.toUpperCase()] ?? Number(livePrice);
+    const price = orderType === 'MARKET'
+      ? mid * (side === 'BUY' ? 1 + SPREAD_RATE : 1 - SPREAD_RATE)
+      : Number(entryPrice);
+    const sl = stopLoss ? Number(stopLoss) : undefined;
+    const tp = takeProfit ? Number(takeProfit) : undefined;
+    if (Number.isFinite(price) && price > 0 && !stopsAreValid(side, price, sl, tp)) {
+      toast.show(t('trading.errInvalidStops'), { variant: 'warning' }); return;
+    }
+    if (oneClick || !Number.isFinite(price) || price <= 0) { void placeOrder(side); return; }
+    setOrderConfirm({
+      symbol,
+      side,
+      orderType,
+      lots: qty,
+      price,
+      leverage: Number(overviewData?.leverage) || 100,
+      freeFunds: Number(overviewData?.balance ?? 0),
+      stopLoss: sl,
+      takeProfit: tp,
+    });
+  }
+
+  async function placeOrder(side: 'BUY' | 'SELL', acceptLoan = false) {
+    const qty = Number(volume);
     try {
       const payload: Record<string, unknown> = {
         side,
@@ -773,6 +804,8 @@ export function ChartsPage() {
           insufficient_funds: t('trading.errInsufficientFunds'),
           insufficient_funds_for_short: t('trading.errInsufficientFunds'),
           price_unavailable: t('trading.errPriceUnavailable'),
+          limit_price_required: t('trading.errEntryPriceRequired'),
+          invalid_stops: t('trading.errInvalidStops'),
         };
         const message = (data.error && knownErrors[data.error]) || (t('trading.errOrderFailed') + ': ' + (data.error ?? ''));
         toast.show(message, { variant: 'error' });
@@ -1017,9 +1050,9 @@ export function ChartsPage() {
               {/* BUY / SELL */}
               <div className="flex-gap mt-20">
                 <button type="button" className="btn btn-danger" style={{ flex: 1, padding: 14 }}
-                  onClick={() => void placeOrder('SELL')}>{t('trading.sell')}</button>
+                  onClick={() => requestOrder('SELL')}>{t('trading.sell')}</button>
                 <button type="button" className="btn btn-success" style={{ flex: 1, padding: 14 }}
-                  onClick={() => void placeOrder('BUY')}>{t('trading.buy')}</button>
+                  onClick={() => requestOrder('BUY')}>{t('trading.buy')}</button>
               </div>
             </div>
           </div>
@@ -1090,7 +1123,11 @@ export function ChartsPage() {
                           </td>
                           <td className="center">
                             <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                              onClick={() => void closeInlinePosition(p.id, p.symbolCode)}>✕</button>
+                              aria-label={t('common.close')} title={t('common.close')}
+                              onClick={() => {
+                                if (oneClick) void closeInlinePosition(p.id, p.symbolCode);
+                                else setCloseConfirm({ id: p.id, symbol: p.symbolCode });
+                              }}>✕</button>
                           </td>
                         </tr>
                       );
@@ -1156,6 +1193,35 @@ export function ChartsPage() {
         </div>
       </div>
       {loanOffer && <LoanOfferModal {...loanOffer} />}
+      {orderConfirm && (
+        <OrderConfirmModal
+          {...orderConfirm}
+          onCancel={() => setOrderConfirm(null)}
+          onConfirm={(dontAsk) => {
+            const side = orderConfirm.side;
+            setOrderConfirm(null);
+            if (dontAsk) setOneClick(true);
+            void placeOrder(side);
+          }}
+        />
+      )}
+      {closeConfirm && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setCloseConfirm(null)}
+        >
+          <div className="card" role="dialog" aria-modal="true" style={{ maxWidth: 380, width: '90%', padding: 30, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <p style={{ marginBottom: 24, fontSize: '1.05rem' }}>{t('confirm.closePosition', { symbol: closeConfirm.symbol })}</p>
+            <div className="flex-gap" style={{ justifyContent: 'center' }}>
+              <button type="button" className="btn btn-danger" autoFocus
+                onClick={() => { const c = closeConfirm; setCloseConfirm(null); void closeInlinePosition(c.id, c.symbol); }}>
+                {t('common.confirm')}
+              </button>
+              <button type="button" className="btn btn-outline-dark" onClick={() => setCloseConfirm(null)}>{t('common.cancel')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

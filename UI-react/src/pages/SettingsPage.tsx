@@ -85,6 +85,7 @@ export function SettingsPage() {
 
   const [pushNotif, setPushNotif] = useState(true);
   const [emailReports, setEmailReports] = useState(true);
+  const [oneClick, setOneClick] = useState(false);
   const [theme, setThemeState] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
   const [pwOpen, setPwOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -97,6 +98,7 @@ export function SettingsPage() {
     if (!prefs) return;
     if ('pushNotif' in prefs) setPushNotif(prefs.pushNotif === 'true');
     if ('emailReports' in prefs) setEmailReports(prefs.emailReports === 'true');
+    setOneClick(prefs.oneClickTrading === 'true');
     if ('theme' in prefs) {
       const t = prefs.theme as Theme;
       setThemeState(t);
@@ -231,6 +233,27 @@ export function SettingsPage() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Trading */}
+        <div className="card text-left">
+          <h3
+            className="mb-20 text-xl font-bold mt-20"
+            style={{ borderBottom: '2px solid var(--border-light)', paddingBottom: 20 }}
+          >
+            {t('settings.trading')}
+          </h3>
+          {prefsLoading ? (
+            <Skeleton height={48} />
+          ) : (
+            <ToggleRow
+              label={t('settings.oneClick')}
+              description={t('settings.oneClickDesc')}
+              checked={oneClick}
+              onChange={handleToggle('oneClickTrading', setOneClick)}
+              borderBottom={false}
+            />
+          )}
         </div>
 
         {/* Notifications */}

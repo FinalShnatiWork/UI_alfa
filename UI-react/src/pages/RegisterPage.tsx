@@ -10,7 +10,8 @@ import { saveUserProfile } from '@/lib/userProfile';
 import { AuthHeader } from '@/components/AuthHeader';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP'] as const;
-const LEVERAGES = ['1:100', '1:50', '1:500'] as const;
+/** Every account is opened at 1:100 on the server. */
+const LEVERAGES = ['1:100'] as const;
 
 const schema = z.object({
   firstName: z.string().optional(),
@@ -20,7 +21,7 @@ const schema = z.object({
   phone: z.string().optional(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   currency: z.enum(['USD', 'EUR', 'GBP']),
-  leverage: z.enum(['1:100', '1:50', '1:500']),
+  leverage: z.enum(LEVERAGES),
   terms: z.literal(true, { message: 'You must accept terms' }),
   risk: z.literal(true, { message: 'You must accept risk disclosure' }),
 });

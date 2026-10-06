@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
+import { useSavePreferences } from '@/hooks/useApi';
 import type { Lang } from '@/types/api';
 import { assetUrl } from '@/lib/assets';
 
@@ -23,6 +24,12 @@ interface Props {
  */
 export function BackPageHeader({ titleKey, backTo = '/dashboard' }: Props) {
   const { t, lang, setLang } = useI18n();
+  const { mutate: savePrefs } = useSavePreferences();
+
+  const handleLangChange = (code: Lang) => {
+    setLang(code);
+    savePrefs({ lang: code });
+  };
 
   return (
     <header className="top-nav header-centered">
@@ -56,7 +63,7 @@ export function BackPageHeader({ titleKey, backTo = '/dashboard' }: Props) {
             type="button"
             className={`btn ${lang === opt.code ? 'btn-primary' : 'btn-outline'}`}
             style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-            onClick={() => setLang(opt.code)}
+            onClick={() => handleLangChange(opt.code)}
           >
             {opt.label}
           </button>

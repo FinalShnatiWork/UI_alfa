@@ -11,6 +11,8 @@ import com.brokerui.user.AppUserRepository;
 import com.brokerui.user.UserRole;
 import java.math.BigDecimal;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AuthBootstrap implements ApplicationRunner {
+  private static final Logger log = LoggerFactory.getLogger(AuthBootstrap.class);
   private final AppUserRepository repo;
   private final PasswordEncoder encoder;
   private final TradingAccountRepository accountRepo;
@@ -250,8 +253,14 @@ public class AuthBootstrap implements ApplicationRunner {
     positionRepo.save(pos);
   }
 
+  /**
+   * Creates the admin on an empty database. An existing admin keeps the password changed in
+   * Settings; it is only reset when BROKER_ADMIN_PASSWORD is set explicitly.
+   */
   private void ensureBootstrapAdmin() {
-    String pwd = System.getenv().getOrDefault("BROKER_ADMIN_PASSWORD", "1234");
+    String envPwd = System.getenv("BROKER_ADMIN_PASSWORD");
+    boolean reset = envPwd != null && !envPwd.isBlank();
+    String pwd = reset ? envPwd : "1234";
     String email = "admin@gmail.com";
     repo
         .findByEmailIgnoreCase(email)
@@ -259,10 +268,11 @@ public class AuthBootstrap implements ApplicationRunner {
             u -> {
               u.setRole(UserRole.ADMIN);
               u.setDisplayName("Administrator");
-              u.setPasswordHash(encoder.encode(pwd));
+              if (reset) u.setPasswordHash(encoder.encode(pwd));
               repo.save(u);
             },
             () -> {
+              if (!reset) log.warn("Admin {} created with the default password; change it in Settings", email);
               AppUser admin = new AppUser();
               admin.setEmail(email);
               admin.setDisplayName("Administrator");

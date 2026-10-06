@@ -417,6 +417,9 @@ public class BrokerApiController {
     if (qty.compareTo(BigDecimal.ZERO) <= 0) {
       return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_quantity")));
     }
+    if (!"BUY".equals(side) && !"SELL".equals(side)) {
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "unsupported_side")));
+    }
 
     // ── Pending (LIMIT / STOP) orders – basic validation + fund reservation ─
     if (!"MARKET".equals(orderType)) {
@@ -435,6 +438,9 @@ public class BrokerApiController {
           : (body.stopPrice() != null ? body.stopPrice() : BigDecimal.ZERO);
       if (targetPrice.compareTo(BigDecimal.ZERO) <= 0) {
         return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "limit_price_required")));
+      }
+      if (!stopsValid("BUY".equals(side), targetPrice, body.stopLoss(), body.takeProfit())) {
+        return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_stops")));
       }
 
       // Classify into STOP or LIMIT dynamically based on relationship with current market price at creation:
@@ -498,9 +504,6 @@ public class BrokerApiController {
     }
 
     // ── MARKET order – fetch live price ──────────────────────────────────────
-    if (!"BUY".equals(side) && !"SELL".equals(side)) {
-      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "unsupported_side")));
-    }
     double price;
     try {
       price = priceService.getLivePrice(symbolCode);
@@ -518,6 +521,9 @@ public class BrokerApiController {
     // Worst case = the external price (BUY at Ask, SELL at Bid). Netting can only make it cheaper;
     // whatever is not used is returned by FillBooking when the order fills.
     BigDecimal bdPrice = TradingFees.applySpread(rawPrice, isBuy);
+    if (!stopsValid(isBuy, bdPrice, body.stopLoss(), body.takeProfit())) {
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_stops")));
+    }
     BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
     BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
     BigDecimal required = margin.add(commission);
@@ -558,6 +564,21 @@ public class BrokerApiController {
     order.setReserveRemaining(required);
     order = orderRepo.save(order);
     return new Placement(null, order.getId(), "ORDER_PLACED");
+  }
+
+  /** BUY: SL below and TP above the reference price; SELL: the opposite. Null means not set. */
+  static boolean stopsValid(boolean isBuy, BigDecimal price, BigDecimal stopLoss, BigDecimal takeProfit) {
+    if (stopLoss != null) {
+      if (stopLoss.signum() <= 0) return false;
+      int c = stopLoss.compareTo(price);
+      if (isBuy ? c >= 0 : c <= 0) return false;
+    }
+    if (takeProfit != null) {
+      if (takeProfit.signum() <= 0) return false;
+      int c = takeProfit.compareTo(price);
+      if (isBuy ? c <= 0 : c >= 0) return false;
+    }
+    return true;
   }
 
   private static Placement done(ResponseEntity<?> response) {
@@ -658,7 +679,8 @@ public class BrokerApiController {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "order_not_found"));
     }
     String st = order.getStatus() == null ? "" : order.getStatus().toUpperCase();
-    if (!com.brokerui.broker.netting.NettingService.OPEN_STATUSES.contains(st)) {
+    if (!com.brokerui.broker.netting.NettingService.OPEN_STATUSES.contains(st)
+        || "CLOSE".equalsIgnoreCase(order.getOrderType())) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "order_not_cancellable"));
     }
     TradingAccount ta = accountRepo.findByIdForUpdate(owned.getId()).orElseThrow();

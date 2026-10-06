@@ -92,7 +92,7 @@ echo   All services started!
 echo   - PostgreSQL    : localhost:5433
 echo   - Backend       : http://localhost:8080
 echo   - Frontend      : http://localhost:3001
-echo   - Admin Hub     : http://localhost:3001/admin
+echo   - Admin Hub     : http://localhost:3001/#/admin
 echo   - NN trainer    : localhost:3005 (optional)
 echo  ============================================
 echo.

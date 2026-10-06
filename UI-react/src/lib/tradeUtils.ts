@@ -5,6 +5,43 @@
  */
 
 import type { BrokerOrder } from '@/types/api';
+import { getContractSize } from '@/lib/api';
+
+/** Same split as backend TradingFees.isCrypto. */
+export function isCryptoSymbol(symbol: string): boolean {
+  const s = symbol.toUpperCase();
+  return s.includes('BTC') || s.includes('ETH') || s.includes('SOL') || s.includes('XRP');
+}
+
+/** Platform spread per side, matches backend PriceSpread.SPREAD_RATE. */
+export const SPREAD_RATE = 0.00015;
+
+export interface OrderCost {
+  units: number;
+  notional: number;
+  margin: number;
+  commission: number;
+  total: number;
+}
+
+/** Mirrors the backend reservation: notional / leverage plus the client commission for one fill. */
+export function estimateOrderCost(symbol: string, lots: number, price: number, leverage: number): OrderCost {
+  const units = lots * getContractSize(symbol);
+  const notional = units * price;
+  const margin = notional / (leverage > 0 ? leverage : 100);
+  const commission = isCryptoSymbol(symbol) ? notional * 0.002 : lots * 7;
+  return { units, notional, margin, commission, total: margin + commission };
+}
+
+/**
+ * True when SL/TP sit on the correct side of the reference price
+ * (BUY: SL below, TP above; SELL: the opposite). Empty values are allowed.
+ */
+export function stopsAreValid(side: 'BUY' | 'SELL', price: number, stopLoss?: number, takeProfit?: number): boolean {
+  if (stopLoss != null && (!(stopLoss > 0) || (side === 'BUY' ? stopLoss >= price : stopLoss <= price))) return false;
+  if (takeProfit != null && (!(takeProfit > 0) || (side === 'BUY' ? takeProfit <= price : takeProfit >= price))) return false;
+  return true;
+}
 
 export interface PairedTrade {
   id: number;

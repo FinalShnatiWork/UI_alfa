@@ -56,6 +56,8 @@ class Session {
       const i = pair.indexOf('=');
       if (i > 0) this.cookies.set(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
     }
+    const sid = res.headers.get('X-Session-Id');
+    if (sid) this.sessionId = sid;
   }
 
   _cookieHeader() {
@@ -66,6 +68,7 @@ class Session {
     const url = this.base + path;
     const headers = { Accept: 'application/json' };
     if (this.cookies.size) headers.Cookie = this._cookieHeader();
+    if (this.sessionId) headers['X-Session-Id'] = this.sessionId;
     const xsrf = this.cookies.get('XSRF-TOKEN');
     if (method !== 'GET' && xsrf) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf);
     let payload;

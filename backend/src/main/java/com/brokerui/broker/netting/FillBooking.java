@@ -110,6 +110,16 @@ public class FillBooking {
    * A close must be allowed to finish: the loss has already happened, and the credit
    * line absorbs what cash cannot. A new position still has to fit the credit limit.
    */
+  /**
+   * False when {@code o} closes a position that no longer exists. Locks the position row,
+   * so call it after the account locks (same order as {@link NettingService#offerClose}).
+   */
+  public boolean closeTargetAlive(BrokerOrder o) {
+    if (o.getClosesPositionId() == null) return true;
+    Position pos = positionRepo.findByIdForUpdate(o.getClosesPositionId()).orElse(null);
+    return pos != null && pos.getQuantity() != null && pos.getQuantity().signum() > 0;
+  }
+
   public boolean canBook(BrokerOrder o, TradingAccount ta, BigDecimal qty, BigDecimal price, boolean internal) {
     if (o.getClosesPositionId() != null) return true;
     return affordable(ta, cost(o, ta, qty, price));
@@ -192,8 +202,7 @@ public class FillBooking {
     slice.setAvgPrice(pos.getAvgPrice());
     PositionCloseMath.Snapshot close = PositionCloseMath.atFillPrice(slice, ta, price, !internal);
 
-    marginLoanService.repaySettlementOrBorrow(ta, close.settlement(),
-        internal ? "Closed inside against another client" : "Closed on the outside market");
+    marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
     commissionLedger.record(ta, o, close.closeCommission(), true);
 
     BigDecimal left = pos.getQuantity().subtract(sliceQty);
