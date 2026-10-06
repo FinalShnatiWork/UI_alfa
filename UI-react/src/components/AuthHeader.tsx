@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import type { Lang } from '@/types/api';
 import { useI18n } from '@/hooks/useI18n';
+import { assetUrl } from '@/lib/assets';
 
 const LANG_OPTIONS: ReadonlyArray<{ code: Lang; label: string }> = [
   { code: 'en', label: 'EN' },
@@ -26,7 +27,7 @@ export function AuthHeader({ children }: Props) {
   return (
     <header className="top-nav">
       <Link to="/landing" className="brand-logo-link" aria-label="Broker App">
-        <img src="/images/LOGO.png?v=6" alt="" width={160} height={40} decoding="async" />
+        <img src={assetUrl('images/LOGO.png?v=6')} alt="Logo" width={160} height={40} decoding="async" />
       </Link>
       {children}
       <div style={{ marginInlineStart: 'auto', display: 'flex', gap: 4 }}>

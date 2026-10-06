@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { useSavePreferences } from '@/hooks/useApi';
 import type { Lang } from '@/types/api';
+import { assetUrl } from '@/lib/assets';
 
 const NAV_LINKS = [
   { to: '/positions', key: 'nav.positions' },
@@ -49,7 +50,7 @@ export function DashboardHeader({ onLogout, loggingOut }: Props) {
   return (
     <header className="top-nav">
       <Link to="/dashboard" className="brand-logo-link" aria-label="Broker App">
-        <img src="/images/LOGO.png?v=6" alt="" width={160} height={40} decoding="async" />
+        <img src={assetUrl('images/LOGO.png?v=6')} alt="Logo" width={160} height={40} decoding="async" />
       </Link>
 
       <nav style={{ display: 'flex', alignItems: 'center', gap: 18, flex: 1 }}>

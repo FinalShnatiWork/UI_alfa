@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { useLogout } from '@/hooks/useLogout';
 import { adminGet, adminPost, healthOk } from '@/lib/adminApi';
+import { assetUrl } from '@/lib/assets';
 import { AdminDataTable, type AdminColumn } from './AdminDataTable';
 import { money, num, signedMoney, when } from './format';
 import { AdminNettingTab } from './AdminNettingTab';
@@ -88,7 +89,7 @@ export function AdminPage() {
     <div className="admin-shell">
       <aside className="admin-aside">
         <div className="admin-brand">
-          <img src="/images/LOGO.png" alt="" height={28} />
+          <img src={assetUrl('images/LOGO.png')} alt="Logo" height={28} />
           <div>
             <div className="admin-brand-name">Admin Hub</div>
             <div className="admin-brand-sub">localhost only</div>

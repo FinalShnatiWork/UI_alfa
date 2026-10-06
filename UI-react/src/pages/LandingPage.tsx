@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { AuthHeader } from '@/components/AuthHeader';
+import { assetUrl } from '@/lib/assets';
 
 /**
  * Welcome marketing landing page for the TradeAdge Broker Platform.
@@ -66,7 +67,7 @@ export function LandingPage() {
 
       <div style={{ width: '100%', marginBottom: 60, overflow: 'hidden' }}>
         <img
-          src="/images/tradingHomePAGE.png?v=3"
+          src={assetUrl('images/tradingHomePAGE.png?v=3')}
           alt=""
           loading="lazy"
           decoding="async"
@@ -157,7 +158,7 @@ export function LandingPage() {
           }}
         >
           <img
-            src="/images/players.png"
+            src={assetUrl('images/players.png')}
             alt="Our Players / Team"
             style={{
               width: '100%',
