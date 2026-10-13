@@ -851,7 +851,7 @@ export function ChartsPage() {
         <p className="charts-disclaimer mb-20">{t('charts.dataNote')}</p>
 
         {/* Category tabs */}
-        <div className="flex-gap flex-wrap mb-16">
+        <div className="horizontal-pills-scroll mb-12">
           {(['forex', 'metals', 'crypto'] as Category[]).map((cat) => (
             <button
               key={cat}
@@ -868,7 +868,7 @@ export function ChartsPage() {
         </div>
 
         {/* Instrument buttons */}
-        <div className="flex-gap flex-wrap mb-16">
+        <div className="horizontal-pills-scroll mb-12">
           {instruments.map((instr) => (
             <button
               key={instr.id}
@@ -882,7 +882,7 @@ export function ChartsPage() {
         </div>
 
         {/* Interval buttons */}
-        <div className="flex-gap flex-wrap mb-24">
+        <div className="horizontal-pills-scroll mb-20">
           {INTERVALS.map((iv) => (
             <button
               key={iv}

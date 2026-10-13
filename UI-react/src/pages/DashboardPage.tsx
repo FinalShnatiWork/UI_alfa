@@ -256,7 +256,7 @@ export function DashboardPage() {
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            <div className="dashboard-credit-grid">
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
                   {t('dashboard.borrowedDebt')}
@@ -315,10 +315,10 @@ export function DashboardPage() {
         )}
 
         {/* ── Quick Actions + Alerts ── */}
-        <div className="grid-2 mb-20" style={{ gridTemplateColumns: '2fr 1fr' }}>
+        <div className="dashboard-main-split mb-20">
 
           {/* Trading Summary */}
-          <div className="card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <div className="card dashboard-perf-card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div className="flex-between" style={{ marginBottom: 20 }}>
               <h3 style={{ margin: 0 }}>{t('dashboard.tradingPerformance')}</h3>
               <span
@@ -396,7 +396,7 @@ export function DashboardPage() {
               return (
                 <>
                   {/* PnL & Performance Breakdown Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+                  <div className="dashboard-perf-grid">
                     <div
                       style={{
                         background: 'var(--bg-alt)',
@@ -475,7 +475,7 @@ export function DashboardPage() {
 
                   {/* Best / Worst */}
                   {positions.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+                    <div className="dashboard-best-worst-grid">
                       <div style={{ fontSize: '0.8rem' }}>
                         <div style={{ color: 'var(--text-secondary)', marginBottom: 3 }}>↑ {t('dashboard.bestPosition')}</div>
                         <span style={{ fontWeight: 600 }}>{best?.symbolCode}</span>{' '}
@@ -499,17 +499,7 @@ export function DashboardPage() {
             })()}
 
             {/* Account meta + single CTA */}
-            <div
-              style={{
-                marginTop: 'auto',
-                paddingTop: 16,
-                borderTop: '1px solid var(--border-light)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
+            <div className="dashboard-action-footer">
               <div style={{ display: 'flex', gap: 20 }}>
                 <div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('dashboard.marginUsed')}</div>

@@ -164,9 +164,9 @@ export function PositionsPage() {
       <div className="container mt-20">
 
         {/* Toolbar */}
-          <div className="card flex-between" style={{ padding: '14px 20px', marginBottom: 16 }}>
+        <div className="card positions-toolbar">
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 0 }}>
+          <div className="positions-tabs">
             {([
               { key: 'open' as Tab, label: `${t('positions.open')} (${activePositions.length})` },
               { key: 'closed' as Tab, label: `${t('positions.closed')} (${closedTrades.length})` },
@@ -175,18 +175,8 @@ export function PositionsPage() {
               <button
                 key={key}
                 type="button"
+                className={`positions-tab-btn ${tab === key ? 'active' : ''}`}
                 onClick={() => setTab(key)}
-                style={{
-                  padding: '8px 20px',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  fontWeight: tab === key ? 700 : 400,
-                  background: tab === key ? 'var(--primary)' : 'transparent',
-                  color: tab === key ? '#fff' : 'var(--text-secondary)',
-                  transition: 'all 0.15s',
-                }}
               >
                 {label}
               </button>
@@ -194,9 +184,8 @@ export function PositionsPage() {
           </div>
           <input
             type="text"
-            className="form-control"
+            className="form-control positions-search-input"
             placeholder={t('common.search')}
-            style={{ padding: '7px 12px', width: 180, fontSize: '0.85rem' }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -204,28 +193,116 @@ export function PositionsPage() {
 
         {/* ── OPEN POSITIONS ── */}
         {tab === 'open' && (
-          <div className="table-scroll">
-          <table className="table-compact">
-            <thead>
-              <tr>
-                <th>{t('table.symbol')}</th>
-                <th>{t('table.type')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.currentPrice')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
-                <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop Table View */}
+            <div className="desktop-table-view table-scroll">
+              <table className="table-compact">
+                <thead>
+                  <tr>
+                    <th>{t('table.symbol')}</th>
+                    <th>{t('table.type')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.currentPrice')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
+                    <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <SkeletonRow />
+                  ) : filteredOpen.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                        {t('positions.empty')}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOpen.map((p) => {
+                      const qty = Math.abs(Number(p.quantity ?? 0));
+                      const avgPrice = Number(p.avgPrice ?? 0);
+                      const livePrice = livePrices[p.symbolCode.toUpperCase()];
+                      const pnl = livePrice != null ? (p.side === 'SHORT' ? (avgPrice - livePrice) * qty * getContractSize(p.symbolCode) : (livePrice - avgPrice) * qty * getContractSize(p.symbolCode)) : null;
+                      const isClosing = closing === p.id;
+                      return (
+                        <tr key={p.id}>
+                          <td className="font-bold">{p.symbolCode}</td>
+                          <td>
+                            {p.side === 'SHORT' ? (
+                              <span className="badge badge-danger">{t('badge.short')}</span>
+                            ) : (
+                              <span className="badge badge-success">{t('badge.long')}</span>
+                            )}
+                          </td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(qty)}</td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(avgPrice)}</td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>
+                            {livePrice != null ? (
+                              <span className={`font-bold ${pnl != null && pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                                {fmtPrice(livePrice)}
+                              </span>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>
+                            {pnl != null ? (
+                              <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                                {pnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(pnl))}
+                              </span>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                              disabled={isClosing}
+                              onClick={() => setConfirm({ position: p })}
+                            >
+                              {isClosing ? t('common.closing') : t('common.close')}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                {filteredOpen.length > 0 && (() => {
+                  const totalPnl = filteredOpen.reduce((sum, p) => {
+                    const qty = Math.abs(Number(p.quantity ?? 0));
+                    const avg = Number(p.avgPrice ?? 0);
+                    const live = livePrices[p.symbolCode.toUpperCase()];
+                    if (live == null) return sum;
+                    const pnl = p.side === 'SHORT' ? (avg - live) * qty * getContractSize(p.symbolCode) : (live - avg) * qty * getContractSize(p.symbolCode);
+                    return sum + pnl;
+                  }, 0);
+                  const pnlColor = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+                  return (
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)' }}>
+                        <td colSpan={5} style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                          {t('table.totalPl')}
+                        </td>
+                        <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
+                          {totalPnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(totalPnl))}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="mobile-cards-view">
               {isLoading ? (
-                <SkeletonRow />
+                <div className="text-center p-20 text-muted">{t('common.loading')}</div>
               ) : filteredOpen.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
-                    {t('positions.empty')}
-                  </td>
-                </tr>
+                <div className="card text-center p-20 text-muted">{t('positions.empty')}</div>
               ) : (
                 filteredOpen.map((p) => {
                   const qty = Math.abs(Number(p.quantity ?? 0));
@@ -234,198 +311,273 @@ export function PositionsPage() {
                   const pnl = livePrice != null ? (p.side === 'SHORT' ? (avgPrice - livePrice) * qty * getContractSize(p.symbolCode) : (livePrice - avgPrice) * qty * getContractSize(p.symbolCode)) : null;
                   const isClosing = closing === p.id;
                   return (
-                    <tr key={p.id}>
-                      <td className="font-bold">{p.symbolCode}</td>
-                      <td>
-                        {p.side === 'SHORT' ? (
-                          <span className="badge badge-danger">{t('badge.short')}</span>
-                        ) : (
-                          <span className="badge badge-success">{t('badge.long')}</span>
-                        )}
-                      </td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(qty)}</td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(avgPrice)}</td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>
-                        {livePrice != null ? (
-                          <span className={`font-bold ${pnl != null && pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                            {fmtPrice(livePrice)}
+                    <div key={p.id} className="card mobile-trading-card">
+                      <div className="mobile-trading-card-head">
+                        <div className="mobile-trading-card-symbol">
+                          <span className="font-bold text-lg">{p.symbolCode}</span>
+                          <span className={`badge ${p.side === 'SHORT' ? 'badge-danger' : 'badge-success'}`}>
+                            {p.side === 'SHORT' ? t('badge.short') : t('badge.long')}
                           </span>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                        <td className="dir-ltr" style={{ textAlign: 'right' }}>
-                          {pnl != null ? (
-                            <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                              {pnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(pnl))}
-                            </span>
-                          ) : (
-                            <span className="text-muted">—</span>
-                          )}
-                        </td>
-                      <td style={{ textAlign: 'center' }}>
+                        </div>
+                        <div className={`mobile-trading-card-pnl dir-ltr ${pnl != null && pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                          {pnl != null ? `${pnl >= 0 ? '+' : '-'}$${fmtPnl(Math.abs(pnl))}` : '—'}
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-grid">
+                        <div>
+                          <div className="text-xs text-muted">{t('table.volume')}</div>
+                          <div className="dir-ltr font-bold text-sm">{fmtQty(qty)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('table.openPrice')}</div>
+                          <div className="dir-ltr text-sm">{fmtPrice(avgPrice)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('table.currentPrice')}</div>
+                          <div className="dir-ltr text-sm font-bold">{livePrice != null ? fmtPrice(livePrice) : '—'}</div>
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-actions">
                         <button
                           type="button"
-                          className="btn btn-danger"
-                          style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                          className="btn btn-danger btn-block"
                           disabled={isClosing}
                           onClick={() => { if (oneClick) void closePosition(p); else setConfirm({ position: p }); }}
                         >
                           {isClosing ? t('common.closing') : t('common.close')}
                         </button>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })
               )}
-            </tbody>
-            {filteredOpen.length > 0 && (() => {
-              const totalPnl = filteredOpen.reduce((sum, p) => {
-                const qty = Math.abs(Number(p.quantity ?? 0));
-                const avg = Number(p.avgPrice ?? 0);
-                const live = livePrices[p.symbolCode.toUpperCase()];
-                if (live == null) return sum;
-                const pnl = p.side === 'SHORT' ? (avg - live) * qty * getContractSize(p.symbolCode) : (live - avg) * qty * getContractSize(p.symbolCode);
-                return sum + pnl;
-              }, 0);
-              const pnlColor = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
-              return (
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid var(--border)' }}>
-                    <td colSpan={5} style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                      {t('table.totalPl')}
-                    </td>
-                    <td className="dir-ltr" style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 700, color: pnlColor }}>
-                      {totalPnl >= 0 ? '+' : '-'}${fmtPnl(Math.abs(totalPnl))}
-                    </td>
-                    <td />
-                  </tr>
-                </tfoot>
-              );
-            })()}
-          </table>
-          </div>
+            </div>
+          </>
         )}
 
         {/* ── CLOSED TRADES (paired BUY+SELL) ── */}
         {tab === 'closed' && (
-          <div className="table-scroll">
-          <table className="table-compact">
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>#</th>
-                <th>{t('table.symbol')}</th>
-                <th>{t('history.openTime')}</th>
-                <th>{t('history.closeTime')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
-                <th style={{ textAlign: 'right' }}>{t('history.closePrice')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.stopLoss')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.takeProfit')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop Table View */}
+            <div className="desktop-table-view table-scroll">
+              <table className="table-compact">
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }}>#</th>
+                    <th>{t('table.symbol')}</th>
+                    <th>{t('history.openTime')}</th>
+                    <th>{t('history.closeTime')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('history.closePrice')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.stopLoss')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.takeProfit')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {histLoading ? (
+                    <SkeletonRow />
+                  ) : filteredClosed.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                        {t('history.noTrades')}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredClosed.slice(0, 200).map((trade, idx) => {
+                      const pl = trade.realizedPnl != null ? Number(trade.realizedPnl) : null;
+                      const plClass = pl == null ? '' : pl >= 0 ? 'text-success' : 'text-danger';
+                      return (
+                        <tr key={trade.id}>
+                          <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
+                          <td className="font-bold">{trade.symbolCode}</td>
+                          <td className="text-sm">{fmtTime(trade.openTime)}</td>
+                          <td className="text-sm">{fmtTime(trade.closeTime)}</td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.openPrice)}</td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.closePrice)}</td>
+                          <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
+                          <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
+                          <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
+                          <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
+                            {pl != null ? `${pl >= 0 ? '+' : '-'}$${fmtPnl(Math.abs(pl))}` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="mobile-cards-view">
               {histLoading ? (
-                <SkeletonRow />
+                <div className="text-center p-20 text-muted">{t('common.loading')}</div>
               ) : filteredClosed.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
-                    {t('history.noTrades')}
-                  </td>
-                </tr>
+                <div className="card text-center p-20 text-muted">{t('history.noTrades')}</div>
               ) : (
-                filteredClosed.slice(0, 200).map((trade, idx) => {
+                filteredClosed.slice(0, 100).map((trade, idx) => {
                   const pl = trade.realizedPnl != null ? Number(trade.realizedPnl) : null;
                   const plClass = pl == null ? '' : pl >= 0 ? 'text-success' : 'text-danger';
                   return (
-                    <tr key={trade.id}>
-                      <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
-                      <td className="font-bold">{trade.symbolCode}</td>
-                      <td className="text-sm">{fmtTime(trade.openTime)}</td>
-                      <td className="text-sm">{fmtTime(trade.closeTime)}</td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.openPrice)}</td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.closePrice)}</td>
-                      <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
-                      <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
-                      <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
-                      <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
-                        {pl != null ? `${pl >= 0 ? '+' : '-'}$${fmtPnl(Math.abs(pl))}` : '—'}
-                      </td>
-                    </tr>
+                    <div key={trade.id} className="card mobile-trading-card">
+                      <div className="mobile-trading-card-head">
+                        <div className="mobile-trading-card-symbol">
+                          <span className="text-muted text-xs mr-4">#{idx + 1}</span>
+                          <span className="font-bold text-base">{trade.symbolCode}</span>
+                        </div>
+                        <div className={`mobile-trading-card-pnl dir-ltr ${plClass}`}>
+                          {pl != null ? `${pl >= 0 ? '+' : '-'}$${fmtPnl(Math.abs(pl))}` : '—'}
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-grid">
+                        <div>
+                          <div className="text-xs text-muted">{t('table.volume')}</div>
+                          <div className="dir-ltr text-sm">{fmtQty(trade.quantity)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('table.openPrice')}</div>
+                          <div className="dir-ltr text-sm">{fmtPrice(trade.openPrice)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('history.closePrice')}</div>
+                          <div className="dir-ltr text-sm">{fmtPrice(trade.closePrice)}</div>
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-footer text-xs text-muted flex-between">
+                        <span>{fmtTime(trade.openTime)}</span>
+                        <span>→ {fmtTime(trade.closeTime)}</span>
+                      </div>
+                    </div>
                   );
                 })
               )}
-            </tbody>
-          </table>
-          </div>
+            </div>
+          </>
         )}
 
         {/* ── PENDING ORDERS ── */}
         {tab === 'pending' && (
-          <div className="table-scroll">
-          <table className="table-compact">
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>#</th>
-                <th>{t('table.symbol')}</th>
-                <th>{t('table.type')}</th>
-                <th>{t('common.side')}</th>
-                <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                <th style={{ textAlign: 'right' }}>{t('common.limitPrice')}</th>
-                <th style={{ textAlign: 'right' }}>{t('common.stopPrice')}</th>
-                <th className="text-sm">{t('table.createdAt')}</th>
-                <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Desktop Table View */}
+            <div className="desktop-table-view table-scroll">
+              <table className="table-compact">
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }}>#</th>
+                    <th>{t('table.symbol')}</th>
+                    <th>{t('table.type')}</th>
+                    <th>{t('common.side')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('common.limitPrice')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('common.stopPrice')}</th>
+                    <th className="text-sm">{t('table.createdAt')}</th>
+                    <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingLoading ? (
+                    <SkeletonRow />
+                  ) : filteredPending.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                        {t('positions.noPending')}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPending.map((o, idx) => {
+                      const isCancelling = cancellingId === o.id;
+                      return (
+                        <tr key={o.id}>
+                          <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
+                          <td className="font-bold">{o.symbolCode}</td>
+                          <td>
+                            <span className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>
+                              {o.orderType}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${o.side === 'BUY' ? 'badge-success' : 'badge-danger'}`}>
+                              {o.side === 'BUY' ? t('badge.buy') : t('badge.sell')}
+                            </span>
+                          </td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(o.quantity)}</td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</td>
+                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.stopPrice)}</td>
+                          <td className="text-sm">{fmtTime(o.createdAt)}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn-outline-danger"
+                              style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+                              disabled={isCancelling}
+                              onClick={() => void handleCancelOrder(o.id, o.symbolCode)}
+                            >
+                              {isCancelling ? '...' : t('common.cancel')}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="mobile-cards-view">
               {pendingLoading ? (
-                <SkeletonRow />
+                <div className="text-center p-20 text-muted">{t('common.loading')}</div>
               ) : filteredPending.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
-                    {t('positions.noPending')}
-                  </td>
-                </tr>
+                <div className="card text-center p-20 text-muted">{t('positions.noPending')}</div>
               ) : (
                 filteredPending.map((o, idx) => {
                   const isCancelling = cancellingId === o.id;
                   return (
-                    <tr key={o.id}>
-                      <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
-                      <td className="font-bold">{o.symbolCode}</td>
-                      <td>
-                        <span className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>
-                          {o.orderType}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${o.side === 'BUY' ? 'badge-success' : 'badge-danger'}`}>
-                          {o.side === 'BUY' ? t('badge.buy') : t('badge.sell')}
-                        </span>
-                      </td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(o.quantity)}</td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</td>
-                      <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.stopPrice)}</td>
-                      <td className="text-sm">{fmtTime(o.createdAt)}</td>
-                      <td style={{ textAlign: 'center' }}>
+                    <div key={o.id} className="card mobile-trading-card">
+                      <div className="mobile-trading-card-head">
+                        <div className="mobile-trading-card-symbol">
+                          <span className="text-muted text-xs mr-4">#{idx + 1}</span>
+                          <span className="font-bold text-base">{o.symbolCode}</span>
+                          <span className={`badge ${o.side === 'BUY' ? 'badge-success' : 'badge-danger'}`}>
+                            {o.side === 'BUY' ? t('badge.buy') : t('badge.sell')}
+                          </span>
+                          <span className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>
+                            {o.orderType}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-grid">
+                        <div>
+                          <div className="text-xs text-muted">{t('table.volume')}</div>
+                          <div className="dir-ltr text-sm">{fmtQty(o.quantity)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('common.limitPrice')}</div>
+                          <div className="dir-ltr text-sm">{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('common.stopPrice')}</div>
+                          <div className="dir-ltr text-sm">{fmtPrice(o.stopPrice)}</div>
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-actions">
                         <button
                           type="button"
-                          className="btn btn-outline-danger"
-                          style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+                          className="btn btn-outline-danger btn-block"
                           disabled={isCancelling}
                           onClick={() => void handleCancelOrder(o.id, o.symbolCode)}
                         >
                           {isCancelling ? '...' : t('common.cancel')}
                         </button>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })
               )}
-            </tbody>
-          </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </>

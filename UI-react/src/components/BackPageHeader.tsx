@@ -17,7 +17,7 @@ interface Props {
 
 /**
  * Centered page header component featuring a Back navigation link and language switcher.
- * Used across sub-screens like Charts, Finance, Settings, History, and Analyzer.
+ * Optimized for both desktop and mobile viewports without overlapping elements.
  *
  * @param props titleKey to resolve and optional backTo navigation route path
  * @returns Centered header component with Back action and language toggles
@@ -32,38 +32,30 @@ export function BackPageHeader({ titleKey, backTo = '/dashboard' }: Props) {
   };
 
   return (
-    <header className="top-nav header-centered">
-      <div className="header-leading">
-        <Link to={backTo} className="brand-logo-link" aria-label="Broker App">
-          <img src={assetUrl('images/LOGO.png?v=6')} alt="Logo" width={160} height={40} decoding="async" />
+    <header className="top-nav back-page-top-nav">
+      <div className="back-nav-leading">
+        <Link to={backTo} className="brand-logo-link back-nav-logo" aria-label="Broker App">
+          <img src={assetUrl('images/LOGO.png?v=6')} alt="Logo" width={140} height={35} decoding="async" />
         </Link>
         <Link to={backTo} className="btn btn-outline header-back" aria-label={t('common.back')}>
           <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
-          <span>{t('common.back')}</span>
+          <span className="header-back-label">{t('common.back')}</span>
         </Link>
       </div>
-      <h2 className="header-page-title">{t(titleKey)}</h2>
-      <div
-        className="header-trailing"
-        style={{
-          position: 'absolute',
-          insetInlineEnd: 32,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          display: 'flex',
-          gap: 4,
-          zIndex: 2,
-        }}
-      >
+
+      <h2 className="back-nav-title">{t(titleKey)}</h2>
+
+      <div className="back-nav-trailing">
         {LANG_OPTIONS.map((opt) => (
           <button
             key={opt.code}
             type="button"
             className={`btn ${lang === opt.code ? 'btn-primary' : 'btn-outline'}`}
-            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+            style={{ padding: '4px 8px', fontSize: '0.78rem' }}
             onClick={() => handleLangChange(opt.code)}
+            aria-label={`Switch to ${opt.label}`}
           >
             {opt.label}
           </button>

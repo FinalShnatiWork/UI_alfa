@@ -22,50 +22,39 @@ export function LandingPage() {
   return (
     <>
       <AuthHeader>
-        <div className="flex-gap">
-          <Link to="/login" className="btn btn-outline">
+        <div className="flex-gap landing-header-actions">
+          <Link to="/login" className="btn btn-outline landing-login-btn">
             {t('landing.logIn')}
           </Link>
-          <Link to="/register" className="btn btn-primary">
+          <Link to="/register" className="btn btn-primary landing-signup-btn">
             {t('landing.signUp')}
           </Link>
         </div>
       </AuthHeader>
 
-      <div className="container text-center mt-20" style={{ padding: '60px 20px 20px' }}>
-        <h1 style={{ fontSize: '2.5rem', marginBottom: 10 }}>{t('landing.hero')}</h1>
-        <p
-          style={{
-            color: 'var(--text-secondary)',
-            fontSize: '1.1rem',
-            marginBottom: 30,
-          }}
-        >
+      <div className="container text-center mt-20 landing-hero-container">
+        <h1 className="landing-hero-title">{t('landing.hero')}</h1>
+        <p className="landing-hero-sub">
           {t('landing.sub')}
         </p>
 
-        <div
-          className="flex flex-gap"
-          style={{ justifyContent: 'center', marginBottom: 40 }}
-        >
+        <div className="landing-cta-group">
           <Link
             to="/register"
-            className="btn btn-primary"
-            style={{ padding: '15px 30px', fontSize: '1.1rem' }}
+            className="btn btn-primary landing-cta-btn"
           >
             {t('landing.openAccount')}
           </Link>
           <Link
             to="/demo-register"
-            className="btn btn-primary"
-            style={{ padding: '15px 30px', fontSize: '1.1rem' }}
+            className="btn btn-primary landing-cta-btn"
           >
             {t('landing.demoAccount')}
           </Link>
         </div>
       </div>
 
-      <div style={{ width: '100%', marginBottom: 60, overflow: 'hidden' }}>
+      <div style={{ width: '100%', marginBottom: 40, overflow: 'hidden' }}>
         <img
           src={assetUrl('images/tradingHomePAGE.png?v=3')}
           alt=""
@@ -83,8 +72,8 @@ export function LandingPage() {
         />
       </div>
 
-      <div className="container text-center" style={{ padding: '0 20px 60px' }}>
-        <div className="stats-grid grid-3 card">
+      <div className="container text-center" style={{ padding: '0 20px 40px' }}>
+        <div className="landing-stats-grid card">
           <div className="stat-card">
             <div className="value text-primary">14</div>
             <div className="label" style={{ color: 'var(--text-secondary)' }}>

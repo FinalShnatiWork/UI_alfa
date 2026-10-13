@@ -180,7 +180,7 @@ export function HistoryPage() {
 
         {/* Filters */}
         <div className="card" style={{ padding: '12px 16px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <div className="history-filters-bar">
             <div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 3 }}>{t('common.from')}</div>
               <input ref={dateFromRef} type="date" className="form-control" style={{ padding: '6px 8px', fontSize: '0.85rem' }} />
