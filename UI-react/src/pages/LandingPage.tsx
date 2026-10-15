@@ -96,6 +96,39 @@ export function LandingPage() {
       </div>
 
       <div
+        className="container landing-mobile-container"
+        style={{ padding: '0 20px 40px', maxWidth: 1100, margin: '0 auto' }}
+      >
+        <div
+          className="landing-mobile-banner"
+          style={{
+            position: 'relative',
+            borderRadius: 20,
+            overflow: 'hidden',
+            border: '1px solid rgba(234, 179, 8, 0.22)',
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65), 0 0 35px rgba(234, 179, 8, 0.12)',
+            background: '#04060a',
+          }}
+        >
+          <img
+            src={assetUrl('images/tradeedge-mobile.jpg')}
+            alt="TradeEdge Mobile Trading App - Powerful trading. Seamless edge."
+            loading="lazy"
+            decoding="async"
+            width={1024}
+            height={571}
+            style={{
+              width: '100%',
+              height: 'auto',
+              display: 'block',
+              aspectRatio: '1024 / 571',
+              objectFit: 'cover',
+            }}
+          />
+        </div>
+      </div>
+
+      <div
         className="container text-center"
         style={{ padding: '60px 20px', maxWidth: 1000, margin: '0 auto' }}
       >

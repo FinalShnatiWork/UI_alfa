@@ -2546,6 +2546,24 @@ html[dir="rtl"] .mobile-drawer-sheet {
   }
 }
 
+.landing-mobile-banner {
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.landing-mobile-banner:hover {
+  transform: translateY(-4px);
+  border-color: rgba(234, 179, 8, 0.45) !important;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.75), 0 0 50px rgba(234, 179, 8, 0.2) !important;
+}
+
+@media (max-width: 520px) {
+  .landing-mobile-container {
+    padding: 0 12px 28px !important;
+  }
+  .landing-mobile-banner {
+    border-radius: 14px !important;
+  }
+}
+
 /* ── History Filters Bar ── */
 .history-filters-bar {
   display: flex;
