@@ -1,6 +1,6 @@
 ﻿# UI Alfa — Broker Trading Platform
 
-Full-stack trading platform: Spring Boot (Java) + React (TypeScript) + PostgreSQL (Docker) + Neural Network AI routing.
+Full-stack trading platform: Spring Boot (Java) + React (TypeScript) + PostgreSQL (Docker). A neural network records a suggestion after a trade. It does not choose where the order goes.
 
 ---
 

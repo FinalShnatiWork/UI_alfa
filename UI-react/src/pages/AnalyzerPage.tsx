@@ -128,216 +128,32 @@ interface OverviewAsset {
     macdStatusRu?: string;
 }
 
-// Built-in resilient assets database matching backend MarketAnalysisController.SUPPORTED
-const FALLBACK_ASSETS: OverviewAsset[] = [
-    {
-        symbol: 'BTCUSD',
-        category: 'crypto',
-        nameEn: 'Bitcoin',
-        nameHe: 'ביטקוין',
-        nameRu: 'Биткоин',
-        price: 103430.50,
-        recommendation: 'STRONG BUY',
-        recommendationHe: 'קנייה חזקה',
-        recommendationRu: 'сильная покупка',
-        confidence: 88,
-        color: '#10b981',
-        rsi: 61.4,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    },
-    {
-        symbol: 'ETHUSD',
-        category: 'crypto',
-        nameEn: 'Ethereum',
-        nameHe: 'אתריום',
-        nameRu: 'Эфириум',
-        price: 3482.20,
-        recommendation: 'BUY',
-        recommendationHe: 'קנייה',
-        recommendationRu: 'покупка',
-        confidence: 76,
-        color: '#10b981',
-        rsi: 58.2,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    },
-    {
-        symbol: 'SOLUSD',
-        category: 'crypto',
-        nameEn: 'Solana',
-        nameHe: 'סולאנה',
-        nameRu: 'Solana',
-        price: 218.40,
-        recommendation: 'STRONG BUY',
-        recommendationHe: 'קנייה חזקה',
-        recommendationRu: 'сильная покупка',
-        confidence: 84,
-        color: '#10b981',
-        rsi: 64.8,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    },
-    {
-        symbol: 'XRPUSD',
-        category: 'crypto',
-        nameEn: 'Ripple XRP',
-        nameHe: 'ריפל',
-        nameRu: 'Ripple XRP',
-        price: 2.45,
-        recommendation: 'NEUTRAL',
-        recommendationHe: 'נייטרלי',
-        recommendationRu: 'нейтрально',
-        confidence: 54,
-        color: '#eab308',
-        rsi: 49.3,
-        macdStatus: 'NEUTRAL',
-        macdStatusHe: 'נייטרלי',
-        macdStatusRu: 'нейтрально',
-    },
-    {
-        symbol: 'EURUSD',
-        category: 'forex',
-        nameEn: 'Euro / US Dollar',
-        nameHe: 'אירו / דולר',
-        nameRu: 'Евро / доллар США',
-        price: 1.0864,
-        recommendation: 'BUY',
-        recommendationHe: 'קנייה',
-        recommendationRu: 'покупка',
-        confidence: 68,
-        color: '#10b981',
-        rsi: 53.1,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    },
-    {
-        symbol: 'GBPUSD',
-        category: 'forex',
-        nameEn: 'British Pound / US Dollar',
-        nameHe: 'פאונד / דולר',
-        nameRu: 'Фунт / доллар США',
-        price: 1.2982,
-        recommendation: 'NEUTRAL',
-        recommendationHe: 'נייטרלי',
-        recommendationRu: 'нейтрально',
-        confidence: 58,
-        color: '#eab308',
-        rsi: 50.8,
-        macdStatus: 'NEUTRAL',
-        macdStatusHe: 'נייטרלי',
-        macdStatusRu: 'нейтрально',
-    },
-    {
-        symbol: 'USDJPY',
-        category: 'forex',
-        nameEn: 'US Dollar / Japanese Yen',
-        nameHe: 'דולר / ין יפני',
-        nameRu: 'Доллар США / иена',
-        price: 153.42,
-        recommendation: 'SELL',
-        recommendationHe: 'מכירה',
-        recommendationRu: 'продажа',
-        confidence: 72,
-        color: '#f43f5e',
-        rsi: 41.5,
-        macdStatus: 'BEARISH',
-        macdStatusHe: 'דובי (יורד)',
-        macdStatusRu: 'медвежий (падение)',
-    },
-    {
-        symbol: 'GBPJPY',
-        category: 'forex',
-        nameEn: 'British Pound / Japanese Yen',
-        nameHe: 'פאונד / ין יפני',
-        nameRu: 'Фунт / иена',
-        price: 199.15,
-        recommendation: 'BUY',
-        recommendationHe: 'קנייה',
-        recommendationRu: 'покупка',
-        confidence: 65,
-        color: '#10b981',
-        rsi: 54.6,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    },
-    {
-        symbol: 'USDCAD',
-        category: 'forex',
-        nameEn: 'US Dollar / Canadian Dollar',
-        nameHe: 'דולר / דולר קנדי',
-        nameRu: 'Доллар США / канадский доллар',
-        price: 1.3924,
-        recommendation: 'SELL',
-        recommendationHe: 'מכירה',
-        recommendationRu: 'продажа',
-        confidence: 69,
-        color: '#f43f5e',
-        rsi: 43.2,
-        macdStatus: 'BEARISH',
-        macdStatusHe: 'דובי (יורד)',
-        macdStatusRu: 'медвежий (падение)',
-    },
-    {
-        symbol: 'NZDUSD',
-        category: 'forex',
-        nameEn: 'NZ Dollar / US Dollar',
-        nameHe: 'דולר ניו זילנדי / דולר',
-        nameRu: 'Новозеландский доллар / доллар США',
-        price: 0.5942,
-        recommendation: 'NEUTRAL',
-        recommendationHe: 'נייטרלי',
-        recommendationRu: 'нейтрально',
-        confidence: 52,
-        color: '#eab308',
-        rsi: 48.7,
-        macdStatus: 'NEUTRAL',
-        macdStatusHe: 'נייטרלי',
-        macdStatusRu: 'нейтрально',
-    },
-    {
-        symbol: 'XAUUSD',
-        category: 'metals',
-        nameEn: 'Gold / US Dollar (Oz)',
-        nameHe: 'זהב / דולר (אונקיה)',
-        nameRu: 'Золото / доллар США (унция)',
-        price: 2764.80,
-        recommendation: 'STRONG BUY',
-        recommendationHe: 'קנייה חזקה',
-        recommendationRu: 'сильная покупка',
-        confidence: 91,
-        color: '#10b981',
-        rsi: 67.2,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    },
-    {
-        symbol: 'XAGUSD',
-        category: 'metals',
-        nameEn: 'Silver / US Dollar (Oz)',
-        nameHe: 'כסף / דולר (אונקיה)',
-        nameRu: 'Серебро / доллар США (унция)',
-        price: 33.85,
-        recommendation: 'BUY',
-        recommendationHe: 'קנייה',
-        recommendationRu: 'покупка',
-        confidence: 79,
-        color: '#10b981',
-        rsi: 59.4,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    },
+/** Names only. Prices and votes come from the server, never from this list. */
+interface AssetName {
+    symbol: string;
+    category: string;
+    nameEn: string;
+    nameHe: string;
+    nameRu: string;
+}
+
+const ASSET_NAMES: AssetName[] = [
+    { symbol: 'BTCUSD', category: 'crypto', nameEn: 'Bitcoin', nameHe: 'ביטקוין', nameRu: 'Биткоин' },
+    { symbol: 'ETHUSD', category: 'crypto', nameEn: 'Ethereum', nameHe: 'אתריום', nameRu: 'Эфириум' },
+    { symbol: 'SOLUSD', category: 'crypto', nameEn: 'Solana', nameHe: 'סולאנה', nameRu: 'Solana' },
+    { symbol: 'XRPUSD', category: 'crypto', nameEn: 'Ripple XRP', nameHe: 'ריפל', nameRu: 'Ripple XRP' },
+    { symbol: 'EURUSD', category: 'forex', nameEn: 'Euro / US Dollar', nameHe: 'אירו / דולר', nameRu: 'Евро / доллар США' },
+    { symbol: 'GBPUSD', category: 'forex', nameEn: 'British Pound / US Dollar', nameHe: 'פאונד / דולר', nameRu: 'Фунт / доллар США' },
+    { symbol: 'USDJPY', category: 'forex', nameEn: 'US Dollar / Japanese Yen', nameHe: 'דולר / ין יפני', nameRu: 'Доллар США / иена' },
+    { symbol: 'GBPJPY', category: 'forex', nameEn: 'British Pound / Japanese Yen', nameHe: 'פאונד / ין יפני', nameRu: 'Фунт / иена' },
+    { symbol: 'USDCAD', category: 'forex', nameEn: 'US Dollar / Canadian Dollar', nameHe: 'דולר / דולר קנדי', nameRu: 'Доллар США / канадский доллар' },
+    { symbol: 'NZDUSD', category: 'forex', nameEn: 'NZ Dollar / US Dollar', nameHe: 'דולר ניו זילנדי / דולר', nameRu: 'Новозеландский доллар / доллар США' },
+    { symbol: 'XAUUSD', category: 'metals', nameEn: 'Gold / US Dollar (Oz)', nameHe: 'זהב / דולר (אונקיה)', nameRu: 'Золото / доллар США (унция)' },
+    { symbol: 'XAGUSD', category: 'metals', nameEn: 'Silver / US Dollar (Oz)', nameHe: 'כסף / דולר (אונקיה)', nameRu: 'Серебро / доллар США (унция)' },
 ];
 
 function blankAssets(): OverviewAsset[] {
-    return FALLBACK_ASSETS.map(asset => ({
+    return ASSET_NAMES.map(asset => ({
         ...asset,
         price: 0,
         recommendation: '',
@@ -641,14 +457,14 @@ export function AnalyzerPage() {
                     if (Array.isArray(data) && data.length > 0) {
                         // Merge backend data with names
                         const merged = data.map((bItem: any) => {
-                            const fallback = FALLBACK_ASSETS.find(f => f.symbol === bItem.symbol);
+                            const fallback = ASSET_NAMES.find(f => f.symbol === bItem.symbol);
                             return {
                                 ...fallback,
                                 ...bItem,
                                 nameEn: fallback?.nameEn || bItem.symbol,
                                 nameHe: fallback?.nameHe || bItem.symbol,
                                 nameRu: fallback?.nameRu || bItem.symbol,
-                                recommendationRu: bItem.recommendationRu || fallback?.recommendationRu || bItem.recommendation,
+                                recommendationRu: bItem.recommendationRu || bItem.recommendation,
                             };
                         });
                         setAssets(merged);
@@ -717,7 +533,7 @@ export function AnalyzerPage() {
 
     // Filter logic
     const filteredAssets = useMemo(() => {
-        return (Array.isArray(assets) ? assets : FALLBACK_ASSETS).filter(asset => {
+        return assets.filter(asset => {
             const term = searchTerm.toLowerCase().trim();
             const matchesSearch =
                 !term ||
@@ -732,7 +548,7 @@ export function AnalyzerPage() {
     // Current selected asset metadata
     const currentAssetMeta = useMemo(() => {
         return assets.find(a => a.symbol === selectedSymbol) ||
-            FALLBACK_ASSETS.find(a => a.symbol === selectedSymbol) ||
+            ASSET_NAMES.find(a => a.symbol === selectedSymbol) ||
             {
                 symbol: selectedSymbol,
                 category: selectedCategory,

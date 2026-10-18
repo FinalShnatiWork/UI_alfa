@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -27,7 +26,6 @@ import org.springframework.web.server.ResponseStatusException;
  * Supports list, ban, unban, delete, and update operations.
  */
 @RestController
-@CrossOrigin
 @RequestMapping("/api/admin")
 public class AdminUserController {
   private final AppUserRepository repo;

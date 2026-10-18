@@ -1,3 +1,7 @@
+> Не часть сдачи. Работающий проект — Spring Boot, PostgreSQL и React в папке `UI-react`. Этот файл — старый набросок переезда на Convex, не текущая архитектура.
+>
+> Not part of the submission. The running project is Spring Boot, PostgreSQL, and the React app in `UI-react`. This file is an old Convex migration sketch, not the current architecture.
+
 # 🗺️ תוכנית עבודה מקיפה: מיגרציה לסכמה רלציונית מלאה ב-Convex
 ## Comprehensive Migration & Architecture Plan: UI_alfa to Convex
 

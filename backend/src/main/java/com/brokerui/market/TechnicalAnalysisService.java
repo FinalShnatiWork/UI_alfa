@@ -63,18 +63,16 @@ public class TechnicalAnalysisService {
     Bb[] bbValues = calculateBollinger(closes, 20, 2);
 
     double rsi = last(rsiValues, 50);
-    double macdLine = 0, signal = 0, hist = 0, prevHist = 0;
+    double macdLine = 0, signal = 0, hist = 0;
     if (macdData != null && macdData.histogram.length > 0) {
       macdLine = last(macdData.macdLine, 0);
       signal = last(macdData.signalLine, 0);
       hist = last(macdData.histogram, 0);
-      prevHist = macdData.histogram.length > 1 ? macdData.histogram[macdData.histogram.length - 2] : 0;
     }
     double sma20 = last(sma20Values, currentPrice);
     double sma50 = last(sma50Values, currentPrice);
     Bb bb = lastBb(bbValues, currentPrice);
 
-    double score = 0;
     List<String> explanationsEn = new ArrayList<>();
     List<String> explanationsHe = new ArrayList<>();
     List<String> explanationsRu = new ArrayList<>();
@@ -83,12 +81,10 @@ public class TechnicalAnalysisService {
     String rsiStatusHe = "נייטרלי";
     String rsiStatusRu = "нейтрально";
     if (rsi < 30) {
-      score += 3;
       rsiStatus = "OVERSOLD (BULLISH)";
       rsiStatusHe = "מכירת יתר (חיובי)";
       rsiStatusRu = "перепроданность (бычий)";
     } else if (rsi > 70) {
-      score -= 3;
       rsiStatus = "OVERBOUGHT (BEARISH)";
       rsiStatusHe = "קניית יתר (שלילי)";
       rsiStatusRu = "перекупленность (медвежий)";
@@ -101,78 +97,23 @@ public class TechnicalAnalysisService {
       macdStatus = "BULLISH";
       macdStatusHe = "שוריוני (עולה)";
       macdStatusRu = "бычий (рост)";
-      if (prevHist <= 0) {
-        score += 3.5;
-        explanationsEn.add("MACD line crossed above the signal line (Bullish Crossover). Strong buy signal.");
-        explanationsHe.add("קו ה-MACD חצה מעל קו האות (הצטלבות שורית). איתות קנייה חזק.");
-        explanationsRu.add("MACD пересёк сигнальную линию снизу вверх (бычье пересечение). Сильный сигнал на покупку.");
-      } else if (hist > prevHist) {
-        score += 1.5;
-        explanationsEn.add("MACD histogram is positive and expanding, indicating strong upward momentum.");
-        explanationsHe.add("היסטוגרמת ה-MACD חיובית ומתרחבת, מה שמצביע על מומנטום עלייה חזק.");
-        explanationsRu.add("Гистограмма MACD положительная и растёт — сильный импульс вверх.");
-      } else {
-        score += 0.5;
-        explanationsEn.add("MACD histogram is positive but contracting, upward momentum is weakening.");
-        explanationsHe.add("היסטוגרמת ה-MACD חיובית אך מתכווצת, מומנטום העלייה נחלש.");
-        explanationsRu.add("Гистограмма MACD положительная, но сжимается: импульс вверх слабеет.");
-      }
     } else if (hist < 0) {
       macdStatus = "BEARISH";
       macdStatusHe = "דובי (יורד)";
       macdStatusRu = "медвежий (падение)";
-      if (prevHist >= 0) {
-        score -= 3.5;
-        explanationsEn.add("MACD line crossed below the signal line (Bearish Crossover). Strong sell signal.");
-        explanationsHe.add("קו ה-MACD חצה מתחת לקו האות (הצטלבות דובית). איתות מכירה חזק.");
-        explanationsRu.add("MACD пересёк сигнальную линию сверху вниз (медвежье пересечение). Сильный сигнал на продажу.");
-      } else if (hist < prevHist) {
-        score -= 1.5;
-        explanationsEn.add("MACD histogram is negative and expanding downward, indicating strong bearish momentum.");
-        explanationsHe.add("היסטוגרמת ה-MACD שלילית ומתרחבת מטה, מה שמצביע על לחץ מכירות חזק.");
-        explanationsRu.add("Гистограмма MACD отрицательная и уходит вниз — сильное давление продавцов.");
-      } else {
-        score -= 0.5;
-        explanationsEn.add("MACD histogram is negative but contracting, selling pressure is slowing.");
-        explanationsHe.add("היסטוגרמת ה-MACD שלילית אך מתכווצת, לחץ המכירות מתחיל להיחלש.");
-        explanationsRu.add("Гистограмма MACD отрицательная, но сжимается: давление продавцов слабеет.");
-      }
     }
 
     String maStatus = "NEUTRAL";
     String maStatusHe = "נייטרלי";
     String maStatusRu = "нейтрально";
     if (currentPrice > sma20 && currentPrice > sma50) {
-      score += 2;
       maStatus = "BULLISH";
       maStatusHe = "מגמת עלייה";
       maStatusRu = "восходящий тренд";
-      explanationsEn.add("Price is trading above both SMA 20 (" + fmt2(sma20) + ") and SMA 50 (" + fmt2(sma50) + "), confirming an uptrend.");
-      explanationsHe.add("המחיר נסחר מעל ממוצעים נעים 20 (" + fmt2(sma20) + ") ו-50 (" + fmt2(sma50) + "), דבר המאשר מגמת עלייה.");
-      explanationsRu.add("Цена выше SMA 20 (" + fmt2(sma20) + ") и SMA 50 (" + fmt2(sma50) + "), это подтверждает восходящий тренд.");
     } else if (currentPrice < sma20 && currentPrice < sma50) {
-      score -= 2;
       maStatus = "BEARISH";
       maStatusHe = "מגמת ירידה";
       maStatusRu = "нисходящий тренд";
-      explanationsEn.add("Price is trading below both SMA 20 (" + fmt2(sma20) + ") and SMA 50 (" + fmt2(sma50) + "), confirming a downtrend.");
-      explanationsHe.add("המחיר נסחר מתחת לממוצעים נעים 20 (" + fmt2(sma20) + ") ו-50 (" + fmt2(sma50) + "), דבר המאשר מגמת ירידה.");
-      explanationsRu.add("Цена ниже SMA 20 (" + fmt2(sma20) + ") и SMA 50 (" + fmt2(sma50) + "), это подтверждает нисходящий тренд.");
-    } else {
-      explanationsEn.add("Price is consolidating between the 20-period and 50-period moving averages.");
-      explanationsHe.add("המחיר נמצא בהתכנסות (קונסולידציה) בין הממוצעים הנעים 20 ו-50.");
-      explanationsRu.add("Цена между скользящими средними 20 и 50, идёт консолидация.");
-    }
-    if (sma20 > sma50) {
-      score += 1;
-      explanationsEn.add("Short-term moving average (SMA 20) is above the medium-term average (SMA 50), supporting buyers.");
-      explanationsHe.add("הממוצע הקצר (SMA 20) נמצא מעל הממוצע הבינוני (SMA 50), מה שתומך בקונים.");
-      explanationsRu.add("Короткая SMA 20 выше средней SMA 50 — в пользу покупателей.");
-    } else {
-      score -= 1;
-      explanationsEn.add("Short-term moving average (SMA 20) is below the medium-term average (SMA 50), supporting sellers.");
-      explanationsHe.add("הממוצע הקצר (SMA 20) נמצא מתחת לממוצע הבינוני (SMA 50), מה שתומך במוכרים.");
-      explanationsRu.add("Короткая SMA 20 ниже средней SMA 50 — в пользу продавцов.");
     }
 
     double bbWidth = bb.upper - bb.lower;
@@ -181,32 +122,14 @@ public class TechnicalAnalysisService {
     String bbStatusHe = "מרכז הרצועה";
     String bbStatusRu = "середина канала";
     if (bbPct < 0.15) {
-      score += 1.5;
       bbStatus = "OVERSOLD (LOWER BAND)";
       bbStatusHe = "רצועה תחתונה (תמיכה)";
       bbStatusRu = "нижняя полоса (поддержка)";
-      explanationsEn.add("Price is near the lower Bollinger Band, indicating it is cheap relative to historical deviation.");
-      explanationsHe.add("המחיר קרוב לרצועת בולינגר התחתונה, מה שמסמן רמת תמיכה קרובה (המחיר נמוך יחסית).");
-      explanationsRu.add("Цена у нижней полосы Боллинджера: рядом поддержка, цена относительно низкая.");
     } else if (bbPct > 0.85) {
-      score -= 1.5;
       bbStatus = "OVERBOUGHT (UPPER BAND)";
       bbStatusHe = "רצועה עליונה (התנגדות)";
       bbStatusRu = "верхняя полоса (сопротивление)";
-      explanationsEn.add("Price is near the upper Bollinger Band, showing resistance and high price saturation.");
-      explanationsHe.add("המחיר קרוב לרצועת בולינגר העליונה, מה שמסמן רמת התנגדות קרובה (המחיר רווי יחסית).");
-      explanationsRu.add("Цена у верхней полосы Боллинджера: рядом сопротивление, цена насыщена.");
-    } else {
-      explanationsEn.add("Price is trading within the middle range of the Bollinger Bands.");
-      explanationsHe.add("המחיר נסחר בטווח המרכזי של רצועות בולינגר.");
-      explanationsRu.add("Цена в середине полос Боллинджера.");
     }
-
-    // The lines above still describe each indicator for the cards.
-    // The headline is a fresh count of one vote per indicator, the way a broker technical summary works.
-    explanationsEn.clear();
-    explanationsHe.clear();
-    explanationsRu.clear();
     List<Map<String, Object>> signals = new ArrayList<>();
     voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 10", currentPrice, calculateSma(closes, 10), "ma");
     voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 20", currentPrice, sma20Values, "ma");
@@ -276,7 +199,7 @@ public class TechnicalAnalysisService {
         winningVotes = neutralVotes;
       }
     }
-    score = (buyVotes - sellVotes) / (double) voteTotal * 7.5;
+    double score = (buyVotes - sellVotes) / (double) voteTotal * 7.5;
     int confidence = (int) Math.round(100.0 * winningVotes / voteTotal);
     String windowEn = "1d".equals(interval) ? "Daily candles" : "Hourly candles";
     String windowHe = "1d".equals(interval) ? "נרות יומיים" : "נרות שעתיים";
