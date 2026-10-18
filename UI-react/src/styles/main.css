@@ -1827,6 +1827,59 @@ html[data-theme="light"] .admin-table thead th { background: #f1f5f9; }
 }
 .admin-modal { width: min(420px, 92vw); padding: 20px; }
 
+/* One grid for the whole vote table, so the header and every row share the same columns. */
+.analyzer-vote-table {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 1fr) max-content max-content;
+  column-gap: 16px;
+  align-items: center;
+}
+.analyzer-vote-title {
+  grid-column: 1 / -1;
+  font-weight: 800;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+.analyzer-vote-grid {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+}
+.analyzer-vote-head {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  padding-bottom: 6px;
+}
+.analyzer-vote-end {
+  text-align: end;
+}
+.analyzer-vote-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--border-light);
+}
+.analyzer-vote-name {
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.analyzer-vote-value {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.analyzer-vote-pill {
+  justify-self: end;
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 /* ==========================================================================
    MOBILE RESPONSIVE DESIGN SYSTEM & MOBILE VIEW IMPROVEMENTS
    ========================================================================== */

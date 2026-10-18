@@ -130,24 +130,7 @@ public class TechnicalAnalysisService {
       bbStatusHe = "רצועה עליונה (התנגדות)";
       bbStatusRu = "верхняя полоса (сопротивление)";
     }
-    List<Map<String, Object>> signals = new ArrayList<>();
-    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 10", currentPrice, calculateSma(closes, 10), "ma");
-    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 20", currentPrice, sma20Values, "ma");
-    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 50", currentPrice, sma50Values, "ma");
-    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 100", currentPrice, calculateSma(closes, 100), "ma");
-    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "EMA 12", currentPrice, calculateEma(closes, 12), "ma");
-    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "EMA 26", currentPrice, calculateEma(closes, 26), "ma");
-    voteOscillator(signals, explanationsEn, explanationsHe, explanationsRu, "RSI 14", rsi, 30, 70, fmt1(rsi), "oscillator");
-    Double stoch = stochasticK(highs, lows, closes, 14);
-    if (stoch != null) {
-      voteOscillator(signals, explanationsEn, explanationsHe, explanationsRu, "Stochastic 14", stoch, 20, 80, fmt1(stoch), "oscillator");
-    }
-    if (macdData != null && macdData.histogram.length > 0) {
-      String macdAction = hist > 0 ? "BUY" : hist < 0 ? "SELL" : "NEUTRAL";
-      addVote(signals, explanationsEn, explanationsHe, explanationsRu, "MACD 12,26,9", hist, fmt2(hist), macdAction, "oscillator");
-    }
-    String bbAction = currentPrice < bb.lower ? "BUY" : currentPrice > bb.upper ? "SELL" : "NEUTRAL";
-    addVote(signals, explanationsEn, explanationsHe, explanationsRu, "Bollinger 20,2", currentPrice, fmtPx(currentPrice), bbAction, "oscillator");
+    List<Map<String, Object>> signals = castVotes(closes, highs, lows, explanationsEn, explanationsHe, explanationsRu);
     Map<String, Object> levels = nearestLevels(highs, lows, currentPrice);
 
     int buyVotes = 0;
@@ -468,28 +451,7 @@ public class TechnicalAnalysisService {
       highs[i] = candles.get(i).high();
       lows[i] = candles.get(i).low();
     }
-    double price = closes[n - 1];
-    List<Map<String, Object>> signals = new ArrayList<>();
-    voteMovingAverage(signals, null, null, null, "SMA 10", price, calculateSma(closes, 10), "ma");
-    voteMovingAverage(signals, null, null, null, "SMA 20", price, calculateSma(closes, 20), "ma");
-    voteMovingAverage(signals, null, null, null, "SMA 50", price, calculateSma(closes, 50), "ma");
-    voteMovingAverage(signals, null, null, null, "SMA 100", price, calculateSma(closes, 100), "ma");
-    voteMovingAverage(signals, null, null, null, "EMA 12", price, calculateEma(closes, 12), "ma");
-    voteMovingAverage(signals, null, null, null, "EMA 26", price, calculateEma(closes, 26), "ma");
-    voteOscillator(signals, null, null, null, "RSI 14", last(calculateRsi(closes, 14), 50), 30, 70, "", "oscillator");
-    Double stoch = stochasticK(highs, lows, closes, 14);
-    if (stoch != null) {
-      voteOscillator(signals, null, null, null, "Stochastic 14", stoch, 20, 80, "", "oscillator");
-    }
-    Macd macd = calculateMacd(closes, 12, 26, 9);
-    if (macd != null && macd.histogram.length > 0) {
-      double hist = last(macd.histogram, 0);
-      String macdAction = hist > 0 ? "BUY" : hist < 0 ? "SELL" : "NEUTRAL";
-      addVote(signals, null, null, null, "MACD 12,26,9", hist, "", macdAction, "oscillator");
-    }
-    Bb bb = lastBb(calculateBollinger(closes, 20, 2), price);
-    String bbAction = price < bb.lower ? "BUY" : price > bb.upper ? "SELL" : "NEUTRAL";
-    addVote(signals, null, null, null, "Bollinger 20,2", price, "", bbAction, "oscillator");
+    List<Map<String, Object>> signals = castVotes(closes, highs, lows, null, null, null);
     int buy = 0;
     int sell = 0;
     int neutral = 0;
@@ -501,6 +463,44 @@ public class TechnicalAnalysisService {
       }
     }
     return labelFromVotes(buy, sell, neutral, signals.size());
+  }
+
+  /** One vote per indicator. The badge and the $10,000 line both call this. */
+  private List<Map<String, Object>> castVotes(
+      double[] closes,
+      double[] highs,
+      double[] lows,
+      List<String> en,
+      List<String> he,
+      List<String> ru) {
+    List<Map<String, Object>> signals = new ArrayList<>();
+    double price = closes[closes.length - 1];
+    double rsi = last(calculateRsi(closes, 14), 50);
+    double[] sma20 = calculateSma(closes, 20);
+    double[] sma50 = calculateSma(closes, 50);
+    Macd macd = calculateMacd(closes, 12, 26, 9);
+    double hist = 0;
+    boolean hasMacd = macd != null && macd.histogram.length > 0;
+    if (hasMacd) hist = last(macd.histogram, 0);
+    Bb bb = lastBb(calculateBollinger(closes, 20, 2), price);
+    voteMovingAverage(signals, en, he, ru, "SMA 10", price, calculateSma(closes, 10), "ma");
+    voteMovingAverage(signals, en, he, ru, "SMA 20", price, sma20, "ma");
+    voteMovingAverage(signals, en, he, ru, "SMA 50", price, sma50, "ma");
+    voteMovingAverage(signals, en, he, ru, "SMA 100", price, calculateSma(closes, 100), "ma");
+    voteMovingAverage(signals, en, he, ru, "EMA 12", price, calculateEma(closes, 12), "ma");
+    voteMovingAverage(signals, en, he, ru, "EMA 26", price, calculateEma(closes, 26), "ma");
+    voteOscillator(signals, en, he, ru, "RSI 14", rsi, 30, 70, fmt1(rsi), "oscillator");
+    Double stoch = stochasticK(highs, lows, closes, 14);
+    if (stoch != null) {
+      voteOscillator(signals, en, he, ru, "Stochastic 14", stoch, 20, 80, fmt1(stoch), "oscillator");
+    }
+    if (hasMacd) {
+      String macdAction = hist > 0 ? "BUY" : hist < 0 ? "SELL" : "NEUTRAL";
+      addVote(signals, en, he, ru, "MACD 12,26,9", hist, fmt2(hist), macdAction, "oscillator");
+    }
+    String bbAction = price < bb.lower ? "BUY" : price > bb.upper ? "SELL" : "NEUTRAL";
+    addVote(signals, en, he, ru, "Bollinger 20,2", price, fmtPx(price), bbAction, "oscillator");
+    return signals;
   }
 
   /**

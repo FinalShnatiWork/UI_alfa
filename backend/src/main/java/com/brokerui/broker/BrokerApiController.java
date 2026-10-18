@@ -301,22 +301,6 @@ public class BrokerApiController {
     return used;
   }
 
-  /** Builds a FILLED BrokerOrder record for history/audit. */
-  private BrokerOrder buildFilledOrder(TradingAccount ta, String symbolCode, String side,
-      BigDecimal qty, BigDecimal fillPrice, BigDecimal realizedPnl) {
-    BrokerOrder order = new BrokerOrder();
-    order.setTradingAccount(ta);
-    order.setSymbolCode(symbolCode);
-    order.setSide(side);
-    order.setOrderType("MARKET");
-    order.setStatus("FILLED");
-    order.setQuantity(qty);
-    order.setFilledAt(Instant.now());
-    order.setEntryPrice(fillPrice);
-    order.setRealizedPnl(realizedPnl);
-    return order;
-  }
-
   // ───────────────────────────────────────────────────────────────────────────
   // Place Order (POST /api/broker/orders)
   // ───────────────────────────────────────────────────────────────────────────
