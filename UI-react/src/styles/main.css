@@ -88,7 +88,12 @@ a { color: inherit; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.container { max-width: 1200px; margin: 0 auto; padding: 24px; animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; animation: fadeIn 0.35s ease forwards; }
 
 .top-nav {
   background-color: var(--header-bg);
@@ -437,6 +442,71 @@ table tr:active { transform: none; }
 .table-compact th.wrap {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Pricing tables fit the page on a computer. On a phone each row becomes a
+   card, so words are not broken into a vertical stack of letters. */
+.table-scroll table.pricing-table {
+  min-width: 0;
+}
+.pricing-table th,
+.pricing-table td {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+@media (max-width: 720px) {
+  .pricing-table thead {
+    display: none;
+  }
+  .pricing-table,
+  .pricing-table tbody,
+  .pricing-table tr,
+  .pricing-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .pricing-table {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+  .pricing-table tr {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    background: var(--surface-1);
+  }
+  .pricing-table tr:last-child {
+    margin-bottom: 0;
+  }
+  .pricing-table td {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 42%) 1fr;
+    gap: 8px 12px;
+    align-items: start;
+    padding: 8px 0;
+    border: none;
+    text-align: start;
+  }
+  .pricing-table td::before {
+    content: attr(data-label);
+    grid-column: 1;
+    grid-row: 1;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .pricing-table td > * {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+  .pricing-table tr:hover td {
+    background: transparent;
+  }
 }
 
 /* Positions table (Charts/Trading inline panels) */
@@ -1761,10 +1831,15 @@ html[data-theme="light"] .admin-table thead th { background: #f1f5f9; }
    MOBILE RESPONSIVE DESIGN SYSTEM & MOBILE VIEW IMPROVEMENTS
    ========================================================================== */
 
-/* Prevent accidental horizontal overflow */
-html, body {
-  overflow-x: hidden;
-  max-width: 100vw;
+/* Keep the page from jumping sideways when the scrollbar appears.
+   overflow-x: hidden on html and body also turns them into extra vertical
+   scrollers and pulls the header off the top of the window. */
+html {
+  scrollbar-gutter: stable;
+}
+body {
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 /* Touch device font size fix: prevents iOS Safari auto-zoom on input focus */

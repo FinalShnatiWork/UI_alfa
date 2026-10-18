@@ -71,33 +71,35 @@ export function PricingPage() {
         <section className="card text-left" style={{ marginBottom: 20 }}>
           <h3 style={{ marginTop: 0 }}>{t('pricing.commissionTitle')}</h3>
           <div className="table-scroll">
-            <table className="table-compact" style={{ minWidth: 0 }}>
+            <table className="table-compact pricing-table">
               <thead>
                 <tr>
-                  <th className="wrap">{t('pricing.colGroup')}</th>
-                  <th className="wrap">{t('pricing.colSymbols')}</th>
-                  <th className="wrap">{t('pricing.colLot')}</th>
-                  <th className="wrap">{t('pricing.colCommission')}</th>
+                  <th>{t('pricing.colGroup')}</th>
+                  <th>{t('pricing.colSymbols')}</th>
+                  <th>{t('pricing.colLot')}</th>
+                  <th>{t('pricing.colCommission')}</th>
                 </tr>
               </thead>
               <tbody>
                 {GROUPS.map((g) => (
                   <tr key={g.key}>
-                    <td className="font-bold">{t(`pricing.group.${g.key}`)}</td>
-                    <td className="wrap"><bdi>{g.symbols.join(', ')}</bdi></td>
-                    <td className="wrap">
-                      {g.key === 'forex'
-                        ? t('pricing.lotForex', { size: fmtNumber(getContractSize('EURUSD'), 0) })
-                        : sizeGroups(g.symbols).map(([size, symbols]) => (
-                          <div key={size}>
-                            {t(g.key === 'metals' ? 'pricing.lotOunces' : 'pricing.lotCoins', {
-                              symbol: symbols.join(', '),
-                              size: fmtNumber(size, 0),
-                            })}
-                          </div>
-                        ))}
+                    <td className="font-bold" data-label={t('pricing.colGroup')}>{t(`pricing.group.${g.key}`)}</td>
+                    <td data-label={t('pricing.colSymbols')}><bdi>{g.symbols.join(', ')}</bdi></td>
+                    <td data-label={t('pricing.colLot')}>
+                      <div>
+                        {g.key === 'forex'
+                          ? t('pricing.lotForex', { size: fmtNumber(getContractSize('EURUSD'), 0) })
+                          : sizeGroups(g.symbols).map(([size, symbols]) => (
+                            <div key={size}>
+                              {t(g.key === 'metals' ? 'pricing.lotOunces' : 'pricing.lotCoins', {
+                                symbol: symbols.join(', '),
+                                size: fmtNumber(size, 0),
+                              })}
+                            </div>
+                          ))}
+                      </div>
                     </td>
-                    <td className="wrap">
+                    <td data-label={t('pricing.colCommission')}>
                       <bdi className="font-bold">
                         {g.crypto
                           ? t('pricing.feeCrypto', { pct: pct(CRYPTO_COMMISSION_RATE, 1) })
@@ -154,14 +156,14 @@ export function PricingPage() {
           <h3 style={{ marginTop: 0 }}>{t('pricing.exampleTitle')}</h3>
           <p className="text-sm text-secondary">{t('pricing.exampleHint')}</p>
           <div className="table-scroll">
-            <table className="table-compact" style={{ minWidth: 0 }}>
+            <table className="table-compact pricing-table">
               <thead>
                 <tr>
-                  <th className="wrap">{t('pricing.colTrade')}</th>
-                  <th className="wrap">{t('pricing.colMargin')}</th>
-                  <th className="wrap">{t('pricing.colCommissionTotal')}</th>
-                  <th className="wrap">{t('pricing.colSpread')}</th>
-                  <th className="wrap">{t('pricing.colTotalCost')}</th>
+                  <th>{t('pricing.colTrade')}</th>
+                  <th>{t('pricing.colMargin')}</th>
+                  <th>{t('pricing.colCommissionTotal')}</th>
+                  <th>{t('pricing.colSpread')}</th>
+                  <th>{t('pricing.colTotalCost')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,13 +173,13 @@ export function PricingPage() {
                   const spread = cost.notional * SPREAD_RATE * 2;
                   return (
                     <tr key={ex.symbol}>
-                      <td>
+                      <td data-label={t('pricing.colTrade')}>
                         <bdi>{`${ex.symbol} · ${fmtNumber(ex.lots, 2)} · ${fmtNumber(ex.price, ex.price < 10 ? 5 : 2)}`}</bdi>
                       </td>
-                      <td><bdi>{fmtMoney(cost.margin)}</bdi></td>
-                      <td><bdi>{fmtMoney(commission)}</bdi></td>
-                      <td><bdi>≈ {fmtMoney(spread)}</bdi></td>
-                      <td className="font-bold"><bdi>≈ {fmtMoney(commission + spread)}</bdi></td>
+                      <td data-label={t('pricing.colMargin')}><bdi>{fmtMoney(cost.margin)}</bdi></td>
+                      <td data-label={t('pricing.colCommissionTotal')}><bdi>{fmtMoney(commission)}</bdi></td>
+                      <td data-label={t('pricing.colSpread')}><bdi>≈ {fmtMoney(spread)}</bdi></td>
+                      <td className="font-bold" data-label={t('pricing.colTotalCost')}><bdi>≈ {fmtMoney(commission + spread)}</bdi></td>
                     </tr>
                   );
                 })}
