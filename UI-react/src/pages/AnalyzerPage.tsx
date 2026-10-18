@@ -836,7 +836,7 @@ export function AnalyzerPage() {
                 </div>
 
                 {/* 2-COLUMN MAIN WORKSPACE */}
-                <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 24, alignItems: 'start' }}>
+                <div className="analyzer-workspace-grid">
                     
                     {/* LEFT COLUMN: ASSET LIST BOARD */}
                     <div
@@ -845,11 +845,6 @@ export function AnalyzerPage() {
                             padding: '18px 14px 14px 14px',
                             display: 'flex',
                             flexDirection: 'column',
-                            height: 'calc(100vh - 120px)',
-                            maxHeight: 820,
-                            minHeight: 560,
-                            position: 'sticky',
-                            top: 90,
                             overflow: 'hidden',
                             background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.75) 0%, rgba(12, 17, 29, 0.85) 100%)',
                             border: '1px solid rgba(255, 255, 255, 0.08)',

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // ReactQueryDevtools intentionally excluded from production build
 import { I18nProvider } from '@/hooks/useI18n';
 import { ToastProvider } from '@/hooks/useToast';
-import { AuthProvider } from '@/hooks/useAuth';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PreferenceSync } from '@/components/PreferenceSync';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -22,6 +22,7 @@ import { AnalyzerPage } from '@/pages/AnalyzerPage';
 import { AdminPage } from '@/pages/admin/AdminPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
 import { PricingPage } from '@/pages/PricingPage';
+import { BottomNav } from '@/components/BottomNav';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +40,12 @@ const queryClient = new QueryClient({
  *
  * @returns Root application layout element with routing
  */
+function AuthenticatedBottomNav() {
+  const { status } = useAuth();
+  if (status !== 'authenticated') return null;
+  return <BottomNav />;
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -48,6 +55,7 @@ export function App() {
             <HashRouter>
               <AuthProvider>
                 <PreferenceSync>
+                <div className="app-shell">
                 <Routes>
                   <Route path="/" element={<Navigate to="/landing" replace />} />
                   <Route path="/landing" element={<LandingPage />} />
@@ -69,6 +77,8 @@ export function App() {
 
                   <Route path="*" element={<PlaceholderPage title="Not Found" />} />
                 </Routes>
+                <AuthenticatedBottomNav />
+                </div>
                 </PreferenceSync>
               </AuthProvider>
             </HashRouter>
