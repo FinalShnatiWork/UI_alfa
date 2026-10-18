@@ -1,5 +1,9 @@
 package com.brokerui.market;
 
+import com.brokerui.broker.ContractSpecs;
+import com.brokerui.broker.TradingFees;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,13 +11,17 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
- * RSI / MACD / SMA / Bollinger scoring for the analyzer page.
- * Same formulas and BUY/SELL/HOLD thresholds so the Analyzer page stays numerically familiar.
+ * Technical summary for the analyzer page.
+ * Each standard indicator casts one vote (Buy, Neutral, or Sell). The headline is the count of those votes.
  */
 @Service
 public class TechnicalAnalysisService {
 
   public Map<String, Object> analyze(List<CandleBar> candles, String symbol) {
+    return analyze(candles, symbol, "1h");
+  }
+
+  public Map<String, Object> analyze(List<CandleBar> candles, String symbol, String interval) {
     String sym = symbol == null ? "Unknown" : symbol.trim().toUpperCase();
     if (candles == null || candles.size() < 50) {
       Map<String, Object> empty = new LinkedHashMap<>();
@@ -32,12 +40,19 @@ public class TechnicalAnalysisService {
       empty.put("summary", "Not enough historical candle data to perform technical analysis. Requires at least 50 periods.");
       empty.put("summaryHe", "אין מספיק נתוני נרות היסטוריים לביצוע אנליזה טכנית. נדרשים לפחות 50 נרות.");
       empty.put("summaryRu", "Недостаточно исторических свечей для технического анализа. Нужно минимум 50 свечей.");
+      empty.put("available", false);
+      empty.put("votes", Map.of("buy", 0, "neutral", 0, "sell", 0));
+      empty.put("signals", List.of());
       return empty;
     }
 
     double[] closes = new double[candles.size()];
+    double[] highs = new double[candles.size()];
+    double[] lows = new double[candles.size()];
     for (int i = 0; i < candles.size(); i++) {
       closes[i] = candles.get(i).close();
+      highs[i] = candles.get(i).high();
+      lows[i] = candles.get(i).low();
     }
     double currentPrice = closes[closes.length - 1];
 
@@ -72,37 +87,11 @@ public class TechnicalAnalysisService {
       rsiStatus = "OVERSOLD (BULLISH)";
       rsiStatusHe = "מכירת יתר (חיובי)";
       rsiStatusRu = "перепроданность (бычий)";
-      explanationsEn.add("RSI is at " + fmt1(rsi) + " which is oversold. A price rebound is likely.");
-      explanationsHe.add("מדד ה-RSI עומד על " + fmt1(rsi) + " (מכירת יתר). סבירות גבוהה לתיקון כלפי מעלה.");
-      explanationsRu.add("RSI на уровне " + fmt1(rsi) + " — перепроданность. Вероятен отскок вверх.");
-    } else if (rsi < 45) {
-      score += 1;
-      rsiStatus = "MODERATELY OVERSOLD";
-      rsiStatusHe = "נטייה למכירת יתר";
-      rsiStatusRu = "умеренная перепроданность";
-      explanationsEn.add("RSI is low at " + fmt1(rsi) + ", showing slight upward support.");
-      explanationsHe.add("מדד ה-RSI נמוך (" + fmt1(rsi) + "), תומך בהזדמנות קנייה מתונה.");
-      explanationsRu.add("RSI низкий (" + fmt1(rsi) + "), есть умеренный повод для покупки.");
     } else if (rsi > 70) {
       score -= 3;
       rsiStatus = "OVERBOUGHT (BEARISH)";
       rsiStatusHe = "קניית יתר (שלילי)";
       rsiStatusRu = "перекупленность (медвежий)";
-      explanationsEn.add("RSI is at " + fmt1(rsi) + " which is overbought. Downward correction expected.");
-      explanationsHe.add("מדד ה-RSI עומד על " + fmt1(rsi) + " (קניית יתר). סבירות גבוהה לתיקון מטה.");
-      explanationsRu.add("RSI на уровне " + fmt1(rsi) + " — перекупленность. Вероятна коррекция вниз.");
-    } else if (rsi > 55) {
-      score -= 1;
-      rsiStatus = "MODERATELY OVERBOUGHT";
-      rsiStatusHe = "נטייה לקניית יתר";
-      rsiStatusRu = "умеренная перекупленность";
-      explanationsEn.add("RSI is elevated at " + fmt1(rsi) + ", showing slight exhaustion.");
-      explanationsHe.add("מדד ה-RSI גבוה (" + fmt1(rsi) + "), מראה סימני תשישות לקונים.");
-      explanationsRu.add("RSI повышен (" + fmt1(rsi) + "), покупатели выдыхаются.");
-    } else {
-      explanationsEn.add("RSI is neutral at " + fmt1(rsi) + ".");
-      explanationsHe.add("מדד ה-RSI נייטרלי ועומד על " + fmt1(rsi) + ".");
-      explanationsRu.add("RSI нейтрален: " + fmt1(rsi) + ".");
     }
 
     String macdStatus = "NEUTRAL";
@@ -213,45 +202,94 @@ public class TechnicalAnalysisService {
       explanationsRu.add("Цена в середине полос Боллинджера.");
     }
 
-    String recommendation = "HOLD";
-    String recommendationHe = "נייטרלי / המתן";
-    String recommendationRu = "нейтрально / ждать";
-    String recColor = "#eab308";
-    if (score >= 5.5) {
-      recommendation = "STRONG BUY";
-      recommendationHe = "קנייה חזקה";
-      recommendationRu = "сильная покупка";
-      recColor = "#22c55e";
-    } else if (score >= 2.0) {
-      recommendation = "BUY";
-      recommendationHe = "קנייה";
-      recommendationRu = "покупка";
-      recColor = "#4ade80";
-    } else if (score <= -5.5) {
-      recommendation = "STRONG SELL";
-      recommendationHe = "מכירה חזקה";
-      recommendationRu = "сильная продажа";
-      recColor = "#ef4444";
-    } else if (score <= -2.0) {
-      recommendation = "SELL";
-      recommendationHe = "מכירה";
-      recommendationRu = "продажа";
-      recColor = "#f87171";
+    // The lines above still describe each indicator for the cards.
+    // The headline is a fresh count of one vote per indicator, the way a broker technical summary works.
+    explanationsEn.clear();
+    explanationsHe.clear();
+    explanationsRu.clear();
+    List<Map<String, Object>> signals = new ArrayList<>();
+    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 10", currentPrice, calculateSma(closes, 10), "ma");
+    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 20", currentPrice, sma20Values, "ma");
+    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 50", currentPrice, sma50Values, "ma");
+    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "SMA 100", currentPrice, calculateSma(closes, 100), "ma");
+    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "EMA 12", currentPrice, calculateEma(closes, 12), "ma");
+    voteMovingAverage(signals, explanationsEn, explanationsHe, explanationsRu, "EMA 26", currentPrice, calculateEma(closes, 26), "ma");
+    voteOscillator(signals, explanationsEn, explanationsHe, explanationsRu, "RSI 14", rsi, 30, 70, fmt1(rsi), "oscillator");
+    Double stoch = stochasticK(highs, lows, closes, 14);
+    if (stoch != null) {
+      voteOscillator(signals, explanationsEn, explanationsHe, explanationsRu, "Stochastic 14", stoch, 20, 80, fmt1(stoch), "oscillator");
     }
+    if (macdData != null && macdData.histogram.length > 0) {
+      String macdAction = hist > 0 ? "BUY" : hist < 0 ? "SELL" : "NEUTRAL";
+      addVote(signals, explanationsEn, explanationsHe, explanationsRu, "MACD 12,26,9", hist, fmt2(hist), macdAction, "oscillator");
+    }
+    String bbAction = currentPrice < bb.lower ? "BUY" : currentPrice > bb.upper ? "SELL" : "NEUTRAL";
+    addVote(signals, explanationsEn, explanationsHe, explanationsRu, "Bollinger 20,2", currentPrice, fmtPx(currentPrice), bbAction, "oscillator");
+    Map<String, Object> levels = nearestLevels(highs, lows, currentPrice);
 
-    int confidence = (int) Math.min(100, Math.max(30, Math.round(50 + (Math.abs(score) / 10.0) * 50)));
-    String convEn = score >= 2 ? "positive indicator convergence" : score <= -2 ? "negative indicator convergence" : "consolidating indicators";
-    String convHe = score >= 2 ? "התכנסות אינדיקטורים חיובית" : score <= -2 ? "התכנסות אינדיקטורים שלילית" : "אינדיקטורים מאוזנים ודשדוש";
-    String convRu = score >= 2 ? "схождение индикаторов в плюс" : score <= -2 ? "схождение индикаторов в минус" : "индикаторы в балансе";
-    String summaryEn = "The bot recommends a " + recommendation + " action for " + sym + " with a confidence score of " + confidence
-        + "%. This is based on " + convEn + ". RSI stands at " + fmt1(rsi) + " (" + rsiStatus + "), MACD is currently "
-        + macdStatus + ", and price is in a " + maStatus + " layout relative to the moving averages.";
-    String summaryHe = "הבוט ממליץ על פעולת " + recommendationHe + " עבור " + sym + " ברמת ביטחון של " + confidence
-        + "%. המלצה זו מבוססת על " + convHe + ". מדד ה-RSI עומד על " + fmt1(rsi) + " (" + rsiStatusHe + "), ה-MACD מראה מומנטום "
-        + macdStatusHe + ", והמחיר נמצא ב" + maStatusHe + " ביחס לממוצעים הנעים.";
-    String summaryRu = "Бот рекомендует «" + recommendationRu + "» по " + sym + ", уверенность " + confidence
-        + "%. Основание: " + convRu + ". RSI " + fmt1(rsi) + " (" + rsiStatusRu + "), MACD сейчас "
-        + macdStatusRu + ", цена относительно скользящих средних: " + maStatusRu + ".";
+    int buyVotes = 0;
+    int sellVotes = 0;
+    int neutralVotes = 0;
+    for (Map<String, Object> row : signals) {
+      switch (String.valueOf(row.get("action"))) {
+        case "BUY" -> buyVotes++;
+        case "SELL" -> sellVotes++;
+        default -> neutralVotes++;
+      }
+    }
+    int voteTotal = Math.max(1, signals.size());
+    String recommendation = labelFromVotes(buyVotes, sellVotes, neutralVotes, signals.size());
+    String recommendationHe;
+    String recommendationRu;
+    String recColor;
+    int winningVotes;
+    switch (recommendation) {
+      case "STRONG BUY" -> {
+        recommendationHe = "קנייה חזקה";
+        recommendationRu = "сильная покупка";
+        recColor = "#22c55e";
+        winningVotes = buyVotes;
+      }
+      case "BUY" -> {
+        recommendationHe = "קנייה";
+        recommendationRu = "покупка";
+        recColor = "#4ade80";
+        winningVotes = buyVotes;
+      }
+      case "STRONG SELL" -> {
+        recommendationHe = "מכירה חזקה";
+        recommendationRu = "сильная продажа";
+        recColor = "#ef4444";
+        winningVotes = sellVotes;
+      }
+      case "SELL" -> {
+        recommendationHe = "מכירה";
+        recommendationRu = "продажа";
+        recColor = "#f87171";
+        winningVotes = sellVotes;
+      }
+      default -> {
+        recommendation = "NEUTRAL";
+        recommendationHe = "נייטרלי";
+        recommendationRu = "нейтрально";
+        recColor = "#eab308";
+        winningVotes = neutralVotes;
+      }
+    }
+    score = (buyVotes - sellVotes) / (double) voteTotal * 7.5;
+    int confidence = (int) Math.round(100.0 * winningVotes / voteTotal);
+    String windowEn = "1d".equals(interval) ? "Daily candles" : "Hourly candles";
+    String windowHe = "1d".equals(interval) ? "נרות יומיים" : "נרות שעתיים";
+    String windowRu = "1d".equals(interval) ? "Дневные свечи" : "Часовые свечи";
+    String summaryEn = windowEn + " for " + sym + ": " + buyVotes + " Buy, " + neutralVotes + " Neutral, " + sellVotes
+        + " Sell. Summary: " + recommendation + ". This describes candles that already closed. It is not a price forecast.";
+    String summaryHe = windowHe + " עבור " + sym + ": " + buyVotes + " קנייה, " + neutralVotes + " נייטרלי, " + sellVotes
+        + " מכירה. סיכום: " + recommendationHe + ". זה מתאר נרות שכבר נסגרו, לא תחזית מחיר.";
+    String summaryRu = windowRu + " по " + sym + ": покупка " + buyVotes + ", нейтрально " + neutralVotes + ", продажа " + sellVotes
+        + ". Итог: " + recommendationRu + ". Это описание уже закрытых свечей, не прогноз цены.";
+    explanationsEn.add(0, "How a vote is cast: price above a moving average is Buy, below is Sell. RSI is Buy under 30 and Sell over 70. Stochastic is Buy under 20 and Sell over 80. MACD is Buy when its histogram is above zero. Bollinger votes only outside the bands. Anything in between is Neutral.");
+    explanationsHe.add(0, "איך נספר קול: מחיר מעל ממוצע נע הוא קנייה, ומתחתיו מכירה. RSI הוא קנייה מתחת ל-30 ומכירה מעל 70. סטוכסטי הוא קנייה מתחת ל-20 ומכירה מעל 80. MACD הוא קנייה כשההיסטוגרמה מעל אפס. בולינגר מצביע רק מחוץ לרצועות. כל השאר נייטרלי.");
+    explanationsRu.add(0, "Как считается голос: цена выше скользящей средней — покупка, ниже — продажа. RSI голосует за покупку ниже 30 и за продажу выше 70. Стохастик — за покупку ниже 20 и за продажу выше 80. MACD голосует за покупку, когда гистограмма выше нуля. Боллинджер голосует только за пределами полос. Всё, что между порогами, — нейтрально.");
 
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("symbol", sym);
@@ -273,6 +311,11 @@ public class TechnicalAnalysisService {
     out.put("summary", summaryEn);
     out.put("summaryHe", summaryHe);
     out.put("summaryRu", summaryRu);
+    out.put("available", true);
+    out.put("interval", "1d".equals(interval) ? "1d" : "1h");
+    out.put("votes", Map.of("buy", buyVotes, "neutral", neutralVotes, "sell", sellVotes));
+    out.put("signals", signals);
+    out.put("levels", levels);
     return out;
   }
 
@@ -420,6 +463,255 @@ public class TechnicalAnalysisService {
     return candles;
   }
 
+  private static void voteMovingAverage(
+      List<Map<String, Object>> signals,
+      List<String> en,
+      List<String> he,
+      List<String> ru,
+      String name,
+      double price,
+      double[] values,
+      String group) {
+    if (values == null || values.length == 0) return;
+    double ma = values[values.length - 1];
+    String action = price > ma ? "BUY" : price < ma ? "SELL" : "NEUTRAL";
+    addVote(signals, en, he, ru, name, ma, fmtPx(ma), action, group);
+  }
+
+  /** Buy under the low line, sell over the high line, neutral in the middle. */
+  private static void voteOscillator(
+      List<Map<String, Object>> signals,
+      List<String> en,
+      List<String> he,
+      List<String> ru,
+      String name,
+      double value,
+      double buyBelow,
+      double sellAbove,
+      String valueText,
+      String group) {
+    String action = value < buyBelow ? "BUY" : value > sellAbove ? "SELL" : "NEUTRAL";
+    addVote(signals, en, he, ru, name, value, valueText, action, group);
+  }
+
+  private static void addVote(
+      List<Map<String, Object>> signals,
+      List<String> en,
+      List<String> he,
+      List<String> ru,
+      String name,
+      double value,
+      String valueText,
+      String action,
+      String group) {
+    String actionHe = switch (action) {
+      case "BUY" -> "קנייה";
+      case "SELL" -> "מכירה";
+      default -> "נייטרלי";
+    };
+    String actionRu = switch (action) {
+      case "BUY" -> "покупка";
+      case "SELL" -> "продажа";
+      default -> "нейтрально";
+    };
+    String actionEn = switch (action) {
+      case "BUY" -> "Buy";
+      case "SELL" -> "Sell";
+      default -> "Neutral";
+    };
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("name", name);
+    row.put("value", value);
+    row.put("valueText", valueText);
+    row.put("action", action);
+    row.put("actionHe", actionHe);
+    row.put("actionRu", actionRu);
+    row.put("group", group);
+    signals.add(row);
+    if (en != null) en.add(name + ": " + valueText + " — " + actionEn);
+    if (he != null) he.add(name + ": " + valueText + " — " + actionHe);
+    if (ru != null) ru.add(name + ": " + valueText + " — " + actionRu);
+  }
+
+  /** Same Buy / Sell / Neutral word the summary badge uses, without the long text. */
+  String verdict(List<CandleBar> candles) {
+    if (candles == null || candles.size() < 50) return "HOLD";
+    int n = candles.size();
+    double[] closes = new double[n];
+    double[] highs = new double[n];
+    double[] lows = new double[n];
+    for (int i = 0; i < n; i++) {
+      closes[i] = candles.get(i).close();
+      highs[i] = candles.get(i).high();
+      lows[i] = candles.get(i).low();
+    }
+    double price = closes[n - 1];
+    List<Map<String, Object>> signals = new ArrayList<>();
+    voteMovingAverage(signals, null, null, null, "SMA 10", price, calculateSma(closes, 10), "ma");
+    voteMovingAverage(signals, null, null, null, "SMA 20", price, calculateSma(closes, 20), "ma");
+    voteMovingAverage(signals, null, null, null, "SMA 50", price, calculateSma(closes, 50), "ma");
+    voteMovingAverage(signals, null, null, null, "SMA 100", price, calculateSma(closes, 100), "ma");
+    voteMovingAverage(signals, null, null, null, "EMA 12", price, calculateEma(closes, 12), "ma");
+    voteMovingAverage(signals, null, null, null, "EMA 26", price, calculateEma(closes, 26), "ma");
+    voteOscillator(signals, null, null, null, "RSI 14", last(calculateRsi(closes, 14), 50), 30, 70, "", "oscillator");
+    Double stoch = stochasticK(highs, lows, closes, 14);
+    if (stoch != null) {
+      voteOscillator(signals, null, null, null, "Stochastic 14", stoch, 20, 80, "", "oscillator");
+    }
+    Macd macd = calculateMacd(closes, 12, 26, 9);
+    if (macd != null && macd.histogram.length > 0) {
+      double hist = last(macd.histogram, 0);
+      String macdAction = hist > 0 ? "BUY" : hist < 0 ? "SELL" : "NEUTRAL";
+      addVote(signals, null, null, null, "MACD 12,26,9", hist, "", macdAction, "oscillator");
+    }
+    Bb bb = lastBb(calculateBollinger(closes, 20, 2), price);
+    String bbAction = price < bb.lower ? "BUY" : price > bb.upper ? "SELL" : "NEUTRAL";
+    addVote(signals, null, null, null, "Bollinger 20,2", price, "", bbAction, "oscillator");
+    int buy = 0;
+    int sell = 0;
+    int neutral = 0;
+    for (Map<String, Object> row : signals) {
+      switch (String.valueOf(row.get("action"))) {
+        case "BUY" -> buy++;
+        case "SELL" -> sell++;
+        default -> neutral++;
+      }
+    }
+    return labelFromVotes(buy, sell, neutral, signals.size());
+  }
+
+  /**
+   * Walks the recent candles with one rule: while the summary says Buy, a pretend 10,000
+   * sits in the price; otherwise it stands aside. The site's commission is charged on entry
+   * and on exit. The last point cashes out, so the exit fee is included.
+   */
+  public Map<String, Object> replay(List<CandleBar> candles, String symbol) {
+    Map<String, Object> out = new LinkedHashMap<>();
+    if (candles == null || candles.size() < 80) {
+      out.put("available", false);
+      return out;
+    }
+    String sym = symbol == null ? "" : symbol.trim().toUpperCase();
+    double contract = ContractSpecs.getContractSize(sym).doubleValue();
+    int start = Math.max(60, candles.size() - 120);
+    double equity = 10_000;
+    boolean inMarket = false;
+    double entry = 0;
+    double invested = 0;
+    int entries = 0;
+    double fees = 0;
+    List<Double> points = new ArrayList<>();
+    for (int i = start; i < candles.size(); i++) {
+      String rec = verdict(candles.subList(0, i + 1));
+      boolean wantLong = rec.contains("BUY");
+      double price = candles.get(i).close();
+      if (price > 0 && wantLong && !inMarket) {
+        double fee = feeOn(sym, equity, price, contract);
+        equity -= fee;
+        fees += fee;
+        entry = price;
+        invested = equity;
+        inMarket = true;
+        entries++;
+      } else if (price > 0 && !wantLong && inMarket) {
+        double mark = invested * (price / entry);
+        double fee = feeOn(sym, mark, price, contract);
+        equity = mark - fee;
+        fees += fee;
+        inMarket = false;
+        invested = 0;
+      }
+      double marked = inMarket && entry > 0 ? invested * (price / entry) : equity;
+      points.add(round2(marked));
+    }
+    if (inMarket && entry > 0 && !points.isEmpty()) {
+      double price = candles.get(candles.size() - 1).close();
+      double mark = invested * (price / entry);
+      double fee = feeOn(sym, mark, price, contract);
+      fees += fee;
+      points.set(points.size() - 1, round2(mark - fee));
+    }
+    double end = points.isEmpty() ? 10_000 : points.get(points.size() - 1);
+    out.put("available", true);
+    out.put("stake", 10000);
+    out.put("endValue", round2(end));
+    out.put("changePct", round2((end - 10_000) / 10_000 * 100.0));
+    out.put("entries", entries);
+    out.put("fees", round2(fees));
+    out.put("bars", points.size());
+    out.put("points", points);
+    return out;
+  }
+
+  private static String labelFromVotes(int buy, int sell, int neutral, int total) {
+    if (total <= 0) return "NEUTRAL";
+    if (buy >= sell * 2 && buy * 5 >= total * 3) return "STRONG BUY";
+    if (sell >= buy * 2 && sell * 5 >= total * 3) return "STRONG SELL";
+    if (buy > sell && buy > neutral) return "BUY";
+    if (sell > buy && sell > neutral) return "SELL";
+    return "NEUTRAL";
+  }
+
+  /** Commission on one fill, same schedule as a real order of this size. */
+  private static double feeOn(String symbol, double amount, double price, double contract) {
+    if (amount <= 0 || price <= 0 || contract <= 0) return 0;
+    double lots = amount / (price * contract);
+    return TradingFees.calculateCommission(symbol, BigDecimal.valueOf(lots), BigDecimal.valueOf(price)).doubleValue();
+  }
+
+  private static double round2(double value) {
+    return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
+  }
+
+  /**
+   * Nearest confirmed turn on the recent candles.
+   * A turn is a high or low that sticks out above or below the two bars on each side.
+   * Resistance is the closest such high above the last price, support the closest such low below it.
+   */
+  private static Map<String, Object> nearestLevels(double[] high, double[] low, double price) {
+    Map<String, Object> levels = new LinkedHashMap<>();
+    if (high.length < 5 || low.length != high.length) return levels;
+    int end = high.length - 3;
+    int start = Math.max(2, end - 48);
+    Double support = null;
+    Double resistance = null;
+    for (int i = start; i <= end; i++) {
+      boolean swingHigh = high[i] > high[i - 1] && high[i] > high[i - 2] && high[i] > high[i + 1] && high[i] > high[i + 2];
+      boolean swingLow = low[i] < low[i - 1] && low[i] < low[i - 2] && low[i] < low[i + 1] && low[i] < low[i + 2];
+      if (swingHigh && high[i] > price && (resistance == null || high[i] < resistance)) resistance = high[i];
+      if (swingLow && low[i] < price && (support == null || low[i] > support)) support = low[i];
+    }
+    int from = Math.max(0, high.length - 40);
+    int to = high.length - 2;
+    if (resistance == null) {
+      for (int i = from; i <= to; i++) {
+        if (high[i] > price && (resistance == null || high[i] < resistance)) resistance = high[i];
+      }
+    }
+    if (support == null) {
+      for (int i = from; i <= to; i++) {
+        if (low[i] < price && (support == null || low[i] > support)) support = low[i];
+      }
+    }
+    if (support != null) levels.put("support", support);
+    if (resistance != null) levels.put("resistance", resistance);
+    return levels;
+  }
+
+  /** Stochastic %K. Null when there are not enough highs and lows. */
+  private static Double stochasticK(double[] high, double[] low, double[] close, int period) {
+    int last = close.length - 1;
+    if (last < period - 1) return null;
+    double highest = high[last];
+    double lowest = low[last];
+    for (int j = 0; j < period; j++) {
+      highest = Math.max(highest, high[last - j]);
+      lowest = Math.min(lowest, low[last - j]);
+    }
+    if (highest == lowest) return 50.0;
+    return (close[last] - lowest) / (highest - lowest) * 100.0;
+  }
+
   private static double last(double[] arr, double fallback) {
     return arr == null || arr.length == 0 ? fallback : arr[arr.length - 1];
   }
@@ -434,6 +726,13 @@ public class TechnicalAnalysisService {
 
   private static String fmt2(double v) {
     return String.format(java.util.Locale.US, "%.2f", v);
+  }
+
+  private static String fmtPx(double v) {
+    double abs = Math.abs(v);
+    if (abs >= 1000) return String.format(java.util.Locale.US, "%.2f", v);
+    if (abs >= 10) return String.format(java.util.Locale.US, "%.3f", v);
+    return String.format(java.util.Locale.US, "%.5f", v);
   }
 
   record Macd(double[] macdLine, double[] signalLine, double[] histogram) {}

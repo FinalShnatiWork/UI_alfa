@@ -43,25 +43,32 @@ public class MarketAnalysisController {
       @RequestParam(defaultValue = "crypto") String category,
       @RequestParam(defaultValue = "1h") String interval) {
     String clean = symbol.trim().toUpperCase();
-    return ResponseEntity.ok(analyzeSymbol(clean, interval));
+    return ResponseEntity.ok(analyzeSymbol(clean, interval, true));
   }
 
   @GetMapping("/api/market/analysis/all")
-  public ResponseEntity<?> all() {
+  public ResponseEntity<?> all(@RequestParam(defaultValue = "1h") String interval) {
+    String iv = candleInterval(interval);
     List<Map<String, Object>> results = new ArrayList<>();
     for (Asset asset : SUPPORTED) {
-      Map<String, Object> full = analyzeSymbol(asset.id, "1h");
+      Map<String, Object> full = analyzeSymbol(asset.id, iv, false);
       results.add(analysis.overviewRow(full, asset.category));
     }
     return ResponseEntity.ok(results);
   }
 
-  private Map<String, Object> analyzeSymbol(String symbol, String interval) {
-    List<CandleBar> candles = market.listCandles(symbol, interval);
-    if (candles == null || candles.isEmpty()) {
-      candles = TechnicalAnalysisService.syntheticCandles(symbol);
-    }
-    return analysis.analyze(candles, symbol);
+  private Map<String, Object> analyzeSymbol(String symbol, String interval, boolean withReplay) {
+    String iv = candleInterval(interval);
+    List<CandleBar> candles = market.listCandles(symbol, iv);
+    List<CandleBar> bars = candles == null ? List.of() : candles;
+    Map<String, Object> full = analysis.analyze(bars, symbol, iv);
+    if (withReplay) full.put("replay", analysis.replay(bars, symbol));
+    return full;
+  }
+
+  /** The page offers the two windows Yahoo and Bybit both fill reliably. */
+  private static String candleInterval(String interval) {
+    return "1d".equals(interval) ? "1d" : "1h";
   }
 
   private record Asset(String id, String category) {}

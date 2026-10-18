@@ -33,6 +33,74 @@ interface AnalysisResult {
     summary: string;
     summaryHe: string;
     summaryRu?: string;
+    available?: boolean;
+    votes?: { buy: number; neutral: number; sell: number };
+    signals?: SignalVote[];
+    levels?: PriceLevels;
+    replay?: ReplayResult;
+}
+
+interface ReplayResult {
+    available?: boolean;
+    stake?: number;
+    endValue?: number;
+    changePct?: number;
+    entries?: number;
+    fees?: number;
+    bars?: number;
+    points?: number[];
+}
+
+interface SignalVote {
+    name: string;
+    value: number;
+    action: string;
+    group?: string;
+}
+
+interface PriceLevels {
+    support?: number;
+    resistance?: number;
+}
+
+function signalGroup(row: SignalVote): 'ma' | 'oscillator' {
+    if (row.group === 'ma' || row.group === 'oscillator') return row.group;
+    return row.name.startsWith('SMA') || row.name.startsWith('EMA') ? 'ma' : 'oscillator';
+}
+
+function formatSignalValue(name: string, value: number): string {
+    if (name.startsWith('RSI') || name.startsWith('Stochastic')) {
+        return value.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    }
+    const abs = Math.abs(value);
+    const digits = abs >= 100 ? 2 : abs >= 10 ? 3 : 5;
+    return value.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: digits });
+}
+
+function ReplayLine({ points, up }: { points: number[]; up: boolean }) {
+    if (points.length < 2) return null;
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const span = max - min || 1;
+    const width = 320;
+    const height = 112;
+    const pad = 8;
+    const path = points.map((point, index) => {
+        const x = pad + (index / (points.length - 1)) * (width - pad * 2);
+        const y = pad + (1 - (point - min) / span) * (height - pad * 2);
+        return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return (
+        <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="120" role="img" aria-hidden="true" style={{ display: 'block' }}>
+            <path d={path} fill="none" stroke={up ? '#10b981' : points[points.length - 1] < points[0] ? '#f43f5e' : '#eab308'} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function formatLevel(value: number): string {
+    const abs = Math.abs(value);
+    const digits = abs >= 100 ? 2 : abs >= 10 ? 3 : 5;
+    return value.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: digits });
 }
 
 /** English, then the language the page is actually in. Missing text stays English. */
@@ -268,112 +336,41 @@ const FALLBACK_ASSETS: OverviewAsset[] = [
     },
 ];
 
-// Generate comprehensive fallback analysis data for any asset
-function buildFallbackAnalysis(symbol: string, category: string): AnalysisResult {
-    const asset = FALLBACK_ASSETS.find(a => a.symbol === symbol) || {
-        symbol,
-        category,
-        nameEn: symbol,
-        nameHe: symbol,
-        nameRu: symbol,
-        price: 100.0,
-        recommendation: 'BUY',
-        recommendationHe: 'קנייה',
-        recommendationRu: 'покупка',
-        confidence: 70,
-        color: '#10b981',
-        rsi: 55,
-        macdStatus: 'BULLISH',
-        macdStatusHe: 'שוריוני (עולה)',
-        macdStatusRu: 'бычий (рост)',
-    };
+function blankAssets(): OverviewAsset[] {
+    return FALLBACK_ASSETS.map(asset => ({
+        ...asset,
+        price: 0,
+        recommendation: '',
+        recommendationHe: '',
+        recommendationRu: '',
+        confidence: 0,
+        color: '#94a3b8',
+        rsi: 0,
+        macdStatus: '',
+        macdStatusHe: '',
+        macdStatusRu: '',
+    }));
+}
 
-    const price = asset.price;
-    const isBuy = asset.recommendation.includes('BUY');
-    const isSell = asset.recommendation.includes('SELL');
-
-    const sma20 = isBuy ? price * 0.985 : isSell ? price * 1.015 : price * 0.998;
-    const sma50 = isBuy ? price * 0.965 : isSell ? price * 1.032 : price * 1.002;
-    const bbUpper = price * 1.035;
-    const bbLower = price * 0.965;
-    const bbMiddle = (bbUpper + bbLower) / 2;
-
-    const score = isBuy ? (asset.recommendation.includes('STRONG') ? 5.8 : 3.6) : isSell ? -4.2 : 0.4;
-
+function unavailableAnalysis(symbol: string): AnalysisResult {
     return {
-        symbol: asset.symbol,
-        category: asset.category,
-        recommendation: asset.recommendation,
-        recommendationHe: asset.recommendationHe,
-        recommendationRu: asset.recommendationRu,
-        score,
-        confidence: asset.confidence,
-        color: asset.color,
-        price: asset.price,
-        indicators: {
-            rsi: {
-                value: asset.rsi,
-                status: isBuy ? 'BULLISH SUPPORT' : isSell ? 'BEARISH EXHAUSTION' : 'BALANCED RANGE',
-                statusHe: isBuy ? 'תמיכה שורית' : isSell ? 'עייפות קונים' : 'טווח מאוזן',
-                statusRu: isBuy ? 'бычья поддержка' : isSell ? 'выдох покупателей' : 'ровный диапазон',
-            },
-            macd: {
-                macdLine: isBuy ? 0.00185 * price : -0.0012 * price,
-                signalLine: isBuy ? 0.00112 * price : -0.0006 * price,
-                hist: isBuy ? 0.00073 * price : -0.0006 * price,
-                status: asset.macdStatus,
-                statusHe: asset.macdStatusHe,
-                statusRu: asset.macdStatusRu,
-            },
-            sma: {
-                sma20,
-                sma50,
-                status: isBuy ? 'GOLDEN CROSS (BULLISH)' : isSell ? 'DEATH CROSS (BEARISH)' : 'NEUTRAL ALIGNMENT',
-                statusHe: isBuy ? 'הצלבה שורית (עולה)' : isSell ? 'הצלבה דובית (יורדת)' : 'ממוצעים מאוזנים',
-                statusRu: isBuy ? 'золотой крест (бычий)' : isSell ? 'крест смерти (медвежий)' : 'средние рядом',
-            },
-            bb: {
-                upper: bbUpper,
-                middle: bbMiddle,
-                lower: bbLower,
-                status: isBuy ? 'TRADING IN UPPER EXPANSION' : isSell ? 'TESTING LOWER BOUND' : 'INSIDE STANDARD CHANNELS',
-                statusHe: isBuy ? 'התבססות ברצועה העליונה' : isSell ? 'לחץ לכיוון הרצועה התחתונה' : 'תנועה בתוך הערוץ המרכזי',
-                statusRu: isBuy ? 'ход у верхней полосы' : isSell ? 'проверка нижней границы' : 'внутри обычного канала',
-            },
-        },
-        explanationsEn: [
-            `RSI is positioned at ${asset.rsi.toFixed(1)}, showing healthy momentum without extreme exhaustion.`,
-            `MACD histogram demonstrates ${isBuy ? 'positive upward divergence' : isSell ? 'negative downward pressure' : 'neutral consolidation'}.`,
-            `Current price ($${price.toLocaleString(NUM_LOCALE)}) trades ${price > sma20 ? 'above' : 'below'} both the 20-period and 50-period moving averages.`,
-            `Bollinger Bands volatility structure indicates ${isBuy ? 'sustained bullish continuation' : isSell ? 'downside correction risk' : 'stable trading ranges'}.`,
-        ],
-        explanationsHe: [
-            `מדד ה-RSI עומד על ${asset.rsi.toFixed(1)}, מציג מומנטום יציב ובריא ללא קיצוניות חריגה.`,
-            `היסטוגרמת MACD מציגה ${isBuy ? 'התרחבות חיובית כלפי מעלה ומומנטום קונים' : isSell ? 'לחץ מכירות והיחלשות קונים' : 'קונסולידציה והמתנה לכיוון ברור'}.`,
-            `המחיר הנוכחי ($${price.toLocaleString(NUM_LOCALE)}) נסחר ${price > sma20 ? 'מעל' : 'מתחת'} לממוצעים הנעים לתקופות 20 ו-50 ימים.`,
-            `רצועות בולינגר מראות ${isBuy ? 'פריצה מבוקרת ועוצמה במגמת העלייה' : isSell ? 'סיכון להמשך ירידה ובדיקת תמיכות' : 'תנודתיות מאוזנת בתוך גבולות הערוץ'}.`,
-        ],
-        explanationsRu: [
-            `RSI на уровне ${asset.rsi.toFixed(1)}: импульс ровный, без крайнего перегрева.`,
-            `Гистограмма MACD показывает ${isBuy ? 'рост вверх и импульс покупателей' : isSell ? 'давление продавцов' : 'консолидацию, явного направления нет'}.`,
-            `Текущая цена ($${price.toLocaleString(NUM_LOCALE)}) ${price > sma20 ? 'выше' : 'ниже'} скользящих средних 20 и 50.`,
-            `Полосы Боллинджера: ${isBuy ? 'контролируемый пробой и сила восходящего движения' : isSell ? 'риск продолжения снижения' : 'спокойная волатильность внутри канала'}.`,
-        ],
-        summary: isBuy
-            ? `Algorithmic analysis identifies strong multi-indicator buy momentum on ${asset.symbol} with ${asset.confidence}% statistical confidence.`
-            : isSell
-            ? `Bearish divergence detected across moving averages and oscillators, suggesting tactical caution or short bias.`
-            : `Consolidation mode detected. Key indicators are neutral; monitor breakout levels before opening directional positions.`,
-        summaryHe: isBuy
-            ? `האלגוריתם מזהה מומנטום קנייה חזק במספר אינדיקטורים מובילים על ${asset.symbol} ברמת ביטחון סטטיסטית של ${asset.confidence}%.`
-            : isSell
-            ? `זוהתה סטייה דובית בשילוב ממוצעים נעים ומתנדים, המצביעה על זהירות ונטייה לירידות.`
-            : `הנכס נמצא במצב התכנסות ודשדוש. מומלץ להמתין לפריצת רמות תמיכה/התנגדות לפני כניסה לפוזיציה.`,
-        summaryRu: isBuy
-            ? `Алгоритм видит импульс на покупку по нескольким индикаторам ${asset.symbol}, уверенность ${asset.confidence}%.`
-            : isSell
-            ? `Медвежье расхождение по средним и осцилляторам: лучше осторожность, уклон вниз.`
-            : `Актив в консолидации. Индикаторы нейтральны, перед входом стоит дождаться пробоя.`,
+        symbol,
+        recommendation: 'NEUTRAL',
+        recommendationHe: 'נייטרלי',
+        recommendationRu: 'нейтрально',
+        score: 0,
+        confidence: 0,
+        color: '#94a3b8',
+        price: 0,
+        available: false,
+        votes: { buy: 0, neutral: 0, sell: 0 },
+        indicators: { rsi: null, macd: null, sma: null, bb: null },
+        explanationsEn: [],
+        explanationsHe: [],
+        explanationsRu: [],
+        summary: 'The market server did not return enough candles for this symbol.',
+        summaryHe: 'שרת השוק לא החזיר מספיק נרות לנכס הזה.',
+        summaryRu: 'Сервер рынка не вернул достаточно свечей по этому инструменту.',
     };
 }
 
@@ -619,10 +616,11 @@ export function AnalyzerPage() {
         document.title = t('titles.analyzer');
     }, [t]);
 
-    const [assets, setAssets] = useState<OverviewAsset[]>(FALLBACK_ASSETS);
+    const [assets, setAssets] = useState<OverviewAsset[]>(blankAssets);
     const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSD');
     const [selectedCategory, setSelectedCategory] = useState<string>('crypto');
-    const [analysis, setAnalysis] = useState<AnalysisResult | null>(() => buildFallbackAnalysis('BTCUSD', 'crypto'));
+    const [candleInterval, setCandleInterval] = useState<'1h' | '1d'>('1h');
+    const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
 
     const [loadingOverview, setLoadingOverview] = useState(false);
     const [loadingAnalysis, setLoadingAnalysis] = useState(false);
@@ -637,7 +635,7 @@ export function AnalyzerPage() {
 
         const fetchOverview = async () => {
             try {
-                const res = await fetch('/api/market/analysis/all');
+                const res = await fetch(`/api/market/analysis/all?interval=${candleInterval}`);
                 if (res.ok && active) {
                     const data = await res.json();
                     if (Array.isArray(data) && data.length > 0) {
@@ -670,16 +668,17 @@ export function AnalyzerPage() {
             active = false;
             clearInterval(interval);
         };
-    }, []);
+    }, [candleInterval]);
 
     // Fetch detailed analysis for selected asset, fall back seamlessly
     useEffect(() => {
         let active = true;
+        setAnalysis(null);
         setLoadingAnalysis(true);
 
         const fetchAnalysis = async () => {
             try {
-                const res = await fetch(`/api/market/analysis?symbol=${selectedSymbol}&category=${selectedCategory}`);
+                const res = await fetch(`/api/market/analysis?symbol=${selectedSymbol}&category=${selectedCategory}&interval=${candleInterval}`);
                 if (res.ok && active) {
                     const data = await res.json();
                     if (data && data.symbol) {
@@ -688,13 +687,13 @@ export function AnalyzerPage() {
                     }
                 }
             } catch {
-                // Use resilient calculated fallback
+                // Leave the last real summary on screen when a refresh fails.
             } finally {
                 if (active) setLoadingAnalysis(false);
             }
 
             if (active) {
-                setAnalysis(buildFallbackAnalysis(selectedSymbol, selectedCategory));
+                setAnalysis(prev => (prev && prev.symbol === selectedSymbol ? prev : unavailableAnalysis(selectedSymbol)));
             }
         };
 
@@ -705,7 +704,7 @@ export function AnalyzerPage() {
             active = false;
             clearInterval(interval);
         };
-    }, [selectedSymbol, selectedCategory]);
+    }, [selectedSymbol, selectedCategory, candleInterval]);
 
     const handleAssetSelect = (symbol: string, category: string) => {
         setSelectedSymbol(symbol);
@@ -754,6 +753,67 @@ export function AnalyzerPage() {
         if (rec.includes('SELL')) return 'analyzer-badge-sell';
         return 'analyzer-badge-neutral';
     };
+
+    const voteWord = (action: string) =>
+        action === 'BUY' ? t('analyzer.buy') : action === 'SELL' ? t('analyzer.sell') : t('analyzer.neutral');
+
+    const maSignals = (analysis?.signals ?? []).filter(row => signalGroup(row) === 'ma');
+    const oscillatorSignals = (analysis?.signals ?? []).filter(row => signalGroup(row) === 'oscillator');
+
+    const levelGap = (level: number) => {
+        if (!analysis?.price) return '';
+        const n = Math.abs((level - analysis.price) / analysis.price * 100).toLocaleString(NUM_LOCALE, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+        return level > analysis.price ? t('analyzer.abovePct', { n }) : t('analyzer.belowPct', { n });
+    };
+
+    const renderSignalTable = (title: string, rows: SignalVote[]) => (
+        <div>
+            <div style={{ fontWeight: 800, fontSize: '0.95rem', marginBottom: 10, color: 'var(--text-primary)' }}>{title}</div>
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(7rem, 1.3fr) minmax(4.5rem, 0.9fr) auto',
+                    columnGap: 10,
+                    alignItems: 'center',
+                    fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                    fontWeight: 700,
+                    paddingBottom: 6,
+                }}
+            >
+                <span>{t('analyzer.colName')}</span>
+                <span style={{ textAlign: 'end' }}>{t('analyzer.colValue')}</span>
+                <span style={{ textAlign: 'end' }}>{t('analyzer.colVote')}</span>
+            </div>
+            {rows.map(row => (
+                <div
+                    key={row.name}
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(7rem, 1.3fr) minmax(4.5rem, 0.9fr) auto',
+                        columnGap: 10,
+                        alignItems: 'center',
+                        padding: '8px 0',
+                        borderTop: '1px solid var(--border-light)',
+                    }}
+                >
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{row.name}</span>
+                    <span style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {formatSignalValue(row.name, row.value)}
+                    </span>
+                    <span
+                        className={getRecBadgeClass(row.action)}
+                        style={{ justifySelf: 'end', fontSize: '0.68rem', padding: '3px 8px', borderRadius: 6, fontWeight: 800, whiteSpace: 'nowrap' }}
+                    >
+                        {voteWord(row.action)}
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
 
     return (
         <>
@@ -1093,11 +1153,15 @@ export function AnalyzerPage() {
                                                         letterSpacing: '0.02em',
                                                     }}
                                                 >
-                                                    {pick(lang, asset.recommendation, asset.recommendationHe, asset.recommendationRu)}
+                                                    {asset.recommendation
+                                                        ? pick(lang, asset.recommendation, asset.recommendationHe, asset.recommendationRu)
+                                                        : '…'}
                                                 </span>
-                                                <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                                                    {t('analyzer.confidence', { n: asset.confidence })}
-                                                </span>
+                                                {asset.recommendation ? (
+                                                    <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                                                        {t('analyzer.confidence', { n: asset.confidence })}
+                                                    </span>
+                                                ) : null}
                                             </div>
                                         </div>
                                     );
@@ -1192,11 +1256,48 @@ export function AnalyzerPage() {
                                             </div>
                                         </div>
 
+                                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                            {(['1h', '1d'] as const).map(iv => (
+                                                <button
+                                                    key={iv}
+                                                    type="button"
+                                                    onClick={() => setCandleInterval(iv)}
+                                                    style={{
+                                                        padding: '4px 12px',
+                                                        borderRadius: 8,
+                                                        fontWeight: 700,
+                                                        fontSize: '0.78rem',
+                                                        cursor: 'pointer',
+                                                        color: 'var(--text-primary)',
+                                                        border: candleInterval === iv ? '1px solid var(--accent)' : '1px solid var(--border-light)',
+                                                        background: candleInterval === iv ? 'rgba(234, 179, 8, 0.16)' : 'transparent',
+                                                    }}
+                                                >
+                                                    {iv === '1h' ? t('analyzer.hour') : t('analyzer.day')}
+                                                </button>
+                                            ))}
+                                        </div>
+
                                         <p style={{ margin: '12px 0', fontSize: '0.94rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                                             {pick(lang, analysis.summary, analysis.summaryHe, analysis.summaryRu)}
                                         </p>
 
-                                        {/* Confidence progress bar */}
+                                        {analysis.votes && analysis.available !== false ? (
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                                                <span className="analyzer-badge-buy" style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 8, fontWeight: 800 }}>
+                                                    {t('analyzer.buy')} {analysis.votes.buy}
+                                                </span>
+                                                <span className="analyzer-badge-neutral" style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 8, fontWeight: 800 }}>
+                                                    {t('analyzer.neutral')} {analysis.votes.neutral}
+                                                </span>
+                                                <span className="analyzer-badge-sell" style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 8, fontWeight: 800 }}>
+                                                    {t('analyzer.sell')} {analysis.votes.sell}
+                                                </span>
+                                            </div>
+                                        ) : null}
+
+                                        {/* Share of the votes that landed on the summary */}
+                                        {analysis.available === false ? null : (
                                         <div style={{ marginTop: 14 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 6 }}>
                                                 <span style={{ fontWeight: 600 }}>{t('analyzer.confidenceScore')}</span>
@@ -1215,6 +1316,7 @@ export function AnalyzerPage() {
                                                 />
                                             </div>
                                         </div>
+                                        )}
                                     </div>
 
                                     {/* RIGHT: LIVE PRICE & TRADE NOW ACTION */}
@@ -1236,7 +1338,7 @@ export function AnalyzerPage() {
                                             {t('analyzer.livePrice')}
                                         </div>
                                         <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--accent-strong)', margin: '8px 0 16px', letterSpacing: '-0.02em' }}>
-                                            {typeof analysis.price === 'number'
+                                            {analysis.available !== false && typeof analysis.price === 'number' && analysis.price > 0
                                                 ? `$${analysis.price.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`
                                                 : '—'}
                                         </div>
@@ -1257,6 +1359,8 @@ export function AnalyzerPage() {
                                     </div>
                                 </div>
 
+                                {analysis.available === false ? null : (
+                                <>
                                 {/* 4 TECHNICAL INDICATORS TILES */}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
                                     
@@ -1376,25 +1480,89 @@ export function AnalyzerPage() {
                                     </div>
                                 </div>
 
-                                {/* DETAILED EXPLANATION BREAKDOWN CARD */}
+                                {/* INDICATOR VOTES, THEN THE NEAREST TURN ON THESE CANDLES */}
                                 <div className="card" style={{ padding: 24 }}>
                                     <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
                                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
                                         {t('analyzer.breakdown')}
                                     </h4>
-                                    <ul style={{ margin: 0, paddingInlineStart: 20, display: 'flex', flexDirection: 'column', gap: 12, lineHeight: 1.6 }}>
-                                        {(lang === 'he'
-                                            ? analysis.explanationsHe
-                                            : lang === 'ru'
-                                                ? (analysis.explanationsRu?.length ? analysis.explanationsRu : analysis.explanationsEn)
-                                                : analysis.explanationsEn
-                                        )?.map((exp, idx) => (
-                                            <li key={idx} style={{ color: 'var(--text-primary)', fontSize: '0.92rem' }}>
-                                                {exp}
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 28 }}>
+                                        {renderSignalTable(t('analyzer.movingAverages'), maSignals)}
+                                        {renderSignalTable(t('analyzer.oscillators'), oscillatorSignals)}
+                                    </div>
+                                    <p style={{ margin: '16px 0 0', fontSize: '0.82rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                                        {t('analyzer.voteRule')}
+                                    </p>
                                 </div>
+
+                                <div className="card" style={{ padding: 24 }}>
+                                    <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+                                        {t('analyzer.levels')}
+                                    </h4>
+                                    <p style={{ margin: '0 0 12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>{t('analyzer.levelsNote')}</p>
+                                    {[
+                                        { label: t('analyzer.resistance'), level: analysis.levels?.resistance },
+                                        { label: t('analyzer.support'), level: analysis.levels?.support },
+                                    ].map(row => (
+                                        <div
+                                            key={row.label}
+                                            style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: 'minmax(7rem, 1fr) auto auto',
+                                                columnGap: 16,
+                                                alignItems: 'center',
+                                                padding: '10px 0',
+                                                borderTop: '1px solid var(--border-light)',
+                                            }}
+                                        >
+                                            <span style={{ fontWeight: 700 }}>{row.label}</span>
+                                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                                                {typeof row.level === 'number' ? formatLevel(row.level) : '—'}
+                                            </span>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap', textAlign: 'end' }}>
+                                                {typeof row.level === 'number' ? levelGap(row.level) : ''}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="card" style={{ padding: 24 }}>
+                                    <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+                                        {t('analyzer.replayTitle')}
+                                    </h4>
+                                    <p style={{ margin: '0 0 14px', fontSize: '0.9rem', lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+                                        {t('analyzer.replayText')}
+                                    </p>
+                                    {analysis.replay?.available && analysis.replay.points && analysis.replay.points.length > 1 ? (
+                                        <>
+                                            <div style={{ fontSize: '1.8rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, color: (analysis.replay.changePct ?? 0) > 0 ? '#10b981' : (analysis.replay.changePct ?? 0) < 0 ? '#f43f5e' : 'var(--text-secondary)' }}>
+                                                {(analysis.replay.changePct ?? 0) > 0 ? '+' : ''}
+                                                {(analysis.replay.changePct ?? 0).toLocaleString(NUM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                            </div>
+                                            <div style={{ margin: '6px 0 8px', fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                {t('analyzer.replayBecame', {
+                                                    n: Math.round(analysis.replay.endValue ?? 10000).toLocaleString(NUM_LOCALE),
+                                                })}
+                                            </div>
+                                            <ReplayLine points={analysis.replay.points} up={(analysis.replay.changePct ?? 0) > 0} />
+                                            <p style={{ margin: '8px 0 0', fontSize: '0.82rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>
+                                                {t('analyzer.replayNote')}
+                                                {(analysis.replay.entries ?? 0) > 0
+                                                    ? ` ${t('analyzer.replayEntries', { n: analysis.replay.entries ?? 0 })}.`
+                                                    : ''}
+                                            </p>
+                                            {(analysis.replay.entries ?? 0) === 0 ? (
+                                                <p style={{ margin: '8px 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('analyzer.replayFlat')}</p>
+                                            ) : null}
+                                        </>
+                                    ) : (
+                                        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('analyzer.replayEmpty')}</p>
+                                    )}
+                                </div>
+                                </>
+                                )}
                             </>
                         ) : null}
                     </div>

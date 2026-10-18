@@ -183,6 +183,10 @@ public class YahooFinanceService {
             case "CADJPY" -> "CADJPY=X";
             case "XAUUSD" -> "GC=F";
             case "XAGUSD" -> "SI=F";
+            case "BTCUSD" -> "BTC-USD";
+            case "ETHUSD" -> "ETH-USD";
+            case "SOLUSD" -> "SOL-USD";
+            case "XRPUSD" -> "XRP-USD";
             default -> s.contains("=") || s.contains("-") ? s : s + "=X";
         };
     }
