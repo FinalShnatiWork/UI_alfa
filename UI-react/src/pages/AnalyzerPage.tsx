@@ -6,7 +6,7 @@ import { AssetIcon } from '@/components/AssetIcon';
 import { ReplayLine } from '@/components/analyzer/ReplayLine';
 import { SignalVoteTable, signalGroup, type SignalVote } from '@/components/analyzer/SignalVoteTable';
 import { SpeedometerGauge } from '@/components/analyzer/SpeedometerGauge';
-import { NUM_LOCALE } from '@/lib/format';
+import { fmtSignedPct, NUM_LOCALE } from '@/lib/format';
 
 interface IndicatorStatus {
     status: string;
@@ -327,7 +327,7 @@ export function AnalyzerPage() {
                         justifyContent: 'space-between',
                         gap: 20,
                         flexWrap: 'wrap',
-                        background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.08) 0%, rgba(16, 24, 40, 0.6) 100%)',
+                        background: 'var(--analyzer-hero-bg)',
                         borderColor: 'rgba(234, 179, 8, 0.25)',
                     }}
                 >
@@ -401,8 +401,8 @@ export function AnalyzerPage() {
                             display: 'flex',
                             flexDirection: 'column',
                             overflow: 'hidden',
-                            background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.75) 0%, rgba(12, 17, 29, 0.85) 100%)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: 'var(--analyzer-board-bg)',
+                            border: '1px solid var(--analyzer-panel-border)',
                             boxShadow: '0 12px 36px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
                         }}
                     >
@@ -419,8 +419,8 @@ export function AnalyzerPage() {
                                         fontSize: '0.72rem',
                                         color: 'var(--text-secondary)',
                                         fontWeight: 700,
-                                        background: 'rgba(255, 255, 255, 0.06)',
-                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                        background: 'var(--analyzer-chip-bg)',
+                                        border: '1px solid var(--analyzer-panel-border)',
                                         padding: '3px 8px',
                                         borderRadius: 20,
                                     }}
@@ -465,8 +465,8 @@ export function AnalyzerPage() {
                                         paddingTop: 8,
                                         paddingBottom: 8,
                                         fontSize: '0.84rem',
-                                        background: 'rgba(0, 0, 0, 0.4)',
-                                        borderColor: 'rgba(255, 255, 255, 0.08)',
+                                        background: 'var(--analyzer-input-bg)',
+                                        borderColor: 'var(--analyzer-panel-border)',
                                         borderRadius: 10,
                                         color: 'var(--text-primary)',
                                     }}
@@ -505,10 +505,10 @@ export function AnalyzerPage() {
                             <div
                                 style={{
                                     display: 'flex',
-                                    background: 'rgba(0, 0, 0, 0.35)',
+                                    background: 'var(--analyzer-inset-bg)',
                                     padding: 3,
                                     borderRadius: 10,
-                                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                                    border: '1px solid var(--analyzer-item-border)',
                                     gap: 3,
                                 }}
                             >
@@ -572,11 +572,11 @@ export function AnalyzerPage() {
                                                 position: 'relative',
                                                 padding: '10px 12px',
                                                 background: isSelected
-                                                    ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.14) 0%, rgba(20, 28, 45, 0.85) 100%)'
-                                                    : 'rgba(0, 0, 0, 0.22)',
+                                                    ? 'var(--analyzer-item-selected-bg)'
+                                                    : 'var(--analyzer-item-bg)',
                                                 border: isSelected
                                                     ? '1px solid rgba(234, 179, 8, 0.55)'
-                                                    : '1px solid rgba(255, 255, 255, 0.06)',
+                                                    : '1px solid var(--analyzer-item-border)',
                                                 borderRadius: 12,
                                                 cursor: 'pointer',
                                                 display: 'flex',
@@ -612,10 +612,11 @@ export function AnalyzerPage() {
                                                             {asset.symbol}
                                                         </span>
                                                         <span
+                                                            className="analyzer-chip"
                                                             style={{
                                                                 fontSize: '0.6rem',
-                                                                background: 'rgba(255, 255, 255, 0.07)',
-                                                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                                background: 'var(--analyzer-chip-bg)',
+                                                                border: '1px solid var(--analyzer-panel-border)',
                                                                 padding: '1px 5px',
                                                                 borderRadius: 4,
                                                                 textTransform: 'uppercase',
@@ -637,7 +638,7 @@ export function AnalyzerPage() {
 
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
                                                 <span
-                                                    className={getRecBadgeClass(asset.recommendation)}
+                                                    className={`${getRecBadgeClass(asset.recommendation)} analyzer-rec`}
                                                     style={{
                                                         fontSize: '0.66rem',
                                                         padding: '3px 8px',
@@ -653,7 +654,7 @@ export function AnalyzerPage() {
                                                         : '…'}
                                                 </span>
                                                 {asset.recommendation ? (
-                                                    <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                                                    <span className="analyzer-votes" style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 500 }}>
                                                         {t('analyzer.confidence', { n: asset.confidence })}
                                                     </span>
                                                 ) : null}
@@ -692,7 +693,7 @@ export function AnalyzerPage() {
                                         gap: 30,
                                         alignItems: 'center',
                                         flexWrap: 'wrap',
-                                        background: 'linear-gradient(135deg, rgba(16, 24, 40, 0.6) 0%, rgba(24, 34, 54, 0.7) 100%)',
+                                        background: 'var(--analyzer-card-bg)',
                                         position: 'relative',
                                         overflow: 'hidden',
                                     }}
@@ -757,6 +758,7 @@ export function AnalyzerPage() {
                                                     key={iv}
                                                     type="button"
                                                     onClick={() => setCandleInterval(iv)}
+                                                    className="analyzer-iv-btn"
                                                     style={{
                                                         padding: '4px 12px',
                                                         borderRadius: 8,
@@ -798,7 +800,7 @@ export function AnalyzerPage() {
                                                 <span style={{ fontWeight: 600 }}>{t('analyzer.confidenceScore')}</span>
                                                 <span style={{ fontWeight: 800, color: analysis.color }}>{analysis.confidence}%</span>
                                             </div>
-                                            <div style={{ height: 8, width: '100%', background: 'rgba(255, 255, 255, 0.08)', borderRadius: 4, overflow: 'hidden' }}>
+                                            <div style={{ height: 8, width: '100%', background: 'var(--analyzer-track-bg)', borderRadius: 4, overflow: 'hidden' }}>
                                                 <div
                                                     style={{
                                                         height: '100%',
@@ -818,7 +820,7 @@ export function AnalyzerPage() {
                                     <div
                                         style={{
                                             padding: '20px 24px',
-                                            background: 'rgba(0, 0, 0, 0.35)',
+                                            background: 'var(--analyzer-inset-bg)',
                                             borderRadius: 16,
                                             border: '1px solid var(--border-light)',
                                             textAlign: 'center',
@@ -832,7 +834,7 @@ export function AnalyzerPage() {
                                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
                                             {t('analyzer.livePrice')}
                                         </div>
-                                        <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--accent-strong)', margin: '8px 0 16px', letterSpacing: '-0.02em' }}>
+                                        <div className="analyzer-live-price" style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--accent-strong)', margin: '8px 0 16px', letterSpacing: '-0.02em' }}>
                                             {analysis.available !== false && typeof analysis.price === 'number' && analysis.price > 0
                                                 ? `$${analysis.price.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`
                                                 : '—'}
@@ -872,7 +874,7 @@ export function AnalyzerPage() {
                                             <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-muted)' }}>/ 100</span>
                                         </div>
                                         {/* Slider bar with zones */}
-                                        <div style={{ position: 'relative', height: 12, background: 'rgba(255, 255, 255, 0.06)', borderRadius: 6, overflow: 'hidden', marginTop: 12 }}>
+                                        <div style={{ position: 'relative', height: 12, background: 'var(--analyzer-track-bg)', borderRadius: 6, overflow: 'hidden', marginTop: 12 }}>
                                             <div style={{ position: 'absolute', right: 0, width: '30%', height: '100%', background: 'rgba(244, 63, 94, 0.18)', borderLeft: '1px solid rgba(244, 63, 94, 0.4)' }} />
                                             <div style={{ position: 'absolute', left: 0, width: '30%', height: '100%', background: 'rgba(16, 185, 129, 0.18)', borderRight: '1px solid rgba(16, 185, 129, 0.4)' }} />
                                             <div
@@ -883,8 +885,8 @@ export function AnalyzerPage() {
                                                     top: 0,
                                                     width: 4,
                                                     height: '100%',
-                                                    background: '#ffffff',
-                                                    boxShadow: '0 0 8px #ffffff',
+                                                    background: 'var(--text-primary)',
+                                                    boxShadow: '0 0 8px var(--text-primary)',
                                                     borderRadius: 2,
                                                 }}
                                             />
@@ -1000,22 +1002,12 @@ export function AnalyzerPage() {
                                         { label: t('analyzer.resistance'), level: analysis.levels?.resistance },
                                         { label: t('analyzer.support'), level: analysis.levels?.support },
                                     ].map(row => (
-                                        <div
-                                            key={row.label}
-                                            style={{
-                                                display: 'grid',
-                                                gridTemplateColumns: 'minmax(7rem, 1fr) auto auto',
-                                                columnGap: 16,
-                                                alignItems: 'center',
-                                                padding: '10px 0',
-                                                borderTop: '1px solid var(--border-light)',
-                                            }}
-                                        >
+                                        <div key={row.label} className="analyzer-level-row">
                                             <span style={{ fontWeight: 700 }}>{row.label}</span>
-                                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                                            <span className="analyzer-level-value">
                                                 {typeof row.level === 'number' ? formatLevel(row.level) : '—'}
                                             </span>
-                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap', textAlign: 'end' }}>
+                                            <span className="analyzer-level-gap">
                                                 {typeof row.level === 'number' ? levelGap(row.level) : ''}
                                             </span>
                                         </div>
@@ -1033,8 +1025,7 @@ export function AnalyzerPage() {
                                     {analysis.replay?.available && analysis.replay.points && analysis.replay.points.length > 1 ? (
                                         <>
                                             <div style={{ fontSize: '1.8rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, color: (analysis.replay.changePct ?? 0) > 0 ? '#10b981' : (analysis.replay.changePct ?? 0) < 0 ? '#f43f5e' : 'var(--text-secondary)' }}>
-                                                {(analysis.replay.changePct ?? 0) > 0 ? '+' : ''}
-                                                {(analysis.replay.changePct ?? 0).toLocaleString(NUM_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                                                <bdi dir="ltr">{fmtSignedPct(analysis.replay.changePct ?? 0, 1)}</bdi>
                                             </div>
                                             <div style={{ margin: '6px 0 8px', fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                                                 {t('analyzer.replayBecame', {
@@ -1086,12 +1077,12 @@ export function AnalyzerPage() {
                     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
                 }
                 .analyzer-tab-btn:hover:not([style*="linear-gradient"]) {
-                    background: rgba(255, 255, 255, 0.07) !important;
+                    background: var(--analyzer-chip-bg) !important;
                     color: var(--text-primary) !important;
                 }
                 .analyzer-scroll-list {
                     scrollbar-width: thin;
-                    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+                    scrollbar-color: var(--border) transparent;
                 }
                 .analyzer-scroll-list::-webkit-scrollbar {
                     width: 5px;
@@ -1110,9 +1101,12 @@ export function AnalyzerPage() {
                     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
                 }
                 .analyzer-asset-item:hover:not(.selected) {
-                    background: rgba(255, 255, 255, 0.05) !important;
-                    border-color: rgba(255, 255, 255, 0.14) !important;
+                    background: var(--analyzer-item-hover-bg) !important;
+                    border-color: var(--border) !important;
                     transform: translateX(${isRtl ? '-2px' : '2px'});
+                }
+                html[data-theme="light"] .analyzer-live-price {
+                    color: #92710a !important;
                 }
                 .analyzer-badge-buy {
                     background: var(--green-glow);
