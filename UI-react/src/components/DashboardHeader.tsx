@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { useSavePreferences } from '@/hooks/useApi';
@@ -40,21 +40,47 @@ export function DashboardHeader({ onLogout, loggingOut }: Props) {
   const { t, lang, setLang } = useI18n();
   const { pathname } = useLocation();
   const { mutate: savePrefs } = useSavePreferences();
-  const [menuOpen, setMenuOpen] = useState(false);
+  // The drawer remembers the route it was opened on, so any navigation closes it
+  // without a state update inside an effect.
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const menuOpen = menuPath === pathname;
+  const setMenuOpen = (open: boolean) => setMenuPath(open ? pathname : null);
+  const sheetRef = useRef<HTMLElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Close mobile drawer whenever route changes
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
-  // Close on Escape key
+  // While the drawer is open: Escape closes it, Tab stays inside it, the page behind does not
+  // scroll, and focus goes back to the menu button afterwards.
   useEffect(() => {
     if (!menuOpen) return;
+    const sheet = sheetRef.current;
+    const menuBtn = menuBtnRef.current;
+    const focusables = () => Array.from(
+      sheet?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [],
+    );
+    focusables()[0]?.focus();
+    document.documentElement.classList.add('menu-open');
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Escape') { setMenuPath(null); return; }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !sheet?.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !sheet?.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      document.documentElement.classList.remove('menu-open');
+      menuBtn?.focus({ preventScroll: true });
+    };
   }, [menuOpen]);
 
   /**
@@ -125,10 +151,11 @@ export function DashboardHeader({ onLogout, loggingOut }: Props) {
 
           {/* Mobile hamburger menu toggle button */}
           <button
+            ref={menuBtnRef}
             type="button"
             className={`mobile-menu-btn ${menuOpen ? 'active' : ''}`}
             onClick={() => setMenuOpen(!menuOpen)}
-            aria-label={menuOpen ? 'Close Menu' : 'Open Menu'}
+            aria-label={menuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
             aria-expanded={menuOpen}
           >
             <span className="hamburger-line" />
@@ -142,9 +169,12 @@ export function DashboardHeader({ onLogout, loggingOut }: Props) {
       {menuOpen && (
         <div className="mobile-drawer-overlay" onClick={() => setMenuOpen(false)}>
           <aside
+            ref={sheetRef}
             className="mobile-drawer-sheet"
             onClick={(e) => e.stopPropagation()}
-            aria-label="Mobile Navigation Menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('nav.menu')}
           >
             <div className="mobile-drawer-header">
               <Link to="/dashboard" onClick={() => setMenuOpen(false)}>
@@ -160,7 +190,7 @@ export function DashboardHeader({ onLogout, loggingOut }: Props) {
                 type="button"
                 className="mobile-drawer-close"
                 onClick={() => setMenuOpen(false)}
-                aria-label="Close Menu"
+                aria-label={t('nav.closeMenu')}
               >
                 ✕
               </button>

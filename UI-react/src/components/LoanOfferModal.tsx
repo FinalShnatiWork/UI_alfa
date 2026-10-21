@@ -40,7 +40,7 @@ export const LoanOfferModal: React.FC<LoanOfferDetails> = ({
   const row = (label: string, value: string, style?: React.CSSProperties, labelStyle?: React.CSSProperties) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10, ...style }}>
       <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', ...labelStyle }}>{label}</span>
-      <bdi style={{ fontWeight: 600 }}>{value}</bdi>
+      <bdi dir="ltr" style={{ fontWeight: 600 }}>{value}</bdi>
     </div>
   );
 
@@ -55,12 +55,12 @@ export const LoanOfferModal: React.FC<LoanOfferDetails> = ({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
-        padding: 20,
+        padding: 16,
       }}
       onClick={onCancel}
     >
       <div
-        className="card"
+        className="card modal-dialog-scroll"
         role="dialog"
         aria-modal="true"
         aria-labelledby="loan-offer-title"

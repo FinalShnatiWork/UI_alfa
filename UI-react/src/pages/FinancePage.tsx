@@ -94,8 +94,10 @@ function TxModal({ type, currency, onClose, onConfirm, t }: TxModalProps) {
       onClick={onClose}
     >
       <div
-        className="card"
-        style={{ maxWidth: 420, width: '92%', padding: 0, overflow: 'hidden' }}
+        className="card modal-dialog-scroll"
+        role="dialog"
+        aria-modal="true"
+        style={{ maxWidth: 420, width: '92%', padding: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -108,7 +110,8 @@ function TxModal({ type, currency, onClose, onConfirm, t }: TxModalProps) {
           <button
             type="button"
             onClick={onClose}
-            style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--text-secondary)' }}
+            aria-label={t('common.close')}
+            style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--text-secondary)', minWidth: 44, minHeight: 44 }}
           >
             ✕
           </button>

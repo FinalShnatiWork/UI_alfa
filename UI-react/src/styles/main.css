@@ -1137,6 +1137,17 @@ html[data-theme="light"] .trading-asset-select optgroup {
   color: var(--text-primary);
 }
 
+/* Dialogs never grow past the screen: on short phones the body scrolls inside the dialog
+   instead of the top being cut off. */
+.modal-dialog-scroll {
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 0;
+}
+
 /* Toasts (replaces alert) */
 .toast-container {
   position: fixed;
@@ -1281,6 +1292,9 @@ html[data-theme="light"] .confirm-modal-overlay {
   padding: 28px 28px 24px;
   width: 100%;
   max-width: 420px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
   animation: fadeUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -2116,6 +2130,16 @@ body {
 @media (max-width: 860px) {
   .dashboard-nav-header {
     padding: 10px 14px;
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+  .mobile-menu-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .header-lang-pills .btn {
+    min-width: 44px;
+    min-height: 44px;
   }
   .dashboard-nav-header .brand-logo-img {
     width: 130px;
@@ -2129,6 +2153,21 @@ body {
   }
   .mobile-menu-btn {
     display: flex !important;
+  }
+}
+/* Phones: a smaller logo keeps logo, language buttons and menu on one row down to 360px. */
+@media (max-width: 420px) {
+  .dashboard-nav-header .brand-logo-link {
+    padding: 4px 4px;
+  }
+  .dashboard-nav-header .brand-logo-img {
+    width: 112px;
+  }
+}
+/* Very narrow phones: logo + menu only. The language buttons are also in the drawer. */
+@media (max-width: 345px) {
+  .dashboard-nav-header .header-lang-pills {
+    display: none;
   }
 }
 
@@ -2187,8 +2226,8 @@ html[dir="rtl"] .mobile-drawer-sheet {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -2241,6 +2280,39 @@ html[dir="rtl"] .mobile-drawer-sheet {
   padding-top: 18px;
   border-top: 1px solid var(--border-light);
 }
+.mobile-drawer-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.mobile-drawer-lang .btn,
+.mobile-drawer-footer > .btn {
+  min-height: 44px;
+}
+html.menu-open {
+  overflow: hidden;
+}
+html[data-theme="light"] .mobile-drawer-overlay {
+  background: rgba(15, 23, 42, 0.4);
+}
+html[data-theme="light"] .mobile-drawer-sheet {
+  background: #fff;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.18);
+}
+html[data-theme="light"] .mobile-drawer-link {
+  color: var(--text-primary);
+}
+html[data-theme="light"] .mobile-drawer-link:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--text-primary);
+}
+html[data-theme="light"] .mobile-drawer-link.active {
+  color: #92710a;
+  background: rgba(234, 179, 8, 0.14);
+}
+html[data-theme="light"] .mobile-drawer-indicator {
+  color: #92710a;
+}
 
 /* ── BackPageHeader Responsive ── */
 .back-page-top-nav {
@@ -2282,13 +2354,33 @@ html[dir="rtl"] .mobile-drawer-sheet {
   }
   .back-nav-title {
     font-size: 1.05rem;
+    /* Long titles (and the Hebrew / Russian ones) wrap to two lines instead of being cut */
+    white-space: normal;
+    text-overflow: clip;
+    line-height: 1.2;
+    overflow-wrap: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    min-width: 0;
   }
   .header-back {
     padding: 6px 10px;
     font-size: 0.82rem;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .back-nav-trailing .btn {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 @media (max-width: 480px) {
+  .back-page-top-nav {
+    gap: 8px;
+    padding: 10px 12px;
+  }
   .header-back .header-back-label {
     display: none;
   }
@@ -2296,7 +2388,11 @@ html[dir="rtl"] .mobile-drawer-sheet {
     padding: 6px 8px;
   }
   .back-nav-title {
-    font-size: 0.98rem;
+    font-size: 0.9rem;
+    line-height: 1.15;
+    padding: 0 2px;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
   }
 }
 
@@ -2424,7 +2520,7 @@ html[dir="rtl"] .mobile-drawer-sheet {
   justify-content: center;
 }
 .mobile-bottom-nav-label {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -2442,18 +2538,33 @@ html[dir="rtl"] .mobile-drawer-sheet {
   background: var(--red);
   color: #fff;
   border-radius: 10px;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 800;
   padding: 1px 5px;
   line-height: 1.2;
 }
+html[data-theme="light"] .mobile-bottom-nav {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .mobile-bottom-nav-item {
+  color: var(--text-secondary);
+}
+html[data-theme="light"] .mobile-bottom-nav-item.active {
+  color: #92710a;
+}
 
-@media (max-width: 768px) {
+/* Same breakpoint as the hamburger menu, so every width has one consistent mobile navigation. */
+@media (max-width: 860px) {
   .mobile-bottom-nav {
     display: block !important;
   }
-  .app-shell {
+  .app-shell:has(.mobile-bottom-nav) {
     padding-bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+  /* Toasts sit above the bottom bar instead of covering it */
+  body:has(.mobile-bottom-nav) .toast-container {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -2516,7 +2627,8 @@ html[data-theme="light"] .positions-tab-btn.active {
   display: none;
 }
 
-@media (max-width: 680px) {
+/* Same breakpoint as the bottom bar: below it, cards instead of wide tables. */
+@media (max-width: 860px) {
   .positions-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -2530,10 +2642,12 @@ html[data-theme="light"] .positions-tab-btn.active {
     flex: 1;
     text-align: center;
     padding: 7px 4px;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
+    min-height: 44px;
   }
   .positions-search-input {
     width: 100% !important;
+    min-height: 44px;
   }
   .desktop-table-view {
     display: none !important;

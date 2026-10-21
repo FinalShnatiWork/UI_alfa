@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // ReactQueryDevtools intentionally excluded from production build
 import { I18nProvider } from '@/hooks/useI18n';
@@ -40,9 +40,15 @@ const queryClient = new QueryClient({
  *
  * @returns Root application layout element with routing
  */
+/** Signed-in app pages that show the bottom bar. Public pages (landing, login, register) and 404 do not. */
+const BOTTOM_NAV_ROUTES = new Set([
+  '/dashboard', '/positions', '/charts', '/analyzer', '/finance', '/history', '/account', '/settings', '/pricing',
+]);
+
 function AuthenticatedBottomNav() {
   const { status } = useAuth();
-  if (status !== 'authenticated') return null;
+  const { pathname } = useLocation();
+  if (status !== 'authenticated' || !BOTTOM_NAV_ROUTES.has(pathname)) return null;
   return <BottomNav />;
 }
 

@@ -22,9 +22,9 @@ export function ConfirmModal({ message, onConfirm, onCancel }: ConfirmModalProps
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onCancel}
     >
-      <div className="card" role="dialog" aria-modal="true" style={{ maxWidth: 380, width: '90%', padding: 30, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+      <div className="card modal-dialog-scroll" role="dialog" aria-modal="true" style={{ maxWidth: 380, width: '90%', padding: 30, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
         <p style={{ marginBottom: 24, fontSize: '1.05rem' }}>{message}</p>
-        <div className="flex-gap" style={{ justifyContent: 'center' }}>
+        <div className="flex-gap" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-danger" autoFocus onClick={onConfirm}>{t('common.confirm')}</button>
           <button type="button" className="btn btn-outline-dark" onClick={onCancel}>{t('common.cancel')}</button>
         </div>
