@@ -469,7 +469,7 @@ export function DashboardPage() {
               ) : (
                 notifications.map((n) => {
                   let displayTitle = t(n.title) || n.title;
-                  let displayBody = n.body;
+                  let displayBody: string;
                   try {
                     const data = JSON.parse(n.body);
                     const bodyKey = n.title.replace(/\.[^.]+$/, '.body');

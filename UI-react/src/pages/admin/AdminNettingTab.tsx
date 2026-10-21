@@ -27,6 +27,7 @@ export function AdminNettingTab() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async poll: state is set only after the requests resolve
     void refresh();
     const id = setInterval(() => void refresh(), 4000);
     return () => clearInterval(id);

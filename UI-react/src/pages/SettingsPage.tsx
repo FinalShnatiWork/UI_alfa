@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
@@ -93,17 +94,18 @@ export function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
 
-  // Hydrate from DB once loaded
-  useEffect(() => {
-    if (!prefs) return;
+  // Hydrate from DB once loaded (during render, when a new preferences object arrives)
+  const [hydratedFrom, setHydratedFrom] = useState<typeof prefs>(undefined);
+  if (prefs && prefs !== hydratedFrom) {
+    setHydratedFrom(prefs);
     if ('pushNotif' in prefs) setPushNotif(prefs.pushNotif === 'true');
     if ('emailReports' in prefs) setEmailReports(prefs.emailReports === 'true');
     setOneClick(prefs.oneClickTrading === 'true');
-    if ('theme' in prefs) {
-      const t = prefs.theme as Theme;
-      setThemeState(t);
-      applyTheme(t);
-    }
+    if ('theme' in prefs) setThemeState(prefs.theme as Theme);
+  }
+  // Applying the theme touches the document, so it stays in an effect.
+  useEffect(() => {
+    if (prefs && 'theme' in prefs) applyTheme(prefs.theme as Theme);
   }, [prefs]);
 
   useEffect(() => {
@@ -123,13 +125,13 @@ export function SettingsPage() {
     };
   }
 
-  function handleLangChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  function handleLangChange(e: ChangeEvent<HTMLSelectElement>) {
     const l = e.target.value as Lang;
     setLang(l);
     savePrefs({ lang: l });
   }
 
-  function handleThemeChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  function handleThemeChange(e: ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value as Theme;
     setThemeState(value);
     applyTheme(value);

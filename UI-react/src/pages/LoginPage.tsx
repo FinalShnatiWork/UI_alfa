@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { MouseEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -91,7 +92,7 @@ export function LoginPage() {
     }
   };
 
-  const handleForgot = (e: React.MouseEvent) => {
+  const handleForgot = (e: MouseEvent) => {
     e.preventDefault();
     toast.show(t('alerts.passwordRecovery'), { variant: 'info' });
   };

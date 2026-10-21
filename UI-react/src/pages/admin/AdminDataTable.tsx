@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
 
 export type AdminColumn<T> = {
   id: string;
@@ -46,9 +46,12 @@ export function AdminDataTable<T>({
   const [dir, setDir] = useState<'asc' | 'desc'>(initialDir);
   const [page, setPage] = useState(0);
 
-  useEffect(() => {
+  // Back to the first page when the filter changes (adjusted during render, not in an effect).
+  const [pageKey, setPageKey] = useState(resetKey);
+  if (pageKey !== resetKey) {
+    setPageKey(resetKey);
     setPage(0);
-  }, [resetKey]);
+  }
 
   const sorted = useMemo(() => {
     const col = columns.find((c) => c.id === sortId && c.sort);

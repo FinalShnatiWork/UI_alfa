@@ -488,7 +488,7 @@ async function mockGet(path: string): Promise<any> {
       const avgPrice = parseFloat(pos.avgPrice);
       const qty = parseFloat(pos.quantity);
       
-       let pnl = 0;
+      let pnl: number;
       const contractSize = getContractSize(pos.symbolCode);
       if (pos.side === 'SHORT') {
         pnl = (avgPrice - livePrice) * qty * contractSize;
@@ -709,7 +709,7 @@ async function mockPost(path: string, body: any): Promise<Response> {
       setStorage('mock_overview', overview);
 
       // Classify into STOP or LIMIT dynamically based on relationship with current market price at creation:
-      let mappedOrderType = 'LIMIT';
+      let mappedOrderType: string;
       let mappedLimitPrice = '';
       let mappedStopPrice = '';
 

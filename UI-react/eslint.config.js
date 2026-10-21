@@ -30,5 +30,13 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },
+  {
+    // The Vite config is a Node file that belongs to tsconfig.node.json, not the app project.
+    files: ['vite.config.ts'],
+    languageOptions: {
+      parserOptions: { project: './tsconfig.node.json' },
+      globals: { ...globals.node },
+    },
+  },
   prettierConfig,
 ];

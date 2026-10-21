@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
 import { usePositions } from '@/hooks/useApi';
@@ -5,7 +6,7 @@ import { usePositions } from '@/hooks/useApi';
 interface NavItem {
   to: string;
   labelKey: string;
-  icon: (active: boolean) => JSX.Element;
+  icon: (active: boolean) => ReactElement;
   badge?: number;
 }
 

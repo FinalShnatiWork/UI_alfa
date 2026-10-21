@@ -99,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check auth on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async: state is set only after /api/auth/me answers
     void refresh();
   }, [refresh]);
 

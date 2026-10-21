@@ -167,7 +167,7 @@ export function AnalyzerPage() {
     const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
 
     const [loadingOverview, setLoadingOverview] = useState(false);
-    const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+    const [loadingAnalysis, setLoadingAnalysis] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState<string>('all');
 
@@ -214,11 +214,18 @@ export function AnalyzerPage() {
         };
     }, [candleInterval]);
 
+    // A new symbol / interval clears the old summary right away (during render, not in the effect).
+    const analysisKey = `${selectedSymbol}|${selectedCategory}|${candleInterval}`;
+    const [shownKey, setShownKey] = useState(analysisKey);
+    if (shownKey !== analysisKey) {
+        setShownKey(analysisKey);
+        setAnalysis(null);
+        setLoadingAnalysis(true);
+    }
+
     // Fetch detailed analysis for selected asset, fall back seamlessly
     useEffect(() => {
         let active = true;
-        setAnalysis(null);
-        setLoadingAnalysis(true);
 
         const fetchAnalysis = async () => {
             try {

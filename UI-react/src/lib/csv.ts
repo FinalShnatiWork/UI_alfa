@@ -71,6 +71,7 @@ function zipStore(files: { name: string; data: Uint8Array }[]): Uint8Array {
 /** Marks that keep Hebrew and English in order on the site. Excel draws them as boxes and shuffles the letters. */
 function plain(value: string): string {
   return value
+    // eslint-disable-next-line no-control-regex -- stripping control characters is the point here
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
