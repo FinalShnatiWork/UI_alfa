@@ -81,7 +81,7 @@ export function App() {
                   <Route path="/admin" element={<ProtectedRoute role="ADMIN"><AdminPage /></ProtectedRoute>} />
                   <Route path="/admin/netting" element={<ProtectedRoute role="ADMIN"><AdminPage /></ProtectedRoute>} />
 
-                  <Route path="*" element={<PlaceholderPage title="Not Found" />} />
+                  <Route path="*" element={<PlaceholderPage />} />
                 </Routes>
                 <AuthenticatedBottomNav />
                 </div>

@@ -187,7 +187,7 @@ export function HistoryPage() {
                 {t('history.reset')}
               </button>
               <button type="button" className="btn btn-outline-dark" style={{ padding: '7px 12px', fontSize: '0.85rem' }} onClick={() => exportCsv(filtered, t)}>
-                Excel
+                {t('finance.exportCsv')}
               </button>
             </div>
           </div>

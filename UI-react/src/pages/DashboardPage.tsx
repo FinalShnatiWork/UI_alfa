@@ -179,7 +179,7 @@ export function DashboardPage() {
             <div className="flex-between mb-20">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: '1.2rem' }}>📜</span>
-                <h3 style={{ margin: 0 }}>{t('dashboard.creditLine')} &amp; Margin Loan</h3>
+                <h3 style={{ margin: 0 }}>{t('dashboard.creditLineTitle')}</h3>
               </div>
               <span
                 className="badge"

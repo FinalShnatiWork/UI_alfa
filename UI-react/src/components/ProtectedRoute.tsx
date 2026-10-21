@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/hooks/useI18n';
 
 interface Props {
   children: ReactNode;
@@ -17,6 +18,7 @@ interface Props {
  */
 export function ProtectedRoute({ children, role }: Props) {
   const { status, user } = useAuth();
+  const { t } = useI18n();
   const location = useLocation();
 
   if (status === 'loading') {
@@ -41,7 +43,7 @@ export function ProtectedRoute({ children, role }: Props) {
             animation: 'spin 0.8s linear infinite',
           }}
         />
-        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Loading...</span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{t('common.loading')}</span>
       </div>
     );
   }

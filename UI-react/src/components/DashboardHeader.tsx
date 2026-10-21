@@ -218,7 +218,7 @@ export function DashboardHeader({ onLogout, loggingOut }: Props) {
               <div className="mobile-drawer-footer">
                 <div className="mobile-drawer-lang">
                   <div className="text-xs text-muted mb-8" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Language / שפה
+                    {t('settings.language')}
                   </div>
                   <div className="flex-gap">
                     {LANG_OPTIONS.map((opt) => (

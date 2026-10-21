@@ -624,7 +624,7 @@ export function AnalyzerPage() {
                                                                 fontWeight: 600,
                                                             }}
                                                         >
-                                                            {asset.category}
+                                                            {t(`analyzer.cat.${asset.category}`)}
                                                         </span>
                                                     </div>
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>
@@ -907,15 +907,15 @@ export function AnalyzerPage() {
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>MACD Line:</span>
+                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.macdLine')}</span>
                                                 <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.macd?.macdLine === 'number' ? analysis.indicators.macd.macdLine.toFixed(4) : '—'}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>Signal Line:</span>
+                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.signalLine')}</span>
                                                 <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.macd?.signalLine === 'number' ? analysis.indicators.macd.signalLine.toFixed(4) : '—'}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>Histogram:</span>
+                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.histogram')}</span>
                                                 <span style={{ fontWeight: 800, color: (analysis.indicators?.macd?.hist ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
                                                     {typeof analysis.indicators?.macd?.hist === 'number' ? analysis.indicators.macd.hist.toFixed(4) : '—'}
                                                 </span>
@@ -955,22 +955,22 @@ export function AnalyzerPage() {
                                     {/* 4. BOLLINGER BANDS CARD */}
                                     <div className="card" style={{ padding: 20, marginBottom: 0 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                            <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>Bollinger Bands (20, 2)</span>
+                                            <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{t('analyzer.bollinger')}</span>
                                             <span className={getRecBadgeClass(analysis.indicators?.bb?.status?.includes('OVERSOLD') ? 'BUY' : analysis.indicators?.bb?.status?.includes('OVERBOUGHT') ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
                                                 {pick(lang, analysis.indicators?.bb?.status, analysis.indicators?.bb?.statusHe, analysis.indicators?.bb?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>Upper Band:</span>
+                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.bbUpper')}</span>
                                                 <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.upper === 'number' ? `$${analysis.indicators.bb.upper.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>Middle (Basis):</span>
+                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.bbMiddle')}</span>
                                                 <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.middle === 'number' ? `$${analysis.indicators.bb.middle.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>Lower Band:</span>
+                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.bbLower')}</span>
                                                 <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.lower === 'number' ? `$${analysis.indicators.bb.lower.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
                                             </div>
                                         </div>
