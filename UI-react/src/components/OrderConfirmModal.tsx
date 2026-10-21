@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/hooks/useI18n';
 import { estimateOrderCost } from '@/lib/tradeUtils';
-import { fmtMoney, NUM_LOCALE } from '@/lib/format';
+import { fmtMoneyMinus, fmtPrice as fmtQuote, NUM_LOCALE } from '@/lib/format';
 
 export interface OrderConfirmDetails {
   symbol: string;
@@ -11,7 +11,7 @@ export interface OrderConfirmDetails {
   /** Ask/Bid estimate for MARKET, the entered price for LIMIT. */
   price: number;
   leverage: number;
-  /** Free cash before the trade. */
+  /** Free margin before the trade (not the balance). */
   freeFunds: number;
   stopLoss?: number;
   takeProfit?: number;
@@ -24,13 +24,10 @@ interface Props extends OrderConfirmDetails {
 
 function fmtPrice(v: number): string {
   const abs = Math.abs(v);
-  const d = abs > 1000 ? 2 : abs >= 10 ? 4 : 5;
-  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
+  return fmtQuote(v, abs > 1000 ? 2 : abs >= 10 ? 4 : 5, false);
 }
 
-function fmtUsd(v: number): string {
-  return v < 0 ? `−${fmtMoney(-v)}` : fmtMoney(v);
-}
+const fmtUsd = (v: number) => fmtMoneyMinus(v);
 
 export function OrderConfirmModal(props: Props) {
   const { symbol, side, orderType, lots, price, leverage, freeFunds, stopLoss, takeProfit, onConfirm, onCancel } = props;
@@ -74,7 +71,7 @@ export function OrderConfirmModal(props: Props) {
       onClick={onCancel}
     >
       <div
-        className="card"
+        className="card modal-dialog-scroll"
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-confirm-title"

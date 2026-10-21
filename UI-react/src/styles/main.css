@@ -1447,6 +1447,8 @@ html[data-theme="light"] .tx-modal-close:hover {
 @media (max-width: 1024px) {
   .charts-main-layout {
     flex-direction: column;
+    /* flex-start would shrink the chart column to its content width in the column layout */
+    align-items: stretch;
   }
   .charts-right-col {
     width: 100%;
@@ -2673,8 +2675,21 @@ html[data-theme="light"] .positions-tab-btn.active {
     height: 330px !important;
     padding: 8px;
   }
+  /* The mount fills the card's content box (330px minus padding), so the chart stays inside the card */
   .chart-preview-area .chart-mount {
-    min-height: 330px !important;
+    min-height: 0 !important;
+    height: 100%;
+  }
+  .chart-ctrl-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 1rem;
+  }
+  .horizontal-pills-scroll .btn {
+    min-height: 44px;
+  }
+  .charts-orders-toolbar .btn {
+    min-height: 44px;
   }
   .trading-panel-card {
     padding: 18px 14px;
@@ -2684,6 +2699,26 @@ html[data-theme="light"] .positions-tab-btn.active {
   }
   .live-price-text {
     font-size: 1.35rem;
+  }
+}
+
+/* ── Charts page: open positions / pending orders below the chart ── */
+.charts-orders-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.charts-orders-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .charts-orders-tabs {
+    gap: 8px;
   }
 }
 

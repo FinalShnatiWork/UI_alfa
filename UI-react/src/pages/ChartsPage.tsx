@@ -10,7 +10,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
 import { LoanOfferModal, type LoanOfferDetails } from '@/components/LoanOfferModal';
-import { fmtMoney, fmtNumber, NUM_LOCALE } from '@/lib/format';
+import { fmtLots, fmtMoney, fmtPrice, fmtSignedMoney, fmtSignedPct, priceDecimals } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { OrderConfirmModal, type OrderConfirmDetails } from '@/components/OrderConfirmModal';
 import { usePositions, useBrokerOverview, useInvalidateAfterTrade, useLivePrices, usePendingOrders, useCancelOrder, useOneClickTrading } from '@/hooks/useApi';
@@ -233,17 +233,30 @@ function chartColors() {
   };
 }
 
-function fmtP(n: unknown): string {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v)) return '—';
-  const abs = Math.abs(v);
-  // Fixed decimals within each band — variable maxFractionDigits made the
-  // positions table under the chart jump on every live tick.
-  const d = abs > 1000 ? 2 : abs >= 10 ? 4 : 5;
-  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
+const INSTRUMENT_DECIMALS: Record<string, number> = Object.fromEntries(
+  Object.values(CATEGORY_CONFIG).flatMap((c) => c.instruments.map((i) => [i.id, i.decimals])),
+);
+
+/** The instrument's quote precision; the magnitude band for symbols that are not listed here. */
+function decimalsFor(symbol: string, sample?: number): number | undefined {
+  return INSTRUMENT_DECIMALS[symbol.toUpperCase()] ?? (sample != null ? priceDecimals(sample) : undefined);
 }
 
-const fmtMoney2 = (n: unknown) => fmtNumber(n, 2);
+/** Fixed decimals per instrument, so the positions table under the chart does not jump on every live tick. */
+function fmtP(symbol: string, n: unknown): string {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v)) return '—';
+  return fmtPrice(v, decimalsFor(symbol, v), false);
+}
+
+/** Green / red by the rounded value shown, so "0.00%" is never painted as a loss. */
+function changeColor(pct: number): string {
+  const r = Number(pct.toFixed(2));
+  return r > 0 ? 'var(--green, #22c55e)' : r < 0 ? 'var(--red, #ef4444)' : 'var(--text-secondary)';
+}
+
+/** Price-line labels are drawn on a canvas: drop the invisible bidi marks the Hebrew strings carry. */
+const lineTitle = (s: string) => s.replace(/[\u2066-\u2069]/g, '');
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -315,6 +328,7 @@ export function ChartsPage() {
     ...queryLivePrices,
     ...chartLivePrices,
   };
+  const currency = overviewData?.currency || 'USD';
   const balance = overviewData ? fmtMoney(overviewData.balance, overviewData.currency) : '—';
   const positionQty = positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())
     ? Number(positions.find((p) => p.symbolCode.toUpperCase() === symbol.toUpperCase())!.quantity).toFixed(2)
@@ -350,7 +364,7 @@ export function ChartsPage() {
             lineWidth: 2,
             lineStyle: 2, // Dashed line style
             axisLabelVisible: true,
-            title: `${t('trading.limit') || 'Limit'} Order @ ${priceVal.toFixed(4)}`,
+            title: lineTitle(t('charts.lineLimit', { price: fmtPrice(priceVal, decimalsFor(symbol)) })),
           });
           priceLinesRef.current.push(activeLine);
         } catch (e) {
@@ -378,7 +392,7 @@ export function ChartsPage() {
             lineWidth: 2,
             lineStyle: 0, // Solid
             axisLabelVisible: true,
-            title: `Position ${isShort ? 'SHORT' : 'LONG'} ${qty.toFixed(2)} @ ${avgPrice.toFixed(4)}`,
+            title: lineTitle(t('charts.linePosition', { side: t(isShort ? 'badge.short' : 'badge.long'), qty: fmtLots(qty), price: fmtPrice(avgPrice, decimalsFor(currentSym)) })),
           });
           priceLinesRef.current.push(entryLine);
 
@@ -391,7 +405,7 @@ export function ChartsPage() {
               lineWidth: 1,
               lineStyle: 1, // Dotted
               axisLabelVisible: true,
-              title: `TP @ ${tp.toFixed(4)}`,
+              title: lineTitle(`${t('table.takeProfit')} @ ${fmtPrice(tp, decimalsFor(currentSym))}`),
             });
             priceLinesRef.current.push(tpLine);
           }
@@ -405,7 +419,7 @@ export function ChartsPage() {
               lineWidth: 1,
               lineStyle: 1, // Dotted
               axisLabelVisible: true,
-              title: `SL @ ${sl.toFixed(4)}`,
+              title: lineTitle(`${t('table.stopLoss')} @ ${fmtPrice(sl, decimalsFor(currentSym))}`),
             });
             priceLinesRef.current.push(slLine);
           }
@@ -431,7 +445,7 @@ export function ChartsPage() {
             lineWidth: 1,
             lineStyle: 2, // Dashed
             axisLabelVisible: true,
-            title: `Pending ${o.side} ${o.orderType} ${qty.toFixed(2)} @ ${targetVal.toFixed(4)}`,
+            title: lineTitle(t('charts.linePending', { side: t(o.side === 'BUY' ? 'badge.buy' : 'badge.sell'), type: o.orderType, qty: fmtLots(qty), price: fmtPrice(targetVal, decimalsFor(currentSym)) })),
           });
           priceLinesRef.current.push(pendingLine);
         } catch (e) {
@@ -456,10 +470,11 @@ export function ChartsPage() {
 
   // Init chart
   useEffect(() => {
-    if (!mountRef.current || chartRef.current) return;
-    const chart = createChart(mountRef.current, {
-      width: mountRef.current.clientWidth,
-      height: mountRef.current.clientHeight || 420,
+    const mount = mountRef.current;
+    if (!mount || chartRef.current) return;
+    const chart = createChart(mount, {
+      width: mount.clientWidth,
+      height: mount.clientHeight || 420,
       ...chartColors(),
     });
     chartRef.current = chart;
@@ -476,14 +491,22 @@ export function ChartsPage() {
       volSeriesRef.current.priceScale().applyOptions({ scaleMargins: { top: 0.80, bottom: 0 } });
     }
 
-    const onResize = () => { if (chart && mountRef.current) chart.applyOptions({ width: mountRef.current.clientWidth }); };
-    window.addEventListener('resize', onResize);
+    // Follow the mount's real size (layout changes, rotation, the column layout on phones),
+    // not only window resizes.
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (!box) return;
+      const w = Math.floor(box.width);
+      const h = Math.floor(box.height);
+      if (w > 0 && h > 0) chart.resize(w, h);
+    });
+    ro.observe(mount);
 
     const mo = new MutationObserver(() => { if (chart) chart.applyOptions(chartColors()); });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     return () => {
-      window.removeEventListener('resize', onResize);
+      ro.disconnect();
       mo.disconnect();
       stopLive();
       chart.remove();
@@ -537,7 +560,7 @@ export function ChartsPage() {
       setLiveChangePct(0);
     } else {
       const pct = ((close - open) / open) * 100;
-      setLiveChange(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
+      setLiveChange(fmtSignedPct(pct));
       setLiveChangePct(pct);
     }
     // Keep live price map updated so positions table reflects chart feed
@@ -551,6 +574,10 @@ export function ChartsPage() {
     const cfg = CATEGORY_CONFIG[cat];
     const instr = cfg.instruments.find(i => i.id === sym) ?? cfg.instruments[0];
     const source = instr.source ?? cfg.source;
+    // Price axis and crosshair labels use the instrument's own precision (1.08712, 157.231, 2351.20).
+    seriesRef.current.applyOptions({
+      priceFormat: { type: 'price', precision: instr.decimals, minMove: 1 / 10 ** instr.decimals },
+    });
     setStatus(t('charts.loading'));
     const markFeed = (next: 'live' | 'candles') => {
       feedRef.current = next;
@@ -747,7 +774,12 @@ export function ChartsPage() {
       lots: qty,
       price,
       leverage: Number(overviewData?.leverage) || 100,
-      freeFunds: Number(overviewData?.balance ?? 0),
+      // Free margin, not the balance: margin held by open positions and funds reserved for a
+      // pending withdrawal are not available for a new trade (same figure as the Dashboard).
+      freeFunds: Number(
+        overviewData?.freeMargin
+          ?? (Number(overviewData?.balance ?? 0) - Number(overviewData?.pendingWithdrawal ?? 0)),
+      ),
       stopLoss: sl,
       takeProfit: tp,
     });
@@ -842,13 +874,28 @@ export function ChartsPage() {
       const res = await apiPostJson(`/api/broker/positions/${id}/close`, {});
       const data = await res.json() as ClosePositionResponse;
       if (res.ok && data.ok) {
-        const msg = t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (P/L: ${data.closePnl})` : '');
+        const msg = t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (${fmtSignedMoney(data.closePnl, currency)})` : '');
         toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {
         toast.show(t('alerts.closeFail'), { variant: 'error' });
       }
     } catch { toast.show(t('alerts.closeFail'), { variant: 'error' }); }
+  }
+
+  /** Close button: straight away with one-click trading, otherwise after a confirmation. */
+  function requestClose(id: number, sym: string) {
+    if (oneClick) void closeInlinePosition(id, sym);
+    else setConfirmAction({
+      message: t('confirm.closePosition', { symbol: sym }),
+      run: () => void closeInlinePosition(id, sym),
+    });
+  }
+
+  function requestCancel(id: number, sym: string) {
+    const run = () => void handleCancelOrder(id, sym);
+    if (oneClick) run();
+    else setConfirmAction({ message: t('confirm.cancelOrder', { symbol: sym }), run });
   }
 
   const instruments = CATEGORY_CONFIG[category].instruments;
@@ -966,7 +1013,7 @@ export function ChartsPage() {
                   </div>
                   <div style={{ textAlign: 'end' }}>
                     <div className="text-xs text-muted mb-4">{t('trading.changeLabel')}</div>
-                    <div className="live-change-text" style={{ color: liveChangePct >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)' }}>
+                    <div className="live-change-text" style={{ color: changeColor(liveChangePct) }}>
                       {liveChange}
                     </div>
                   </div>
@@ -1027,7 +1074,7 @@ export function ChartsPage() {
                     type="number"
                     step="0.0001"
                     className="form-control"
-                    placeholder="None"
+                    placeholder={t('trading.none')}
                     value={stopLoss}
                     onChange={(e) => setStopLoss(e.target.value)}
                   />
@@ -1038,7 +1085,7 @@ export function ChartsPage() {
                     type="number"
                     step="0.0001"
                     className="form-control"
-                    placeholder="None"
+                    placeholder={t('trading.none')}
                     value={takeProfit}
                     onChange={(e) => setTakeProfit(e.target.value)}
                   />
@@ -1070,9 +1117,9 @@ export function ChartsPage() {
         </div>
 
         {/* Inline positions */}
-        <div className="mt-20">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ display: 'flex', gap: 12 }}>
+        <div className="mt-20 charts-orders-section">
+          <div className="charts-orders-toolbar">
+            <div className="charts-orders-tabs">
               <button
                 type="button"
                 onClick={() => setBottomTab('positions')}
@@ -1093,7 +1140,8 @@ export function ChartsPage() {
             <button className="btn btn-outline-dark" style={{ fontSize: '0.8rem', padding: '6px 12px' }}
               onClick={() => invalidateAfterTrade()}>{t('common.refresh')}</button>
           </div>
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Desktop / tablet: tables */}
+          <div className="card desktop-table-view" style={{ padding: 0, overflow: 'hidden' }}>
             {bottomTab === 'positions' ? (
               <table className="positions-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -1121,27 +1169,21 @@ export function ChartsPage() {
                       return (
                         <tr key={p.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
                           <td style={{ fontWeight: 600 }}>{p.symbolCode}</td>
-                          <td className="num">{fmtP(qty)}</td>
-                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{fmtP(avg)}</td>
+                          <td className="num"><bdi dir="ltr">{fmtLots(qty)}</bdi></td>
+                          <td className="num" style={{ color: 'var(--text-secondary)' }}><bdi dir="ltr">{fmtP(p.symbolCode, avg)}</bdi></td>
                           <td className="num">
                             {live
-                              ? <span style={{ fontWeight: 500 }}>{fmtP(live)}</span>
+                              ? <bdi dir="ltr" style={{ fontWeight: 500 }}>{fmtP(p.symbolCode, live)}</bdi>
                               : <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', display: 'inline-block', minWidth: '7ch', textAlign: 'end' }}>…</span>
                             }
                           </td>
                           <td className="num" style={{ fontWeight: 600, color: pnlColor }}>
-                            {pnl >= 0 ? '+' : ''}{fmtMoney2(pnl)}
+                            <bdi dir="ltr">{fmtSignedMoney(pnl, currency)}</bdi>
                           </td>
                           <td className="center">
                             <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                               aria-label={t('common.close')} title={t('common.close')}
-                              onClick={() => {
-                                if (oneClick) void closeInlinePosition(p.id, p.symbolCode);
-                                else setConfirmAction({
-                                  message: t('confirm.closePosition', { symbol: p.symbolCode }),
-                                  run: () => void closeInlinePosition(p.id, p.symbolCode),
-                                });
-                              }}>✕</button>
+                              onClick={() => requestClose(p.id, p.symbolCode)}>✕</button>
                           </td>
                         </tr>
                       );
@@ -1174,7 +1216,7 @@ export function ChartsPage() {
                         <tr key={o.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
                           <td style={{ fontWeight: 600 }}>{o.symbolCode}</td>
                           <td>
-                            <span className="badge" style={{ background: 'var(--primary)', color: '#fff', fontSize: '0.75rem', padding: '2px 6px', borderRadius: 4 }}>
+                            <span className="badge badge-primary" style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: 4 }}>
                               {o.orderType}
                             </span>
                           </td>
@@ -1183,9 +1225,9 @@ export function ChartsPage() {
                               {o.side}
                             </span>
                           </td>
-                          <td className="num">{fmtP(o.quantity)}</td>
-                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{o.orderType === 'CLOSE' || !limitVal ? '—' : fmtP(limitVal)}</td>
-                          <td className="num" style={{ color: 'var(--text-secondary)' }}>{stopVal ? fmtP(stopVal) : '—'}</td>
+                          <td className="num"><bdi dir="ltr">{fmtLots(o.quantity)}</bdi></td>
+                          <td className="num" style={{ color: 'var(--text-secondary)' }}><bdi dir="ltr">{o.orderType === 'CLOSE' || !limitVal ? '—' : fmtP(o.symbolCode, limitVal)}</bdi></td>
+                          <td className="num" style={{ color: 'var(--text-secondary)' }}><bdi dir="ltr">{stopVal ? fmtP(o.symbolCode, stopVal) : '—'}</bdi></td>
                           <td className="center">
                             <button
                               className="btn btn-outline-danger"
@@ -1193,11 +1235,7 @@ export function ChartsPage() {
                               disabled={isCancelling}
                               aria-label={t('common.cancel')}
                               title={t('common.cancel')}
-                              onClick={() => {
-                                const run = () => void handleCancelOrder(o.id, o.symbolCode);
-                                if (oneClick) run();
-                                else setConfirmAction({ message: t('confirm.cancelOrder', { symbol: o.symbolCode }), run });
-                              }}
+                              onClick={() => requestCancel(o.id, o.symbolCode)}
                             >
                               {isCancelling ? '...' : '✕'}
                             </button>
@@ -1208,6 +1246,106 @@ export function ChartsPage() {
                   )}
                 </tbody>
               </table>
+            )}
+          </div>
+
+          {/* Phones: one card per position / order, like the Positions page */}
+          <div className="mobile-cards-view">
+            {bottomTab === 'positions' ? (
+              posLoading ? (
+                <div className="card text-center text-muted" style={{ padding: 20, marginBottom: 0 }}>{t('common.loading')}</div>
+              ) : positions.length === 0 ? (
+                <div className="card text-center text-muted" style={{ padding: 20, marginBottom: 0 }}>{t('trading.noPositions')}</div>
+              ) : (
+                positions.map((p) => {
+                  const live = livePriceFor(livePrices, p.symbolCode);
+                  const pnl = positionPnl(p, live);
+                  const isShort = p.side === 'SHORT';
+                  return (
+                    <div key={p.id} className="card mobile-trading-card" style={{ marginBottom: 0 }}>
+                      <div className="mobile-trading-card-head">
+                        <div className="mobile-trading-card-symbol">
+                          <span className="font-bold">{p.symbolCode}</span>
+                          <span className={`badge ${isShort ? 'badge-danger' : 'badge-success'}`}>
+                            {isShort ? t('badge.short') : t('badge.long')}
+                          </span>
+                        </div>
+                        <div className={`mobile-trading-card-pnl ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                          <bdi dir="ltr" className="dir-ltr">{fmtSignedMoney(pnl, currency)}</bdi>
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-grid">
+                        <div>
+                          <div className="text-xs text-muted">{t('table.volume')}</div>
+                          <div className="font-bold text-sm"><bdi dir="ltr" className="dir-ltr">{fmtLots(p.quantity)}</bdi></div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('table.openPrice')}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtP(p.symbolCode, p.avgPrice)}</bdi></div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted">{t('table.currentPrice')}</div>
+                          <div className="text-sm font-bold"><bdi dir="ltr" className="dir-ltr">{live ? fmtP(p.symbolCode, live) : '—'}</bdi></div>
+                        </div>
+                      </div>
+                      <div className="mobile-trading-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-block"
+                          onClick={() => requestClose(p.id, p.symbolCode)}
+                        >
+                          {t('common.close')}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )
+            ) : pendingOrders.length === 0 ? (
+              <div className="card text-center text-muted" style={{ padding: 20, marginBottom: 0 }}>{t('positions.noPending')}</div>
+            ) : (
+              pendingOrders.map((o) => {
+                const isCancelling = cancellingId === o.id;
+                const limitVal = o.limitPrice ? Number(o.limitPrice) : null;
+                const stopVal = o.stopPrice ? Number(o.stopPrice) : null;
+                return (
+                  <div key={o.id} className="card mobile-trading-card" style={{ marginBottom: 0 }}>
+                    <div className="mobile-trading-card-head">
+                      <div className="mobile-trading-card-symbol">
+                        <span className="font-bold">{o.symbolCode}</span>
+                        <span className={`badge ${o.side === 'BUY' ? 'badge-success' : 'badge-danger'}`}>
+                          {o.side === 'BUY' ? t('badge.buy') : t('badge.sell')}
+                        </span>
+                        <span className="badge badge-primary">{o.orderType}</span>
+                      </div>
+                    </div>
+                    <div className="mobile-trading-card-grid">
+                      <div>
+                        <div className="text-xs text-muted">{t('table.volume')}</div>
+                        <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtLots(o.quantity)}</bdi></div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted">{t('common.limitPrice')}</div>
+                        <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{o.orderType === 'CLOSE' || !limitVal ? '—' : fmtP(o.symbolCode, limitVal)}</bdi></div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted">{t('common.stopPrice')}</div>
+                        <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{stopVal ? fmtP(o.symbolCode, stopVal) : '—'}</bdi></div>
+                      </div>
+                    </div>
+                    <div className="mobile-trading-card-actions">
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger btn-block"
+                        disabled={isCancelling}
+                        onClick={() => requestCancel(o.id, o.symbolCode)}
+                      >
+                        {isCancelling ? '...' : t('common.cancel')}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
