@@ -26,17 +26,67 @@ export function currencySymbol(currency = 'USD'): string {
   return part?.value ?? currency;
 }
 
-/** "+$12.30" / "−$4.10": sign first, so the number reads the same in RTL. */
+/** Rounds to the shown precision first, so -0.004 is shown as 0 and never as "−0.00". */
+function roundTo(n: number, decimals: number): number {
+  const r = Number(n.toFixed(decimals));
+  return Object.is(r, -0) ? 0 : r;
+}
+
+/** "+$12.30" / "−$4.10": sign first, so the number reads the same in RTL. Wrap it in <bdi dir="ltr"> inside RTL text. */
 export function fmtSignedMoney(value: unknown, currency = 'USD'): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n)) return '—';
-  return `${n >= 0 ? '+' : '−'}${fmtMoney(Math.abs(n), currency)}`;
+  const r = roundTo(n, 2);
+  return `${r >= 0 ? '+' : '−'}${fmtMoney(Math.abs(r), currency)}`;
+}
+
+/** Money with a true minus sign for negatives and no sign for positives ("$1.00" / "−$1.00"). */
+export function fmtMoneyMinus(value: unknown, currency = 'USD'): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return '—';
+  const r = roundTo(n, 2);
+  return r < 0 ? `−${fmtMoney(-r, currency)}` : fmtMoney(r, currency);
 }
 
 export function fmtNumber(value: unknown, decimals = 2): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n)) return '—';
   return n.toLocaleString(NUM_LOCALE, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+/** "+1.25%" / "−0.40%" / "0.00%": true minus sign, and never "-0.00%". */
+export function fmtSignedPct(value: unknown, decimals = 2): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return '—';
+  const r = roundTo(n, decimals);
+  const body = Math.abs(r).toLocaleString(NUM_LOCALE, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return `${r > 0 ? '+' : r < 0 ? '−' : ''}${body}%`;
+}
+
+/** Trade volume in lots. The lot step is 0.01, so two decimals everywhere. */
+export function fmtLots(value: unknown): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return '—';
+  return Math.abs(n).toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Default precision for a quote when the instrument is not known: fixed within each magnitude band,
+ *  so live ticks do not change the string length. */
+export function priceDecimals(value: number): number {
+  const abs = Math.abs(value);
+  return abs < 10 ? 5 : abs < 500 ? 3 : 2;
+}
+
+/**
+ * A price quote. Pass the instrument's decimals when known; otherwise the band precision is used.
+ * Missing values and, with `zeroAsDash`, zero are shown as "—".
+ */
+export function fmtPrice(value: unknown, decimals?: number, zeroAsDash = true): string {
+  if (value == null || value === '') return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n) || (zeroAsDash && n === 0)) return '—';
+  const d = decimals ?? priceDecimals(n);
+  return n.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 /** Date and time without a comma, so Excel keeps the field in one column. */
