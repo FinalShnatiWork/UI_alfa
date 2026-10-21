@@ -7,25 +7,10 @@ import { SkeletonCard, SkeletonRow } from '@/components/Skeleton';
 import { AccountValueChart } from '@/components/AccountValueChart';
 import { useBrokerOverview, usePositions, useNotifications, useLivePrices, useTradeHistory } from '@/hooks/useApi';
 import { livePriceFor, positionPnl } from '@/lib/tradeUtils';
-import { fmtMoney, fmtNumber, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
+import { fmtLots, fmtMoney, fmtPrice as fmtQuote, fmtSignedMoney } from '@/lib/format';
 
-const fmtPnl = (n: unknown) => fmtNumber(n, 2);
-
-/**
- * Formatting utility to render numeric values as price quotes with up to 5 decimals.
- *
- * @param n raw numeric price quote input
- * @returns formatted price quote string
- */
-function fmtPrice(n: unknown): string {
-  if (n == null) return '—';
-  const v = Number(n);
-  if (isNaN(v)) return '—';
-  const abs = Math.abs(v);
-  // Fixed decimals within each magnitude band so live ticks don't change string length.
-  const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
-  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
-}
+/** Price quote with fixed decimals per magnitude band, so live ticks don't change the string length. */
+const fmtPrice = (n: unknown) => fmtQuote(n, undefined, false);
 
 /**
  * Main application dashboard landing screen.
@@ -37,6 +22,9 @@ function fmtPrice(n: unknown): string {
 export function DashboardPage() {
   const { t } = useI18n();
   const { logout, loggingOut } = useLogout();
+  /** Signed amount in the account currency, isolated so the sign stays in front in RTL. */
+  const money = (n: number) => <bdi dir="ltr">{fmtSignedMoney(n, currency)}</bdi>;
+  const pnlColor = (n: number) => (n >= 0 ? 'var(--green)' : 'var(--red)');
 
   const { data: overview, isLoading: overviewLoading } = useBrokerOverview();
   const { data: positionsData, isLoading: positionsLoading } = usePositions();
@@ -129,7 +117,7 @@ export function DashboardPage() {
                 <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
                   {t('dashboard.balance')}
                 </div>
-                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}>{balance}</div>
+                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}><bdi dir="ltr">{balance}</bdi></div>
                 {pendingOut > 0 && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--warning, #f59e0b)', marginTop: 6 }}>
                     {t('dashboard.pendingOut', { amount: pendingOutLabel })}
@@ -140,21 +128,21 @@ export function DashboardPage() {
                 <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
                   {t('dashboard.equity')}
                 </div>
-                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}>{equity}</div>
+                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}><bdi dir="ltr">{equity}</bdi></div>
               </div>
               <div className="card stat-card">
                 <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
                   {t('dashboard.pl')}
                 </div>
                 <div className={`value ${plPositive ? 'text-success' : 'text-danger'}`} style={{ fontSize: '1.4rem', fontWeight: 700 }}>
-                  {pl}
+                  <bdi dir="ltr">{pl}</bdi>
                 </div>
               </div>
               <div className="card stat-card">
                 <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
                   {t('dashboard.freeMargin')}
                 </div>
-                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}>{freeMargin}</div>
+                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}><bdi dir="ltr">{freeMargin}</bdi></div>
               </div>
             </>
           )}
@@ -228,43 +216,43 @@ export function DashboardPage() {
 
             <div className="dashboard-credit-grid">
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
                   {t('dashboard.borrowedDebt')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem', color: hasDebt ? 'var(--red)' : 'inherit' }}>
                   {fmtMoney(borrowedBalance, currency)}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                   / {fmtMoney(creditLimit, currency)} {t('dashboard.creditLimit')}
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
                   {t('dashboard.availableCredit')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--green)' }}>
                   {fmtMoney(Math.max(0, creditLimit - borrowedBalance), currency)}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                   {t('dashboard.autoBorrowLimit')}
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
                   {t('dashboard.interestAccrued')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>
                   {fmtMoney(interestAccrued, currency)}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                   {dailyInterestStr}
                 </div>
               </div>
 
               <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
                   {t('dashboard.marginLevel')}
                 </div>
                 <div
@@ -276,7 +264,7 @@ export function DashboardPage() {
                 >
                   {marginLevelPct != null ? `${marginLevelPct.toFixed(1)}%` : `— ${t('dashboard.noDebt')}`}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                   {t('dashboard.liquidationNote')}
                 </div>
               </div>
@@ -332,7 +320,7 @@ export function DashboardPage() {
                         padding: '14px 16px',
                       }}
                     >
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
                         {t('dashboard.realizedPnl')}
                       </div>
                       <div
@@ -340,12 +328,12 @@ export function DashboardPage() {
                           fontSize: '1.3rem',
                           fontWeight: 700,
                           lineHeight: 1,
-                          color: todayRealizedPnl >= 0 ? 'var(--green)' : 'var(--red)',
+                          color: pnlColor(todayRealizedPnl),
                         }}
                       >
-                        {todayRealizedPnl >= 0 ? '+' : ''}{fmtPnl(todayRealizedPnl)}
+                        {money(todayRealizedPnl)}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                      <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                         {t('dashboard.closedToday')}
                       </div>
                     </div>
@@ -357,7 +345,7 @@ export function DashboardPage() {
                         padding: '14px 16px',
                       }}
                     >
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
                         {t('dashboard.unrealizedPnl')}
                       </div>
                       <div
@@ -365,12 +353,12 @@ export function DashboardPage() {
                           fontSize: '1.3rem',
                           fontWeight: 700,
                           lineHeight: 1,
-                          color: totalUnrealized >= 0 ? 'var(--green)' : 'var(--red)',
+                          color: pnlColor(totalUnrealized),
                         }}
                       >
-                        {totalUnrealized >= 0 ? '+' : ''}{fmtPnl(totalUnrealized)}
+                        {money(totalUnrealized)}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                      <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                         {positions.length} {t('dashboard.openPositions')}
                       </div>
                     </div>
@@ -382,7 +370,7 @@ export function DashboardPage() {
                         padding: '14px 16px',
                       }}
                     >
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
                         {t('dashboard.netPnl')}
                       </div>
                       <div
@@ -390,12 +378,12 @@ export function DashboardPage() {
                           fontSize: '1.3rem',
                           fontWeight: 700,
                           lineHeight: 1,
-                          color: pnl >= 0 ? 'var(--green)' : 'var(--red)',
+                          color: pnlColor(pnl),
                         }}
                       >
-                        {pl}
+                        <bdi dir="ltr">{pl}</bdi>
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                      <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                         {t('dashboard.totalRealizedLive')}
                       </div>
                     </div>
@@ -407,16 +395,16 @@ export function DashboardPage() {
                       <div style={{ fontSize: '0.8rem' }}>
                         <div style={{ color: 'var(--text-secondary)', marginBottom: 3 }}>↑ {t('dashboard.bestPosition')}</div>
                         <span style={{ fontWeight: 600 }}>{best?.symbolCode}</span>{' '}
-                        <span style={{ color: 'var(--green)', fontWeight: 600 }}>
-                          {bestPnl >= 0 ? '+' : ''}{fmtPnl(bestPnl)}
+                        <span style={{ color: pnlColor(bestPnl), fontWeight: 600 }}>
+                          {money(bestPnl)}
                         </span>
                       </div>
                       {positions.length > 1 && (
                         <div style={{ fontSize: '0.8rem' }}>
                           <div style={{ color: 'var(--text-secondary)', marginBottom: 3 }}>↓ {t('dashboard.worstPosition')}</div>
                           <span style={{ fontWeight: 600 }}>{worst?.symbolCode}</span>{' '}
-                          <span style={{ color: 'var(--red)', fontWeight: 600 }}>
-                            {fmtPnl(worstPnl)}
+                          <span style={{ color: pnlColor(worstPnl), fontWeight: 600 }}>
+                            {money(worstPnl)}
                           </span>
                         </div>
                       )}
@@ -430,12 +418,12 @@ export function DashboardPage() {
             <div className="dashboard-action-footer">
               <div style={{ display: 'flex', gap: 20 }}>
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('dashboard.marginUsed')}</div>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{marginUsed}</div>
+                  <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('dashboard.marginUsed')}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}><bdi dir="ltr">{marginUsed}</bdi></div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('dashboard.freeMargin')}</div>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{freeMargin}</div>
+                  <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('dashboard.freeMargin')}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}><bdi dir="ltr">{freeMargin}</bdi></div>
                 </div>
               </div>
               <Link to="/charts" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
@@ -560,7 +548,7 @@ export function DashboardPage() {
           overflowY: positions.length > 6 ? 'auto' : undefined,
           borderRadius: 16,
         }}>
-        <table className="table-compact">
+        <table className="table-compact table-stack">
           <thead style={{ position: positions.length > 6 ? 'sticky' : undefined, top: 0, zIndex: 1 }}>
             <tr>
               <th>{t('table.symbol')}</th>
@@ -590,10 +578,10 @@ export function DashboardPage() {
                 const pnlPos = pnlOf(p);
                 return (
                   <tr key={p.id}>
-                    <td className="font-bold">{p.symbolCode}</td>
-                    <td>{qty.toFixed(4)}</td>
-                    <td className="dir-ltr">{fmtPrice(p.avgPrice)}</td>
-                    <td className="dir-ltr">
+                    <td className="font-bold stack-head">{p.symbolCode}</td>
+                    <td data-label={t('table.volume')}>{fmtLots(qty)}</td>
+                    <td className="dir-ltr" data-label={t('table.openPrice')}>{fmtPrice(p.avgPrice)}</td>
+                    <td className="dir-ltr" data-label={t('table.currentPrice')}>
                       {livePrice ? (
                         <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
                           {fmtPrice(livePrice)}
@@ -602,10 +590,10 @@ export function DashboardPage() {
                         <span className="text-muted" style={{ fontSize: '0.8rem' }}>{t('common.loading')}</span>
                       )}
                     </td>
-                    <td className={`font-bold dir-ltr ${pnlPos >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {pnlPos >= 0 ? '+' : ''}{fmtPnl(pnlPos)}
+                    <td className={`font-bold dir-ltr stack-pl ${pnlPos >= 0 ? 'text-success' : 'text-danger'}`} data-label={t('table.pl')}>
+                      {fmtSignedMoney(pnlPos, currency)}
                     </td>
-                    <td>
+                    <td data-label={t('table.status')}>
                       <span className="badge badge-success">{t('badge.open')}</span>
                     </td>
                   </tr>

@@ -8,20 +8,11 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { usePositions, useLivePrices, useInvalidateAfterTrade, useTradeHistory, usePendingOrders, useCancelOrder, useOneClickTrading, useBrokerOverview } from '@/hooks/useApi';
 import type { Position, BrokerOrder } from '@/types/api';
 import { livePriceFor, pairOrders, positionPnl } from '@/lib/tradeUtils';
-import { fmtDateTime, fmtNumber, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
+import { fmtDateTime, fmtLots, fmtPrice, fmtSignedMoney } from '@/lib/format';
 
 type Tab = 'open' | 'closed' | 'pending';
 
-function fmtPrice(n: unknown): string {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v) || v === 0) return '—';
-  const abs = Math.abs(v);
-  // Fixed decimals within each magnitude band so live ticks don't change string length.
-  const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
-  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
-}
-
-const fmtQty = (n: unknown) => fmtNumber(n, 4);
+const fmtQty = (n: unknown) => fmtLots(n);
 
 /**
  * Positions Page displays active open positions, working pending orders, and closed trades history.
@@ -32,6 +23,7 @@ const fmtQty = (n: unknown) => fmtNumber(n, 4);
  */
 export function PositionsPage() {
   const { t, lang } = useI18n();
+  const isRtl = lang === 'he';
   const fmtTime = (iso: string | undefined) => fmtDateTime(iso, lang);
   const { data: overview } = useBrokerOverview();
   const currency = overview?.currency || 'USD';
@@ -262,22 +254,22 @@ export function PositionsPage() {
                             {p.side === 'SHORT' ? t('badge.short') : t('badge.long')}
                           </span>
                         </div>
-                        <div className={`mobile-trading-card-pnl dir-ltr ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {fmtSignedMoney(pnl, currency)}
+                        <div className={`mobile-trading-card-pnl ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
+                          <bdi dir="ltr" className="dir-ltr">{fmtSignedMoney(pnl, currency)}</bdi>
                         </div>
                       </div>
                       <div className="mobile-trading-card-grid">
                         <div>
                           <div className="text-xs text-muted">{t('table.volume')}</div>
-                          <div className="dir-ltr font-bold text-sm">{fmtQty(qty)}</div>
+                          <div className="font-bold text-sm"><bdi dir="ltr" className="dir-ltr">{fmtQty(qty)}</bdi></div>
                         </div>
                         <div>
                           <div className="text-xs text-muted">{t('table.openPrice')}</div>
-                          <div className="dir-ltr text-sm">{fmtPrice(avgPrice)}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtPrice(avgPrice)}</bdi></div>
                         </div>
                         <div>
                           <div className="text-xs text-muted">{t('table.currentPrice')}</div>
-                          <div className="dir-ltr text-sm font-bold">{livePrice != null ? fmtPrice(livePrice) : '—'}</div>
+                          <div className="text-sm font-bold"><bdi dir="ltr" className="dir-ltr">{livePrice != null ? fmtPrice(livePrice) : '—'}</bdi></div>
                         </div>
                       </div>
                       <div className="mobile-trading-card-actions">
@@ -370,27 +362,27 @@ export function PositionsPage() {
                           <span className="text-muted text-xs mr-4">#{idx + 1}</span>
                           <span className="font-bold text-base">{trade.symbolCode}</span>
                         </div>
-                        <div className={`mobile-trading-card-pnl dir-ltr ${plClass}`}>
-                          {pl != null ? fmtSignedMoney(pl, currency) : '—'}
+                        <div className={`mobile-trading-card-pnl ${plClass}`}>
+                          <bdi dir="ltr" className="dir-ltr">{pl != null ? fmtSignedMoney(pl, currency) : '—'}</bdi>
                         </div>
                       </div>
                       <div className="mobile-trading-card-grid">
                         <div>
                           <div className="text-xs text-muted">{t('table.volume')}</div>
-                          <div className="dir-ltr text-sm">{fmtQty(trade.quantity)}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtQty(trade.quantity)}</bdi></div>
                         </div>
                         <div>
                           <div className="text-xs text-muted">{t('table.openPrice')}</div>
-                          <div className="dir-ltr text-sm">{fmtPrice(trade.openPrice)}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtPrice(trade.openPrice)}</bdi></div>
                         </div>
                         <div>
                           <div className="text-xs text-muted">{t('history.closePrice')}</div>
-                          <div className="dir-ltr text-sm">{fmtPrice(trade.closePrice)}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtPrice(trade.closePrice)}</bdi></div>
                         </div>
                       </div>
                       <div className="mobile-trading-card-footer text-xs text-muted flex-between">
                         <span><bdi>{fmtTime(trade.openTime)}</bdi></span>
-                        <span>→ <bdi>{fmtTime(trade.closeTime)}</bdi></span>
+                        <span>{isRtl ? '←' : '→'} <bdi>{fmtTime(trade.closeTime)}</bdi></span>
                       </div>
                     </div>
                   );
@@ -498,15 +490,15 @@ export function PositionsPage() {
                       <div className="mobile-trading-card-grid">
                         <div>
                           <div className="text-xs text-muted">{t('table.volume')}</div>
-                          <div className="dir-ltr text-sm">{fmtQty(o.quantity)}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtQty(o.quantity)}</bdi></div>
                         </div>
                         <div>
                           <div className="text-xs text-muted">{t('common.limitPrice')}</div>
-                          <div className="dir-ltr text-sm">{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</bdi></div>
                         </div>
                         <div>
                           <div className="text-xs text-muted">{t('common.stopPrice')}</div>
-                          <div className="dir-ltr text-sm">{fmtPrice(o.stopPrice)}</div>
+                          <div className="text-sm"><bdi dir="ltr" className="dir-ltr">{fmtPrice(o.stopPrice)}</bdi></div>
                         </div>
                       </div>
                       <div className="mobile-trading-card-actions">

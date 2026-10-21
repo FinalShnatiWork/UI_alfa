@@ -205,9 +205,10 @@ export function SpeedometerGauge({
                 {recommendation} ({confidence}%)
             </div>
 
-            {/* Labels: Sell / Neutral / Buy */}
+            {/* Labels: Sell / Neutral / Buy. The dial is drawn left to right, so the legend is too, in Hebrew as well. */}
             <div
                 style={{
+                    direction: 'ltr',
                     marginTop: 8,
                     fontSize: '0.74rem',
                     display: 'flex',

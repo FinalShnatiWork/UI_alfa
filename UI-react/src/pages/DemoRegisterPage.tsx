@@ -177,6 +177,7 @@ export function DemoRegisterPage() {
               <input
                 id="demoEmail"
                 type="email"
+                dir="ltr"
                 className="form-control"
                 placeholder="trader@sandbox.com"
                 autoComplete="email"

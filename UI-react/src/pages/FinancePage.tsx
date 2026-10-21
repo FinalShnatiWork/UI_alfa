@@ -397,7 +397,7 @@ export function FinancePage() {
           </div>
           <p className="text-sm text-secondary" style={{ marginTop: -8 }}>{t('finance.journalHint')}</p>
           <div className="table-scroll">
-            <table className="table-compact">
+            <table className="table-compact table-stack">
               <thead>
                 <tr>
                   <th>{t('table.dateTime')}</th>
@@ -430,15 +430,15 @@ export function FinancePage() {
 
                     return (
                       <tr key={r.id}>
-                        <td><bdi>{fmtDateTime(r.createdAt, lang)}</bdi></td>
-                        <td className={`font-bold ${isDeposit ? 'text-success' : 'text-danger'}`}>
+                        <td data-label={t('table.dateTime')}><bdi>{fmtDateTime(r.createdAt, lang)}</bdi></td>
+                        <td className={`font-bold stack-head ${isDeposit ? 'text-success' : 'text-danger'}`}>
                           {typeLabelOf(r.txType)}
                         </td>
-                        <td className="font-bold">
-                          <bdi>{isDeposit ? '+' : '−'}{fmtMoney(amt, currency)}</bdi>
+                        <td className="font-bold stack-pl">
+                          <bdi dir="ltr">{isDeposit ? '+' : '−'}{fmtMoney(amt, currency)}</bdi>
                         </td>
-                        <td>{methodLabelOf(r) || '—'}</td>
-                        <td>
+                        <td data-label={t('table.method')}>{methodLabelOf(r) || '—'}</td>
+                        <td data-label={t('table.status')}>
                           <span className={`badge ${badgeClass}`}>
                             {codeLabel(t, 'txStatus', r.status)}
                           </span>
@@ -478,7 +478,7 @@ export function FinancePage() {
                 {t('finance.creditHistoryDesc')}
               </p>
               <div className="table-scroll">
-                <table className="table-compact">
+                <table className="table-compact table-stack">
                   <thead>
                     <tr>
                       <th>{t('table.dateTime')}</th>
@@ -501,8 +501,8 @@ export function FinancePage() {
                     ) : (
                       ledger.map((entry) => (
                         <tr key={entry.id}>
-                          <td className="text-sm"><bdi>{fmtDateTime(entry.createdAt, lang)}</bdi></td>
-                          <td>
+                          <td className="text-sm" data-label={t('table.dateTime')}><bdi>{fmtDateTime(entry.createdAt, lang)}</bdi></td>
+                          <td className="stack-head">
                             <span
                               className="badge"
                               style={{
@@ -516,16 +516,16 @@ export function FinancePage() {
                               {codeLabel(t, 'creditEntry', entry.entryType)}
                             </span>
                           </td>
-                          <td className="font-bold" style={{ color: entryColor(entry.entryType) }}>
-                            {fmtMoney(Number(entry.amount ?? 0), currency)}
+                          <td className="font-bold stack-pl" style={{ color: entryColor(entry.entryType) }}>
+                            <bdi dir="ltr">{fmtMoney(Number(entry.amount ?? 0), currency)}</bdi>
                           </td>
-                          <td style={{ color: 'var(--danger, #ef4444)', fontVariantNumeric: 'tabular-nums' }}>
-                            {fmtMoney(Number(entry.borrowedAfter ?? 0), currency)}
+                          <td style={{ color: 'var(--danger, #ef4444)', fontVariantNumeric: 'tabular-nums' }} data-label={t('table.debtAfter')}>
+                            <bdi dir="ltr">{fmtMoney(Number(entry.borrowedAfter ?? 0), currency)}</bdi>
                           </td>
-                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {fmtMoney(Number(entry.balanceAfter ?? 0), currency)}
+                          <td style={{ fontVariantNumeric: 'tabular-nums' }} data-label={t('table.balanceAfter')}>
+                            <bdi dir="ltr">{fmtMoney(Number(entry.balanceAfter ?? 0), currency)}</bdi>
                           </td>
-                          <td className="text-sm wrap" style={{ color: 'var(--text-secondary)', maxWidth: 280 }}>
+                          <td className="text-sm wrap stack-wide" style={{ color: 'var(--text-secondary)', maxWidth: 280 }} data-label={t('table.note')}>
                             {ledgerNote(t, entry.note)}
                           </td>
                         </tr>

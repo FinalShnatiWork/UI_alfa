@@ -151,6 +151,7 @@ export function RegisterPage() {
               <input
                 id="regEmail"
                 type="email"
+                dir="ltr"
                 className="form-control"
                 placeholder={t('login.emailPlaceholder')}
                 autoComplete="email"

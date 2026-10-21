@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { PointerEvent } from 'react';
 import { useI18n } from '@/hooks/useI18n';
 import { useBrokerOverview, useCreditLedger, useTradeHistory, useTransactions } from '@/hooks/useApi';
 import { dailyAccountValue } from '@/lib/equityHistory';
@@ -48,7 +48,9 @@ export function AccountValueChart() {
   const color = change >= 0 ? 'var(--green)' : 'var(--red)';
   const shown = hover != null && days[hover] ? days[hover] : days[days.length - 1];
 
-  const onMove = (e: MouseEvent<SVGSVGElement>) => {
+  // Pointer events cover mouse, pen and touch: dragging a finger along the chart scrubs it,
+  // lifting the finger (or leaving with the mouse) returns to the latest value.
+  const onMove = (e: PointerEvent<SVGSVGElement>) => {
     if (days.length < 2) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const frac = (e.clientX - rect.left) / rect.width;
@@ -96,9 +98,11 @@ export function AccountValueChart() {
             height={H}
             role="img"
             aria-label={t('dashboard.valueChart.title')}
-            onMouseMove={onMove}
-            onMouseLeave={() => setHover(null)}
-            style={{ display: 'block', cursor: days.length > 1 ? 'crosshair' : 'default' }}
+            onPointerDown={onMove}
+            onPointerMove={onMove}
+            onPointerLeave={() => setHover(null)}
+            onPointerCancel={() => setHover(null)}
+            style={{ display: 'block', cursor: days.length > 1 ? 'crosshair' : 'default', touchAction: 'pan-y' }}
           >
             <path d={area} fill={color} opacity={0.12} />
             <path d={line} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
@@ -110,7 +114,7 @@ export function AccountValueChart() {
             )}
           </svg>
           <div
-            className="flex-between"
+            className="flex-between dashboard-small-label"
             style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}
           >
             <span>{fmtDayMonth(days[0].day, lang)}</span>

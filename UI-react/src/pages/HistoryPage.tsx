@@ -6,26 +6,15 @@ import { useBrokerOverview, useTradeHistory } from '@/hooks/useApi';
 import type { BrokerOrder } from '@/types/api';
 import { pairOrders, tsMs as ts } from '@/lib/tradeUtils';
 import type { PairedTrade } from '@/lib/tradeUtils';
-import { fmtCsvDateTime, fmtDateTime, fmtMoney, fmtSignedMoney, NUM_LOCALE } from '@/lib/format';
+import { fmtCsvDateTime, fmtDateTime, fmtLots, fmtMoney, fmtPrice, fmtSignedMoney } from '@/lib/format';
 import { downloadCsv } from '@/lib/csv';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 const fmtTime = fmtDateTime;
 
-function fmtPrice(n: unknown): string {
-  if (n == null) return '—';
-  const v = Number(n);
-  if (isNaN(v) || v === 0) return '—';
-  const abs = Math.abs(v);
-  const d = abs > 0 && abs < 10 ? 5 : (abs >= 10 && abs < 500 ? 3 : 2);
-  return v.toLocaleString(NUM_LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d });
-}
-
 function fmtQty(n: unknown): string {
-  if (n == null) return '—';
-  const v = Number(n);
-  return isNaN(v) ? '—' : v.toFixed(4);
+  return n == null ? '—' : fmtLots(n);
 }
 
 function fmtPl(n: unknown, currency: string): string {
@@ -168,7 +157,7 @@ export function HistoryPage() {
             <div key={label} className="card" style={{ padding: '12px 14px', marginBottom: 0 }}>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 3 }}>{label}</div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: colored ? (positive ? '#22c55e' : '#ef4444') : undefined }}>
-                {value}
+                <bdi dir="ltr">{value}</bdi>
               </div>
               {sub && <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: 1 }}>{sub}</div>}
             </div>
@@ -206,7 +195,7 @@ export function HistoryPage() {
 
         {/* Table */}
         <div className="table-scroll">
-        <table className="table-compact" style={{ marginTop: 8 }}>
+        <table className="table-compact table-stack" style={{ marginTop: 8 }}>
           <thead>
             <tr>
               <th style={{ width: 40 }}>#</th>
@@ -239,22 +228,22 @@ export function HistoryPage() {
                 const plClass = pl == null ? '' : pl >= 0 ? 'text-success' : 'text-danger';
                 return (
                   <tr key={trade.id}>
-                    <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
-                    <td className="font-bold">{trade.symbolCode}</td>
-                    <td className="text-sm"><bdi>{fmtTime(trade.openTime, lang)}</bdi></td>
-                    <td className="text-sm"><bdi>{fmtTime(trade.closeTime, lang)}</bdi></td>
-                    <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.openPrice)}</td>
-                    <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.closePrice)}</td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
-                    <td className="dir-ltr" style={{ textAlign: 'right', fontWeight: 600, color: grossPl != null ? (grossPl >= 0 ? 'var(--text-success)' : 'var(--text-danger)') : 'inherit' }}>
+                    <td className="text-muted text-sm stack-hide" style={{ width: 40 }}>{idx + 1}</td>
+                    <td className="font-bold stack-head">{trade.symbolCode}</td>
+                    <td className="text-sm" data-label={t('history.openTime')}><bdi>{fmtTime(trade.openTime, lang)}</bdi></td>
+                    <td className="text-sm" data-label={t('history.closeTime')}><bdi>{fmtTime(trade.closeTime, lang)}</bdi></td>
+                    <td className="dir-ltr" style={{ textAlign: 'right' }} data-label={t('table.openPrice')}>{fmtPrice(trade.openPrice)}</td>
+                    <td className="dir-ltr" style={{ textAlign: 'right' }} data-label={t('history.closePrice')}>{fmtPrice(trade.closePrice)}</td>
+                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('history.volume')}>{fmtQty(trade.quantity)}</td>
+                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('table.stopLoss')}>{fmtPrice(trade.stopLoss)}</td>
+                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('table.takeProfit')}>{fmtPrice(trade.takeProfit)}</td>
+                    <td className="dir-ltr" style={{ textAlign: 'right', fontWeight: 600, color: grossPl != null ? (grossPl >= 0 ? 'var(--green)' : 'var(--red)') : 'inherit' }} data-label={t('history.grossPl')}>
                       {grossPl != null ? fmtPl(grossPl, currency) : '—'}
                     </td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>
+                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('history.commission')}>
                       {trade.commission != null ? `−${fmtMoney(trade.commission, currency)}` : '—'}
                     </td>
-                    <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
+                    <td className={`dir-ltr font-bold stack-pl ${plClass}`} style={{ textAlign: 'right' }} data-label={t('history.netPl')}>
                       {pl != null ? fmtPl(pl, currency) : '—'}
                     </td>
                   </tr>
@@ -268,13 +257,13 @@ export function HistoryPage() {
                 <td colSpan={9} className="text-muted text-sm">
                   {t('history.totalPl')} ({withPl.length}):
                 </td>
-                <td className={`dir-ltr font-bold ${grossTradePl >= 0 ? 'text-success' : 'text-danger'}`}>
+                <td className={`dir-ltr font-bold ${grossTradePl >= 0 ? 'text-success' : 'text-danger'}`} data-label={t('history.grossPl')}>
                   {fmtPl(grossTradePl, currency)}
                 </td>
-                <td className="dir-ltr font-bold text-danger">
+                <td className="dir-ltr font-bold text-danger" data-label={t('history.commission')}>
                   −{fmtMoney(commissionTotal, currency)}
                 </td>
-                <td className={`dir-ltr font-bold ${netPl >= 0 ? 'text-success' : 'text-danger'}`}>
+                <td className={`dir-ltr font-bold ${netPl >= 0 ? 'text-success' : 'text-danger'}`} data-label={t('history.netPl')}>
                   {fmtPl(netPl, currency)}
                 </td>
               </tr>

@@ -2700,6 +2700,23 @@ html[data-theme="light"] .positions-tab-btn.active {
   padding: 10px;
   font-weight: 700;
   border-radius: 8px;
+  min-height: 44px;
+}
+.mobile-trading-card-symbol {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.mobile-trading-card-head {
+  gap: 10px;
+}
+.mobile-trading-card-grid > div {
+  min-width: 0;
+}
+.mobile-trading-card-footer {
+  gap: 8px;
+}
+.mobile-trading-card:hover {
+  transform: none;
 }
 
 /* ── Dashboard Responsive Classes ── */
@@ -2763,6 +2780,16 @@ html[data-theme="light"] .positions-tab-btn.active {
   .dashboard-action-footer .btn {
     width: 100%;
     text-align: center;
+  }
+}
+
+/* Phones: page buttons are at least 44px tall, and the small captions on the Dashboard at least 12px */
+@media (max-width: 768px) {
+  .container .btn {
+    min-height: 44px;
+  }
+  .dashboard-small-label {
+    font-size: 0.75rem !important;
   }
 }
 
@@ -2967,10 +2994,128 @@ html[data-theme="light"] .positions-tab-btn.active {
   .history-filters-bar > div:last-child {
     display: flex;
     width: 100%;
+    flex-wrap: wrap;
   }
   .history-filters-bar > div:last-child button {
     flex: 1;
     text-align: center;
+    min-height: 44px;
   }
 }
 
+/* ── Wide data tables on phones ──
+   Tables marked .table-stack turn into one card per row: the first cell is the card
+   title, .stack-pl sits beside it, and every other cell shows its column name (data-label).
+   Same breakpoint as the bottom bar and the Positions cards. */
+@media (max-width: 860px) {
+  .table-scroll:has(> table.table-stack) {
+    overflow: visible !important;
+    max-height: none !important;
+    border-radius: 0;
+  }
+  .table-scroll table.table-stack {
+    min-width: 0;
+  }
+  table.table-stack,
+  table.table-stack tbody,
+  table.table-stack tfoot {
+    display: block;
+    width: 100%;
+  }
+  table.table-stack {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    overflow: visible;
+    margin-top: 0 !important;
+  }
+  table.table-stack thead {
+    display: none;
+  }
+  table.table-stack tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-1);
+  }
+  table.table-stack td {
+    display: block;
+    padding: 0;
+    border: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: start !important;
+    min-width: 0;
+    max-width: none !important;
+    font-size: 0.9rem;
+  }
+  html[dir="rtl"] table.table-stack td {
+    text-align: right !important;
+  }
+  table.table-stack td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    text-shadow: none;
+  }
+  table.table-stack td:not([data-label])::before {
+    display: none;
+  }
+  table.table-stack td[colspan],
+  table.table-stack td.stack-wide {
+    grid-column: 1 / -1;
+  }
+  table.table-stack td[colspan] {
+    text-align: center !important;
+  }
+  table.table-stack td.stack-head {
+    grid-column: 1;
+    order: -2;
+    font-size: 1rem;
+    font-weight: 700;
+    align-self: center;
+  }
+  table.table-stack td.stack-pl {
+    grid-column: 2;
+    order: -1;
+    font-size: 1.05rem;
+    font-weight: 800;
+    text-align: end !important;
+    align-self: center;
+  }
+  html[dir="rtl"] table.table-stack td.stack-pl {
+    text-align: left !important;
+  }
+  table.table-stack td.stack-pl::before {
+    display: none;
+  }
+  table.table-stack td.stack-hide {
+    display: none;
+  }
+  table.table-stack tr:hover td {
+    background: transparent;
+  }
+  table.table-stack tfoot tr {
+    border-color: var(--accent);
+  }
+}
+
+/* RTL: values inside the phone cards line up with their labels */
+.mobile-trading-card-grid,
+.mobile-trading-card-head {
+  text-align: start;
+}
+/* Email and other Latin-only inputs are typed left to right; the Hebrew placeholder still reads right to left. */
+html[dir="rtl"] input[dir="ltr"]:placeholder-shown {
+  direction: rtl;
+}

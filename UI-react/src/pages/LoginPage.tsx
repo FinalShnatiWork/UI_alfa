@@ -125,6 +125,7 @@ export function LoginPage() {
               <input
                 id="loginEmail"
                 type="email"
+                dir="ltr"
                 className="form-control"
                 autoComplete="email"
                 placeholder={t('login.emailPlaceholder')}
