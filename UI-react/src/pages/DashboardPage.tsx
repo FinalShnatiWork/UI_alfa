@@ -166,7 +166,7 @@ export function DashboardPage() {
             className="card mb-20"
             style={{
               padding: '14px 20px',
-              background: isLiquidationRisk ? 'var(--red-soft, #fdecea)' : 'var(--yellow-soft, #fff8e1)',
+              background: isLiquidationRisk ? 'var(--red-soft)' : 'var(--yellow-soft)',
               border: `1px solid ${isLiquidationRisk ? 'var(--red)' : 'var(--yellow, #f0ad4e)'}`,
               display: 'flex',
               alignItems: 'center',
@@ -175,11 +175,11 @@ export function DashboardPage() {
           >
             <span style={{ fontSize: '1.3rem' }}>{isLiquidationRisk ? '🚨' : '⚠️'}</span>
             <div>
-              <div style={{ fontWeight: 700, color: isLiquidationRisk ? 'var(--red)' : '#8a6100' }}>
+              <div style={{ fontWeight: 700, color: isLiquidationRisk ? 'var(--red)' : 'var(--warning-text)' }}>
                 {isLiquidationRisk ? t('dashboard.liquidationRisk') : t('dashboard.marginCallWarning')}
               </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                {t('dashboard.marginLevel')}: {marginLevelPct?.toFixed(1)}%
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                {t('dashboard.marginLevel')}: <bdi dir="ltr" style={{ fontWeight: 700 }}>{marginLevelPct?.toFixed(1)}%</bdi>
               </div>
             </div>
           </div>
@@ -199,16 +199,16 @@ export function DashboardPage() {
                   background: !hasDebt
                     ? 'var(--green-soft)'
                     : isLiquidationRisk
-                    ? 'var(--red-soft, #fdecea)'
+                    ? 'var(--red-soft)'
                     : isMarginCall
-                    ? 'var(--yellow-soft, #fff8e1)'
-                    : 'var(--blue-soft, #e3f2fd)',
+                    ? 'var(--yellow-soft)'
+                    : 'var(--blue-soft)',
                   color: !hasDebt
                     ? 'var(--green)'
                     : isLiquidationRisk
                     ? 'var(--red)'
                     : isMarginCall
-                    ? '#8a6100'
+                    ? 'var(--warning-text)'
                     : 'var(--blue, #1976d2)',
                   fontWeight: 600,
                   fontSize: '0.8rem',
@@ -452,7 +452,7 @@ export function DashboardPage() {
                 <span
                   style={{
                     background: 'var(--primary)',
-                    color: '#fff',
+                    color: 'var(--on-primary)',
                     borderRadius: '50%',
                     width: 20,
                     height: 20,

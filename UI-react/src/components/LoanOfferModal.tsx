@@ -70,8 +70,8 @@ export const LoanOfferModal: React.FC<LoanOfferDetails> = ({
           padding: '28px 32px',
           borderRadius: 16,
           boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
-          border: '1px solid var(--border-color)',
-          background: 'var(--bg-card, #181c24)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-alt)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -89,7 +89,7 @@ export const LoanOfferModal: React.FC<LoanOfferDetails> = ({
         <div style={{ background: 'var(--bg-alt, #0f1218)', padding: '16px 20px', borderRadius: 12, marginBottom: 24 }}>
           {row(t('loanOffer.required'), fmtMoney(required, currency))}
           {row(t('loanOffer.cash'), fmtMoney(cashBalance, currency))}
-          <hr style={{ borderColor: 'var(--border-color)', opacity: 0.3, margin: '10px 0' }} />
+          <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '10px 0' }} />
           {row(
             t('loanOffer.loan'),
             fmtMoney(shortfall, currency),

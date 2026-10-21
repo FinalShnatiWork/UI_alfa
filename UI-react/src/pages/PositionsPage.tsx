@@ -222,7 +222,7 @@ export function PositionsPage() {
                 {filteredOpen.length > 0 && (() => {
                   const totalPnl = filteredOpen.reduce(
                     (sum, p) => sum + positionPnl(p, livePriceFor(livePrices, p.symbolCode)), 0);
-                  const pnlColor = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+                  const pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
                   return (
                     <tfoot>
                       <tr style={{ borderTop: '2px solid var(--border)' }}>
@@ -436,7 +436,7 @@ export function PositionsPage() {
                           <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
                           <td className="font-bold">{o.symbolCode}</td>
                           <td>
-                            <span className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>
+                            <span className="badge badge-primary">
                               {o.orderType}
                             </span>
                           </td>
@@ -490,7 +490,7 @@ export function PositionsPage() {
                           <span className={`badge ${o.side === 'BUY' ? 'badge-success' : 'badge-danger'}`}>
                             {o.side === 'BUY' ? t('badge.buy') : t('badge.sell')}
                           </span>
-                          <span className="badge" style={{ background: 'var(--primary)', color: '#fff' }}>
+                          <span className="badge badge-primary">
                             {o.orderType}
                           </span>
                         </div>
