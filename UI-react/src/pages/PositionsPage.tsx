@@ -167,7 +167,7 @@ export function PositionsPage() {
                       const qty = Math.abs(Number(p.quantity ?? 0));
                       const avgPrice = Number(p.avgPrice ?? 0);
                       const livePrice = livePriceFor(livePrices, p.symbolCode);
-                      const pnl = positionPnl(p, livePrice);
+                      const pnl = positionPnl(p, livePrice, livePrices);
                       const isClosing = closing === p.id;
                       return (
                         <tr key={p.id}>
@@ -213,7 +213,7 @@ export function PositionsPage() {
                 </tbody>
                 {filteredOpen.length > 0 && (() => {
                   const totalPnl = filteredOpen.reduce(
-                    (sum, p) => sum + positionPnl(p, livePriceFor(livePrices, p.symbolCode)), 0);
+                    (sum, p) => sum + positionPnl(p, livePriceFor(livePrices, p.symbolCode), livePrices), 0);
                   const pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
                   return (
                     <tfoot>
@@ -243,7 +243,7 @@ export function PositionsPage() {
                   const qty = Math.abs(Number(p.quantity ?? 0));
                   const avgPrice = Number(p.avgPrice ?? 0);
                   const livePrice = livePriceFor(livePrices, p.symbolCode);
-                  const pnl = positionPnl(p, livePrice);
+                  const pnl = positionPnl(p, livePrice, livePrices);
                   const isClosing = closing === p.id;
                   return (
                     <div key={p.id} className="card mobile-trading-card">

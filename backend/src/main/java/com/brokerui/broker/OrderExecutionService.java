@@ -296,7 +296,7 @@ public class OrderExecutionService {
   public void refreshUnrealizedPnl(Long posId, BigDecimal livePrice) {
     Position pos = positionRepo.findById(posId).orElse(null);
     if (pos == null) return; // already closed — must not be written back
-    BigDecimal uPnl = BrokerApiController.liveUnrealizedPnl(pos, livePrice);
+    BigDecimal uPnl = BrokerApiController.liveUnrealizedPnl(pos, livePrice, priceService);
     if (pos.getUnrealizedPnl() == null || pos.getUnrealizedPnl().compareTo(uPnl) != 0) {
       pos.setUnrealizedPnl(uPnl); // managed entity — flushed on commit, no merge/insert risk
     }
@@ -322,7 +322,7 @@ public class OrderExecutionService {
     Position pos = positionRepo.findByIdForUpdate(posId).orElse(null);
     if (pos == null) return; // closed by the user (or liquidated) while we waited for the lock
 
-    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, closePrice);
+    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, closePrice, priceService::marketPrice);
     BigDecimal qty = close.quantity();
     boolean isShort = close.shortPosition();
     closePrice = close.closePrice();

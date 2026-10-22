@@ -59,7 +59,30 @@ public class MarketPriceService {
         return price;
     }
 
-    private double fetchLivePriceUncached(String sym) {
+    /**
+     * A quote from a real feed or a test override. Null when the only fallback
+     * would be a made-up demo price. Used to convert yen and kroner into dollars.
+     */
+    public BigDecimal marketPrice(String symbol) {
+        String sym = symbol == null ? "" : symbol.trim().toUpperCase();
+        if (sym.isEmpty()) return null;
+        TestOverride override = getTestOverride(sym);
+        if (override != null) return BigDecimal.valueOf(override.mid());
+
+        long now = System.currentTimeMillis();
+        CachedQuote cached = realCache.get(sym);
+        if (cached != null && now - cached.fetchedAtMs() < CACHE_TTL_MS && cached.price() > 0) {
+            return BigDecimal.valueOf(cached.price());
+        }
+        double price = fetchRealPrice(sym);
+        if (!(price > 0)) return null;
+        realCache.put(sym, new CachedQuote(price, now));
+        return BigDecimal.valueOf(price);
+    }
+
+    private final ConcurrentHashMap<String, CachedQuote> realCache = new ConcurrentHashMap<>();
+
+    private double fetchRealPrice(String sym) {
         // 0. Try Binance for crypto
         if (isCrypto(sym)) {
             try {
@@ -84,8 +107,12 @@ public class MarketPriceService {
             } catch (Exception ignored) {}
         }
 
-        // 3. Synthetic fallback
-        return syntheticDemoPrice(sym).doubleValue();
+        return 0;
+    }
+
+    private double fetchLivePriceUncached(String sym) {
+        double real = fetchRealPrice(sym);
+        return real > 0 ? real : syntheticDemoPrice(sym).doubleValue();
     }
 
     /**

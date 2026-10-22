@@ -15,6 +15,8 @@ export interface OrderConfirmDetails {
   freeFunds: number;
   stopLoss?: number;
   takeProfit?: number;
+  /** Live quotes already on the page, used to turn yen and kroner into dollars. */
+  prices?: Record<string, number>;
 }
 
 interface Props extends OrderConfirmDetails {
@@ -30,10 +32,10 @@ function fmtPrice(v: number): string {
 const fmtUsd = (v: number) => fmtMoneyMinus(v);
 
 export function OrderConfirmModal(props: Props) {
-  const { symbol, side, orderType, lots, price, leverage, freeFunds, stopLoss, takeProfit, onConfirm, onCancel } = props;
+  const { symbol, side, orderType, lots, price, leverage, freeFunds, stopLoss, takeProfit, prices, onConfirm, onCancel } = props;
   const { t } = useI18n();
   const [dontAsk, setDontAsk] = useState(false);
-  const cost = estimateOrderCost(symbol, lots, price, leverage);
+  const cost = estimateOrderCost(symbol, lots, price, leverage, prices);
   const freeAfter = freeFunds - cost.total;
   const sideColor = side === 'BUY' ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
   const sideLabel = side === 'BUY' ? t('trading.buy') : t('trading.sell');

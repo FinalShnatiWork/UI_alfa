@@ -81,89 +81,6 @@ function mapToBybitSymbol(s: string): string {
   return MAP[u] ?? (u.endsWith('USD') ? u + 'T' : u);
 }
 
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function symbolAnnualVol(s: string): number {
-  if (s.startsWith('BTC') || s.startsWith('ETH')) return 0.85;
-  if (s.startsWith('SOL') || s.startsWith('XRP')) return 1.00;
-  if (s.startsWith('XAG')) return 0.28;
-  if (s.startsWith('XAU')) return 0.16;
-  if (s.endsWith('JPY')) return 0.08;
-  return 0.07;
-}
-
-function defaultPrice(s: string): number {
-  if (s.endsWith('JPY')) return 158.0;
-  if (s.startsWith('CADJPY')) return 113.0;
-  if (s.startsWith('GBPJPY')) return 210.0;
-  if (s.startsWith('XAU')) return 4660.0;
-  if (s.startsWith('XAG')) return 83.0;
-  if (s.startsWith('BTC')) return 103000.0;
-  if (s.startsWith('ETH')) return 2400.0;
-  if (s.startsWith('SOL')) return 170.0;
-  if (s.startsWith('XRP')) return 2.40;
-  if (s.startsWith('GBPUSD')) return 1.34;
-  if (s.startsWith('USDCAD')) return 1.37;
-  if (s.startsWith('NZDUSD')) return 0.60;
-  if (s.startsWith('EURNOK')) return 10.80;
-  return 1.17;
-}
-
-function syntheticCandles(symbol: string, intervalKey: Interval, count = 300, basePrice?: number | null): Candle[] {
-  const sec = INTERVAL_SECONDS[intervalKey] ?? 3600;
-  const S = symbol.toUpperCase();
-  const anchor = (basePrice && basePrice > 0) ? basePrice : defaultPrice(S);
-  const annualVol = symbolAnnualVol(S);
-  const barsPerYear = (365.25 * 24 * 3600) / sec;
-  const sigmaPerBar = annualVol / Math.sqrt(barsPerYear);
-  const now = Math.floor(Date.now() / 1000);
-  const endBucket = Math.floor(now / sec) * sec;
-  const symHash = Array.from(S).reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) | 0, 7);
-  const periodKey = (Math.floor(endBucket / (sec * count)) & 0x7fffffff);
-  const rand = mulberry32(((symHash ^ periodKey) + 0x9e3779b9) >>> 0);
-  const rawLog = [0];
-  let trendMu = 0, trendLeft = 0;
-  for (let i = 1; i < count; i++) {
-    if (trendLeft <= 0) {
-      const pull = -rawLog[i - 1] * 0.03;
-      trendMu = pull + (rand() - 0.5) * sigmaPerBar * 0.6;
-      trendLeft = Math.floor(6 + rand() * 20);
-    }
-    trendLeft--;
-    const u1 = Math.max(1e-10, rand()), u2 = rand();
-    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    rawLog.push(rawLog[i - 1] + trendMu + sigmaPerBar * z);
-  }
-  const logAnchor = Math.log(anchor);
-  const logOffset = logAnchor - rawLog[rawLog.length - 1];
-  const prices = rawLog.map(l => Math.exp(l + logOffset));
-  const out: Candle[] = [];
-  for (let i = 0; i < count; i++) {
-    const time = (endBucket - (count - 1 - i) * sec) as UTCTimestamp;
-    const close = prices[i];
-    const open = i === 0 ? close : prices[i - 1] * (1 + (rand() - 0.5) * sigmaPerBar * 0.1);
-    const body = Math.abs(close - open);
-    const avgBody = close * sigmaPerBar * 0.5;
-    const wickBase = Math.max(body, avgBody) * (0.15 + rand() * 0.55);
-    const longWick = rand() < 0.06 ? wickBase * (1.5 + rand() * 2.0) : 0;
-    const upper = wickBase + (close > open ? 0 : longWick);
-    const lower = wickBase + (close < open ? 0 : longWick);
-    const high = Math.max(open, close) + upper;
-    const low = Math.max(0.000001, Math.min(open, close) - lower);
-    const volume = Math.round((0.4 + rand() * 1.2 + (body / (avgBody || 1)) * 0.4) * 1000);
-    out.push({ time, open, high, low, close, volume });
-  }
-  return out;
-}
-
 async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -298,9 +215,6 @@ export function ChartsPage() {
   const [liveChange, setLiveChange] = useState('—');
   const [liveChangePct, setLiveChangePct] = useState(0);
   const [status, setStatus] = useState('');
-  /** True only when the exchange did not answer and the candles were drawn here. */
-  const [feed, setFeed] = useState<'live' | 'candles'>('live');
-  const feedRef = useRef<'live' | 'candles'>('live');
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   const [volume, setVolume] = useState('1.00');
   const [entryPrice, setEntryPrice] = useState('');
@@ -579,10 +493,6 @@ export function ChartsPage() {
       priceFormat: { type: 'price', precision: instr.decimals, minMove: 1 / 10 ** instr.decimals },
     });
     setStatus(t('charts.loading'));
-    const markFeed = (next: 'live' | 'candles') => {
-      feedRef.current = next;
-      setFeed(next);
-    };
     if (mountRef.current) { mountRef.current.style.opacity = '0.4'; mountRef.current.style.transition = 'opacity 0.15s'; }
     const fadeIn = () => { if (mountRef.current) mountRef.current.style.opacity = '1'; };
 
@@ -591,13 +501,14 @@ export function ChartsPage() {
         let data: Candle[];
         let restOk = true;
         try { data = await fetchBybitKlines(sym, iv); }
-        catch { restOk = false; data = syntheticCandles(sym, iv); }
+        catch { restOk = false; data = []; }
         if (gen !== liveGenRef.current) return;
-        setChartData(data); chartRef.current?.timeScale().fitContent(); fadeIn();
+        setChartData(data);
+        if (data.length) chartRef.current?.timeScale().fitContent();
+        fadeIn();
         const last = data[data.length - 1];
         if (last) updateBidAsk(instr, last.close);
-        markFeed(restOk ? 'live' : 'candles');
-        setStatus(restOk ? (t('charts.liveBybit') || 'Live (Bybit)') : t('charts.syntheticCandles'));
+        setStatus(restOk ? (t('charts.liveBybit') || 'Live (Bybit)') : t('charts.errorLoad'));
 
         const mappedSym = mapToBybitSymbol(sym);
         const ivMap: Record<Interval, string> = {
@@ -609,13 +520,12 @@ export function ChartsPage() {
         const ws = new WebSocket(BYBIT_WS);
         wsRef.current = ws;
         ws.onopen = () => {
-          if (gen === liveGenRef.current && feedRef.current === 'live') {
-            setStatus(t('charts.liveBybit') || 'Live (Bybit)');
-            ws.send(JSON.stringify({
-              op: 'subscribe',
-              args: [`kline.${mappedIv}.${mappedSym}`]
-            }));
-          }
+          if (gen !== liveGenRef.current) return;
+          if (restOk) setStatus(t('charts.liveBybit') || 'Live (Bybit)');
+          ws.send(JSON.stringify({
+            op: 'subscribe',
+            args: [`kline.${mappedIv}.${mappedSym}`]
+          }));
         };
         ws.onmessage = (ev) => {
           if (gen !== liveGenRef.current) return;
@@ -632,6 +542,7 @@ export function ChartsPage() {
               };
               updateBar(bar);
               updateBidAsk(instr, bar.close);
+              if (!restOk) setStatus(t('charts.liveBybit') || 'Live (Bybit)');
             }
           } catch { /* */ }
         };
@@ -654,14 +565,20 @@ export function ChartsPage() {
         let data: Candle[];
         let yahooOk = true;
         try { data = await fetchYahooCandles(sym, iv, cat); }
-        catch { yahooOk = false; data = syntheticCandles(sym, iv, 300, realPrice); }
+        catch { yahooOk = false; data = []; }
         if (gen !== liveGenRef.current) return;
+        if (!yahooOk) {
+          setChartData([]);
+          fadeIn();
+          setStatus(t('charts.errorLoad'));
+          if (realPrice) updateBidAsk(instr, realPrice);
+          return;
+        }
         setChartData(data); chartRef.current?.timeScale().fitContent(); fadeIn();
         const lastYahoo = data[data.length - 1];
         if (realPrice) updateBidAsk(instr, realPrice);
         else if (lastYahoo) updateBidAsk(instr, lastYahoo.close);
-        markFeed(yahooOk ? 'live' : 'candles');
-        setStatus(yahooOk ? t('charts.liveYahoo') : t('charts.syntheticCandles'));
+        setStatus(t('charts.liveYahoo'));
 
         let currentBar: Candle | null = lastYahoo ? { ...lastYahoo } : null;
         if (realPrice && currentBar) {
@@ -669,7 +586,7 @@ export function ChartsPage() {
           updateBar(currentBar);
         }
 
-        let lastPriceVal = realPrice || (lastYahoo ? lastYahoo.close : defaultPrice(sym));
+        let lastPriceVal = realPrice || (lastYahoo ? lastYahoo.close : 0);
 
         const tickPrice = () => {
           if (gen !== liveGenRef.current || document.hidden) return;
@@ -782,6 +699,7 @@ export function ChartsPage() {
       ),
       stopLoss: sl,
       takeProfit: tp,
+      prices: livePrices,
     });
   }
 
@@ -958,27 +876,6 @@ export function ChartsPage() {
           {/* Left: chart */}
           <div className="charts-left-col">
             <div className="card chart-preview-area" style={{ position: 'relative' }}>
-              {/* Zoom toolbar */}
-              {feed === 'candles' ? (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 10,
-                    left: 12,
-                    zIndex: 10,
-                    padding: '6px 10px',
-                    borderRadius: 8,
-                    background: 'rgba(234, 179, 8, 0.16)',
-                    border: '1px solid rgba(234, 179, 8, 0.5)',
-                    color: 'var(--accent, #eab308)',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    maxWidth: '70%',
-                  }}
-                >
-                  {t('charts.syntheticCandles')}
-                </div>
-              ) : null}
               <div style={{ position: 'absolute', top: 10, right: 12, zIndex: 10, display: 'flex', gap: 6, opacity: 0.75 }}>
                 {[
                   { id: 'zi', label: '+', action: () => { const ts = chartRef.current?.timeScale(); const r = ts?.getVisibleLogicalRange(); if (r) { const m = (r.from + r.to) / 2, h = (r.to - r.from) / 2 * 0.65; ts?.setVisibleLogicalRange({ from: m - h, to: m + h }); } } },
@@ -1164,7 +1061,7 @@ export function ChartsPage() {
                       const qty = Number(p.quantity ?? 0);
                       const avg = Number(p.avgPrice ?? 0);
                       const live = livePriceFor(livePrices, p.symbolCode);
-                      const pnl = positionPnl(p, live);
+                      const pnl = positionPnl(p, live, livePrices);
                       const pnlColor = pnl >= 0 ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)';
                       return (
                         <tr key={p.id} style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
@@ -1259,7 +1156,7 @@ export function ChartsPage() {
               ) : (
                 positions.map((p) => {
                   const live = livePriceFor(livePrices, p.symbolCode);
-                  const pnl = positionPnl(p, live);
+                  const pnl = positionPnl(p, live, livePrices);
                   const isShort = p.side === 'SHORT';
                   return (
                     <div key={p.id} className="card mobile-trading-card" style={{ marginBottom: 0 }}>

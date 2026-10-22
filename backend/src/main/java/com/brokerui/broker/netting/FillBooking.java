@@ -52,10 +52,16 @@ public class FillBooking {
     this.txRepo = txRepo;
   }
 
-  /** Price × qty × contract size / leverage — the margin formula used everywhere in the project. */
-  public static BigDecimal margin(String symbol, BigDecimal qty, BigDecimal price, TradingAccount ta) {
+  /** Quote notional turned into dollars, then divided by leverage. */
+  public static BigDecimal margin(String symbol, BigDecimal qty, BigDecimal price, TradingAccount ta, java.util.function.Function<String, BigDecimal> marketRate) {
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-    return price.multiply(qty).multiply(ContractSpecs.getContractSize(symbol)).divide(leverage, 4, RoundingMode.HALF_UP);
+    BigDecimal quote = price.multiply(qty).multiply(ContractSpecs.getContractSize(symbol));
+    java.util.function.Function<String, BigDecimal> rate = code -> code.equalsIgnoreCase(symbol)
+        ? price
+        : (marketRate == null ? null : marketRate.apply(code));
+    BigDecimal usd = com.brokerui.broker.UsdQuote.toUsd(symbol, quote, rate);
+    if (usd == null) throw new IllegalStateException("fx_rate_unavailable");
+    return usd.divide(leverage, 4, RoundingMode.HALF_UP);
   }
 
   /**
@@ -68,7 +74,10 @@ public class FillBooking {
     BigDecimal price = o.getLimitPrice() != null ? o.getLimitPrice()
         : (o.getStopPrice() != null ? o.getStopPrice() : BigDecimal.ZERO);
     if (price.compareTo(BigDecimal.ZERO) <= 0) return BigDecimal.ZERO;
-    return margin(o.getSymbolCode(), o.remainingQty(), price, ta);
+    // Orders from before the reserve was stored used the raw quote formula. Refund that same sum.
+    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
+    return price.multiply(o.remainingQty()).multiply(ContractSpecs.getContractSize(o.getSymbolCode()))
+        .divide(leverage, 4, RoundingMode.HALF_UP);
   }
 
   /** The share of the outstanding reserve that belongs to {@code qty} (the last fill takes everything left). */
@@ -87,7 +96,7 @@ public class FillBooking {
   }
 
   public FillCost cost(BrokerOrder o, TradingAccount ta, BigDecimal qty, BigDecimal price) {
-    return new FillCost(margin(o.getSymbolCode(), qty, price, ta),
+    return new FillCost(margin(o.getSymbolCode(), qty, price, ta, priceService::marketPrice),
         TradingFees.calculateCommission(o.getSymbolCode(), qty, price), reservePortion(o, ta, qty));
   }
 
@@ -199,7 +208,7 @@ public class FillBooking {
     slice.setSide(pos.getSide());
     slice.setQuantity(sliceQty);
     slice.setAvgPrice(pos.getAvgPrice());
-    PositionCloseMath.Snapshot close = PositionCloseMath.atFillPrice(slice, ta, price, !internal);
+    PositionCloseMath.Snapshot close = PositionCloseMath.atFillPrice(slice, ta, price, !internal, priceService::marketPrice);
 
     marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
     commissionLedger.record(ta, o, close.closeCommission(), true);

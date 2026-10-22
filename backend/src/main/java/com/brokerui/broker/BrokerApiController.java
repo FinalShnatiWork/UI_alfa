@@ -126,7 +126,8 @@ public class BrokerApiController {
     BigDecimal settledValue = AccountEquity.settledValue(ta,
         positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()),
         orderRepo.findByTradingAccountIdAndStatusInOrderByCreatedAtDesc(ta.getId(),
-            com.brokerui.broker.netting.NettingService.OPEN_STATUSES));
+            com.brokerui.broker.netting.NettingService.OPEN_STATUSES),
+        priceService);
     return ResponseEntity.ok(new BrokerOverviewDto(ta.getId(), ta.getAccountType(), ta.getCurrency(), ta.getLeverage(),
         ta.getBalance(), liveEquity, marginUsed, freeMargin,
         ta.getBorrowedBalance(), ta.getCreditLimit(), marginLevelPct, ta.getInterestAccruedTotal(),
@@ -270,16 +271,23 @@ public class BrokerApiController {
     return AccountEquity.equity(ta, positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
   }
 
-  /** Floating P/L for one position at {@code livePrice} (LONG/SHORT + contract size). */
+  /** Floating P/L for one position at {@code livePrice}. Yen and kroner are turned into dollars. */
   public static BigDecimal liveUnrealizedPnl(Position p, BigDecimal livePrice) {
+    return liveUnrealizedPnl(p, livePrice, null);
+  }
+
+  public static BigDecimal liveUnrealizedPnl(Position p, BigDecimal livePrice, com.brokerui.market.MarketPriceService prices) {
     if (p == null || livePrice == null) return BigDecimal.ZERO;
     BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
     BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity().abs();
-    BigDecimal contractSize = getContractSize(p.getSymbolCode());
-    if ("SHORT".equals(p.getSide())) {
-      return avg.subtract(livePrice).multiply(qty).multiply(contractSize);
-    }
-    return livePrice.subtract(avg).multiply(qty).multiply(contractSize);
+    BigDecimal quote = ("SHORT".equals(p.getSide()) ? avg.subtract(livePrice) : livePrice.subtract(avg))
+        .multiply(qty).multiply(getContractSize(p.getSymbolCode()));
+    java.util.function.Function<String, BigDecimal> rate = code -> code.equalsIgnoreCase(p.getSymbolCode())
+        ? livePrice
+        : (prices == null ? null : prices.marketPrice(code));
+    BigDecimal usd = UsdQuote.toUsd(p.getSymbolCode(), quote, rate);
+    if (usd != null) return usd;
+    return p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl();
   }
 
   /**
@@ -293,12 +301,27 @@ public class BrokerApiController {
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     BigDecimal used = BigDecimal.ZERO;
     for (Position p : positions) {
-      BigDecimal contractSize = getContractSize(p.getSymbolCode());
       BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
       BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
-      used = used.add(avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP));
+      BigDecimal quote = avg.multiply(qty).multiply(getContractSize(p.getSymbolCode()));
+      java.util.function.Function<String, BigDecimal> rate = code -> code.equalsIgnoreCase(p.getSymbolCode())
+          ? avg
+          : priceService.marketPrice(code);
+      BigDecimal usd = UsdQuote.toUsd(p.getSymbolCode(), quote, rate);
+      if (usd != null) used = used.add(usd.divide(leverage, 4, RoundingMode.HALF_UP));
     }
     return used;
+  }
+
+  /** Margin in dollars. Null when a yen or krone cross rate is not live. */
+  private BigDecimal marginUsd(String symbol, BigDecimal qty, BigDecimal price, BigDecimal leverage) {
+    BigDecimal quote = price.multiply(qty).multiply(getContractSize(symbol));
+    java.util.function.Function<String, BigDecimal> rate = code -> code.equalsIgnoreCase(symbol)
+        ? price
+        : priceService.marketPrice(code);
+    BigDecimal usd = UsdQuote.toUsd(symbol, quote, rate);
+    if (usd == null) return null;
+    return usd.divide(leverage, 4, RoundingMode.HALF_UP);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -446,11 +469,13 @@ public class BrokerApiController {
         }
       }
 
-      BigDecimal contractSize = getContractSize(symbolCode);
       BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
+      BigDecimal marginPart = marginUsd(symbolCode, qty, targetPrice, leverage);
+      if (marginPart == null) {
+        return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
+      }
       // Margin and commission, like a market order; whatever the fill does not use is returned.
-      BigDecimal reserved = targetPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP)
-          .add(TradingFees.calculateCommission(symbolCode, qty, targetPrice));
+      BigDecimal reserved = marginPart.add(TradingFees.calculateCommission(symbolCode, qty, targetPrice));
       ResponseEntity<?> held = withdrawalHold(ta, pendingOut, reserved);
       if (held != null) return done(held);
       if (!marginLoanService.tryCoverShortfall(ta, reserved, u, request)) {
@@ -494,7 +519,6 @@ public class BrokerApiController {
       return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
     }
     BigDecimal rawPrice = BigDecimal.valueOf(price);
-    BigDecimal contractSize = getContractSize(symbolCode);
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     boolean isBuy = "BUY".equals(side);
 
@@ -504,7 +528,10 @@ public class BrokerApiController {
     if (!stopsValid(isBuy, bdPrice, body.stopLoss(), body.takeProfit())) {
       return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_stops")));
     }
-    BigDecimal margin = bdPrice.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+    BigDecimal margin = marginUsd(symbolCode, qty, bdPrice, leverage);
+    if (margin == null) {
+      return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
+    }
     BigDecimal commission = TradingFees.calculateCommission(symbolCode, qty, bdPrice);
     BigDecimal required = margin.add(commission);
     ResponseEntity<?> held = withdrawalHold(ta, pendingOut, required);

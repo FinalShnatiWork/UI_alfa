@@ -501,7 +501,7 @@ public class NettingService {
     Long id = requiresNew.execute(s -> {
       TradingAccount ta = accountRepo.findByIdForUpdate(accountId).orElseThrow();
       if (!ta.isSimulated()) throw new IllegalArgumentException("account " + accountId + " is not simulated");
-      BigDecimal reserve = FillBooking.margin(symbol, qty, limit, ta);
+      BigDecimal reserve = FillBooking.margin(symbol, qty, limit, ta, priceService::marketPrice);
       if (!marginLoanService.tryCoverShortfall(ta, reserve, null, null)) throw new IllegalStateException("simulated account out of funds");
       BrokerOrder o = new BrokerOrder();
       o.setTradingAccount(ta);
@@ -528,7 +528,7 @@ public class NettingService {
       double p = priceService.getLivePrice(symbol);
       if (!(p > 0)) throw new IllegalStateException("price unavailable for " + symbol);
       BigDecimal px = PriceSpread.apply(BigDecimal.valueOf(p), BUY.equals(side));
-      BigDecimal reserve = FillBooking.margin(symbol, qty, px, ta).add(TradingFees.calculateCommission(symbol, qty, px));
+      BigDecimal reserve = FillBooking.margin(symbol, qty, px, ta, priceService::marketPrice).add(TradingFees.calculateCommission(symbol, qty, px));
       if (!marginLoanService.tryCoverShortfall(ta, reserve, null, null)) throw new IllegalStateException("simulated account out of funds");
       BrokerOrder o = new BrokerOrder();
       o.setTradingAccount(ta);

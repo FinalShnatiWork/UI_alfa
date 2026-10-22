@@ -459,7 +459,7 @@ public class MarginLoanService {
     }
     if (live <= 0) return false;
 
-    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, BigDecimal.valueOf(live));
+    PositionCloseMath.Snapshot close = PositionCloseMath.compute(pos, ta, BigDecimal.valueOf(live), priceService::marketPrice);
 
     BrokerOrder order = new BrokerOrder();
     order.setTradingAccount(ta);

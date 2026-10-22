@@ -48,7 +48,7 @@ export function DashboardPage() {
   const notifications = Array.isArray(notificationsData) ? notificationsData.slice(0, 5) : [];
   const positions = Array.isArray(positionsData) ? positionsData : [];
 
-  const pnlOf = (p: (typeof positions)[number]) => positionPnl(p, livePriceFor(livePrices, p.symbolCode));
+  const pnlOf = (p: (typeof positions)[number]) => positionPnl(p, livePriceFor(livePrices, p.symbolCode), livePrices);
   const livePnl = positions.reduce((sum, p) => sum + pnlOf(p), 0);
 
   const history = Array.isArray(historyData) ? historyData : [];

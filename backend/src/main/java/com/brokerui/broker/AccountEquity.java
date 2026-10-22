@@ -4,6 +4,7 @@ import com.brokerui.market.MarketPriceService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * The single definition of floating P/L, equity and collateral. Every service that needs one
@@ -19,7 +20,7 @@ public final class AccountEquity {
     try {
       double live = prices.getLivePrice(p.getSymbolCode());
       if (live > 0) {
-        return BrokerApiController.liveUnrealizedPnl(p, BigDecimal.valueOf(live));
+        return BrokerApiController.liveUnrealizedPnl(p, BigDecimal.valueOf(live), prices);
       }
     } catch (Exception e) {
       log.debug("No live quote for {} — using last stored floating P/L: {}", p.getSymbolCode(), e.getMessage());
@@ -48,10 +49,7 @@ public final class AccountEquity {
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     BigDecimal total = ta.getBalance();
     for (Position p : positions) {
-      BigDecimal contractSize = BrokerApiController.getContractSize(p.getSymbolCode());
-      BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
-      BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
-      BigDecimal marginLocked = avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP);
+      BigDecimal marginLocked = lockedMargin(p, leverage, prices);
       total = total.add(marginLocked).add(floatingPnl(p, prices));
     }
     return total;
@@ -65,13 +63,16 @@ public final class AccountEquity {
    * which lets the client rebuild a daily history backwards from this number.
    */
   public static BigDecimal settledValue(TradingAccount ta, List<Position> positions, List<BrokerOrder> openOrders) {
+    return settledValue(ta, positions, openOrders, null);
+  }
+
+  public static BigDecimal settledValue(TradingAccount ta, List<Position> positions, List<BrokerOrder> openOrders, MarketPriceService prices) {
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     BigDecimal total = ta.getBalance();
     for (Position p : positions) {
-      BigDecimal contractSize = BrokerApiController.getContractSize(p.getSymbolCode());
       BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
       BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
-      total = total.add(avg.multiply(qty).multiply(contractSize).divide(leverage, 4, RoundingMode.HALF_UP))
+      total = total.add(lockedMargin(p, leverage, prices))
           .add(TradingFees.calculateCommission(p.getSymbolCode(), qty, avg));
     }
     for (BrokerOrder o : openOrders) {
@@ -80,5 +81,18 @@ public final class AccountEquity {
     }
     BigDecimal debt = ta.getBorrowedBalance() == null ? BigDecimal.ZERO : ta.getBorrowedBalance();
     return total.subtract(debt);
+  }
+
+  /** Dollars of margin locked at the entry price. Zero when the cross rate is not live. */
+  private static BigDecimal lockedMargin(Position p, BigDecimal leverage, MarketPriceService prices) {
+    BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
+    BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
+    BigDecimal quote = avg.multiply(qty).multiply(BrokerApiController.getContractSize(p.getSymbolCode()));
+    Function<String, BigDecimal> rate = code -> code.equalsIgnoreCase(p.getSymbolCode())
+        ? avg
+        : (prices == null ? null : prices.marketPrice(code));
+    BigDecimal usd = UsdQuote.toUsd(p.getSymbolCode(), quote, rate);
+    if (usd == null) return BigDecimal.ZERO;
+    return usd.divide(leverage, 4, RoundingMode.HALF_UP);
   }
 }

@@ -13,17 +13,43 @@ export function livePriceFor(prices: Record<string, number>, symbol: string): nu
 }
 
 /**
+ * Quote-currency money into dollars. The rate function is only called for yen,
+ * Canadian dollars and kroner. A missing live cross returns null.
+ */
+export function toUsd(symbol: string, quoteAmount: number, rate: (code: string) => number | undefined): number | null {
+  const s = symbol.toUpperCase();
+  if (s.endsWith('USD')) return quoteAmount;
+  if (s.endsWith('JPY')) {
+    const px = rate('USDJPY');
+    return px && px > 0 ? quoteAmount / px : null;
+  }
+  if (s === 'USDCAD') {
+    const px = rate('USDCAD');
+    return px && px > 0 ? quoteAmount / px : null;
+  }
+  if (s === 'EURNOK') {
+    const eur = rate('EURUSD');
+    const nok = rate('EURNOK');
+    return eur && eur > 0 && nok && nok > 0 ? (quoteAmount * eur) / nok : null;
+  }
+  return quoteAmount;
+}
+
+/**
  * Floating P/L of an open position at the live mid (same basis as the server's equity).
- * Without a live price, falls back to the server's last unrealizedPnl.
+ * Without a live price, or without the cross rate for yen and kroner, falls back to the server's last unrealizedPnl.
  */
 export function positionPnl(
   p: Pick<Position, 'symbolCode' | 'side' | 'quantity' | 'avgPrice' | 'unrealizedPnl'>,
   livePrice: number | undefined,
+  prices?: Record<string, number>,
 ): number {
   const avg = Number(p.avgPrice ?? 0);
   if (!livePrice || !avg) return Number(p.unrealizedPnl ?? 0);
   const qty = Math.abs(Number(p.quantity ?? 0));
-  return (p.side === 'SHORT' ? -1 : 1) * (livePrice - avg) * qty * getContractSize(p.symbolCode);
+  const quote = (p.side === 'SHORT' ? -1 : 1) * (livePrice - avg) * qty * getContractSize(p.symbolCode);
+  const usd = toUsd(p.symbolCode, quote, (code) => (code === p.symbolCode.toUpperCase() ? livePrice : prices?.[code]));
+  return usd == null ? Number(p.unrealizedPnl ?? 0) : usd;
 }
 
 /** Same split as backend TradingFees.isCrypto. */
@@ -56,10 +82,17 @@ export interface OrderCost {
   total: number;
 }
 
-/** Mirrors the backend reservation: notional / leverage plus the client commission for one fill. */
-export function estimateOrderCost(symbol: string, lots: number, price: number, leverage: number): OrderCost {
+/** Mirrors the backend reservation: dollar notional / leverage plus the client commission for one fill. */
+export function estimateOrderCost(
+  symbol: string,
+  lots: number,
+  price: number,
+  leverage: number,
+  prices?: Record<string, number>,
+): OrderCost {
   const units = lots * getContractSize(symbol);
-  const notional = units * price;
+  const quote = units * price;
+  const notional = toUsd(symbol, quote, (code) => (code === symbol.toUpperCase() ? price : prices?.[code])) ?? quote;
   const margin = notional / (leverage > 0 ? leverage : LEVERAGE);
   const commission = isCryptoSymbol(symbol) ? notional * CRYPTO_COMMISSION_RATE : lots * COMMISSION_PER_LOT;
   return { units, notional, margin, commission, total: margin + commission };
