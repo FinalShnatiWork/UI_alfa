@@ -11,17 +11,11 @@ import { AuthHeader } from '@/components/AuthHeader';
 import { PasswordStrength } from '@/components/PasswordStrength';
 import { useAuth } from '@/hooks/useAuth';
 
-const CURRENCIES = ['USD', 'EUR', 'GBP'] as const;
-/** Every account is opened at 1:100 on the server. */
-const LEVERAGES = ['1:100'] as const;
-
 const schema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   email: z.string().email('validation.email'),
   password: z.string().min(8, 'validation.passwordMin'),
-  currency: z.enum(['USD', 'EUR', 'GBP']),
-  leverage: z.enum(LEVERAGES),
   terms: z.literal(true, { message: 'validation.terms' }),
   risk: z.literal(true, { message: 'validation.risk' }),
 });
@@ -52,10 +46,6 @@ export function DemoRegisterPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      currency: 'USD',
-      leverage: '1:100',
-    },
   });
 
   const onSubmit = async (data: FormData) => {
@@ -80,8 +70,6 @@ export function DemoRegisterPage() {
           idDoc: '',
           email: trimmedEmail,
           phone: '',
-          currency: data.currency,
-          leverage: data.leverage,
         });
 
         toast.show(t('alerts.registerOk'), { variant: 'success', duration: 1800 });
@@ -208,37 +196,6 @@ export function DemoRegisterPage() {
                   {t(errors.password.message ?? '')}
                 </span>
               )}
-            </div>
-
-            <div className="grid-2">
-              <div className="form-group">
-                <label htmlFor="demoCurrency">{t('register.currency')}</label>
-                <select
-                  id="demoCurrency"
-                  className="form-control"
-                  {...register('currency')}
-                >
-                  {CURRENCIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="demoLeverage">{t('register.leverage')}</label>
-                <select
-                  id="demoLeverage"
-                  className="form-control"
-                  {...register('leverage')}
-                >
-                  {LEVERAGES.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             <div className="form-group flex-gap" style={{ marginBottom: errors.terms ? 8 : 16 }}>

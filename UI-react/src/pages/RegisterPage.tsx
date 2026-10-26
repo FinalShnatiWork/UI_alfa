@@ -10,10 +10,6 @@ import { saveUserProfile } from '@/lib/userProfile';
 import { AuthHeader } from '@/components/AuthHeader';
 import { PasswordStrength } from '@/components/PasswordStrength';
 
-const CURRENCIES = ['USD', 'EUR', 'GBP'] as const;
-/** Every account is opened at 1:100 on the server. */
-const LEVERAGES = ['1:100'] as const;
-
 const schema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
@@ -21,8 +17,6 @@ const schema = z.object({
   email: z.string().email('validation.email'),
   phone: z.string().optional(),
   password: z.string().min(8, 'validation.passwordMin'),
-  currency: z.enum(['USD', 'EUR', 'GBP']),
-  leverage: z.enum(LEVERAGES),
   terms: z.literal(true, { message: 'validation.terms' }),
   risk: z.literal(true, { message: 'validation.risk' }),
 });
@@ -30,7 +24,7 @@ type FormData = z.infer<typeof schema>;
 
 /**
  * Registration Page for registering new REAL broker client accounts.
- * Collects personal identification files, contact information, passwords, and currency settings.
+ * Collects personal identification, contact information, and a password.
  * The goal of this page is to securely enroll a real user account in the broker database.
  *
  * @returns Real account registration page layout
@@ -47,10 +41,6 @@ export function RegisterPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      currency: 'USD',
-      leverage: '1:100',
-    },
   });
 
   useEffect(() => {
@@ -76,8 +66,6 @@ export function RegisterPage() {
           idDoc: data.idDoc?.trim() ?? '',
           email: trimmedEmail,
           phone: data.phone?.trim() ?? '',
-          currency: data.currency,
-          leverage: data.leverage,
         });
         toast.show(t('alerts.registerOk'), { variant: 'success', duration: 2400 });
         setTimeout(() => navigate('/login'), 1800);
@@ -193,37 +181,6 @@ export function RegisterPage() {
                   {t(errors.password.message ?? '')}
                 </span>
               )}
-            </div>
-
-            <div className="grid-2">
-              <div className="form-group">
-                <label htmlFor="regCurrency">{t('register.currency')}</label>
-                <select
-                  id="regCurrency"
-                  className="form-control"
-                  {...register('currency')}
-                >
-                  {CURRENCIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="regLeverage">{t('register.leverage')}</label>
-                <select
-                  id="regLeverage"
-                  className="form-control"
-                  {...register('leverage')}
-                >
-                  {LEVERAGES.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             <div className="form-group flex-gap">
