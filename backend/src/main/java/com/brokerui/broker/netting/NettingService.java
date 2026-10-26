@@ -513,7 +513,6 @@ public class NettingService {
       o.setLimitPrice(limit);
       o.setReserveRemaining(reserve);
       o.setClientTag(tag);
-      ta.setFreeMargin(ta.getBalance());
       accountRepo.save(ta);
       return orderRepo.save(o).getId();
     });

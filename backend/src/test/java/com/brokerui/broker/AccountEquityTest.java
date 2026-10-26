@@ -96,4 +96,11 @@ class AccountEquityTest {
 
     assertEquals(0, value.compareTo(new BigDecimal("600")), "got " + value);
   }
+
+  @Test
+  void freeCashSubtractsWithdrawalsStillWaiting() {
+    TradingAccount ta = account("1000");
+    assertEquals(0, AccountEquity.freeCash(ta, new BigDecimal("40")).compareTo(new BigDecimal("960")));
+    assertEquals(0, AccountEquity.freeCash(ta, null).compareTo(new BigDecimal("1000")));
+  }
 }

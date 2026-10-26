@@ -1,6 +1,5 @@
 package com.brokerui.broker.netting;
 
-import com.brokerui.broker.AccountEquity;
 import com.brokerui.broker.AccountTransaction;
 import com.brokerui.broker.AccountTransactionRepository;
 import com.brokerui.broker.BrokerOrder;
@@ -283,8 +282,6 @@ public class FillBooking {
     o.setRouting(routingOf(o));
     o.setFilledAt(Instant.now());
     if (o.getRealizedPnl() == null) o.setRealizedPnl(BigDecimal.ZERO);
-    ta.setEquity(liveEquity(ta));
-    ta.setFreeMargin(ta.getBalance());
   }
 
   /** Returns the whole outstanding reserve (cancel / reject of the unfilled part). */
@@ -292,8 +289,6 @@ public class FillBooking {
     BigDecimal refund = outstandingReserve(o, ta);
     if (refund.signum() > 0) marginLoanService.repaySettlementOrBorrow(ta, refund);
     o.setReserveRemaining(BigDecimal.ZERO);
-    ta.setEquity(liveEquity(ta));
-    ta.setFreeMargin(ta.getBalance());
     return refund;
   }
 
@@ -304,9 +299,5 @@ public class FillBooking {
     if (in) return "INTERNAL";
     if (ex) return "EXTERNAL";
     return o.getRouting();
-  }
-
-  public BigDecimal liveEquity(TradingAccount ta) {
-    return AccountEquity.equity(ta, positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
   }
 }

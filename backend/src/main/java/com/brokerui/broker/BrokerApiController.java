@@ -105,8 +105,6 @@ public class BrokerApiController {
     ta.setLeverage(100);
     ta.setStatus("ACTIVE");
     ta.setBalance(new BigDecimal("100000"));
-    ta.setEquity(new BigDecimal("100000"));
-    ta.setFreeMargin(new BigDecimal("100000"));
     return accountRepo.save(ta);
   }
 
@@ -122,7 +120,7 @@ public class BrokerApiController {
         positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
     // Prepaid-margin model: remaining cash is free, minus payouts still waiting for an admin.
     BigDecimal pendingOut = pendingWithdrawals(ta.getId());
-    BigDecimal freeMargin = ta.getBalance().subtract(pendingOut);
+    BigDecimal freeMargin = AccountEquity.freeCash(ta, pendingOut);
     BigDecimal settledValue = AccountEquity.settledValue(ta,
         positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()),
         orderRepo.findByTradingAccountIdAndStatusInOrderByCreatedAtDesc(ta.getId(),
@@ -240,9 +238,6 @@ public class BrokerApiController {
         txRepo.save(tx);
       }
     }
-    // Equity is balance + floating P/L everywhere else; writing bare cash here made the
-    // stored column disagree with the account's real value until the next trade.
-    ta.setEquity(recalcEquity(ta));
     accountRepo.save(ta);
 
     auditLogService.log(u, type, type + " " + amount + " " + ta.getCurrency(), request);
@@ -459,9 +454,6 @@ public class BrokerApiController {
         return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
             "required", reserved, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit())));
       }
-      ta.setEquity(recalcEquity(ta));
-      // Prepaid-margin model: remaining balance is free cash.
-      ta.setFreeMargin(ta.getBalance());
       accountRepo.save(ta);
 
       BrokerOrder order = new BrokerOrder();
@@ -534,8 +526,6 @@ public class BrokerApiController {
       return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
           "required", required, "available", ta.getBalance(), "creditLimit", ta.getCreditLimit())));
     }
-    ta.setEquity(recalcEquity(ta));
-    ta.setFreeMargin(ta.getBalance());
     accountRepo.save(ta);
 
     BrokerOrder order = new BrokerOrder();
@@ -688,9 +678,6 @@ public class BrokerApiController {
       if (refund.compareTo(BigDecimal.ZERO) > 0) {
         marginLoanService.repaySettlementOrBorrow(ta, refund);
         order.setReserveRemaining(BigDecimal.ZERO);
-        ta.setEquity(recalcEquity(ta));
-        // Prepaid-margin model: free cash is the remaining balance (margin already deducted).
-        ta.setFreeMargin(ta.getBalance());
         accountRepo.save(ta);
       }
     }

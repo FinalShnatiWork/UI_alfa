@@ -43,12 +43,6 @@ public class TradingAccount {
   @Column(nullable = false, precision = 18, scale = 8)
   private BigDecimal balance = BigDecimal.ZERO;
 
-  @Column(nullable = false, precision = 18, scale = 8)
-  private BigDecimal equity = BigDecimal.ZERO;
-
-  @Column(name = "free_margin", nullable = false, precision = 18, scale = 8)
-  private BigDecimal freeMargin = BigDecimal.ZERO;
-
   // Amount currently borrowed from the broker's credit line (margin loan).
   @Column(name = "borrowed_balance", nullable = false, precision = 18, scale = 8)
   private BigDecimal borrowedBalance = BigDecimal.ZERO;
@@ -138,22 +132,6 @@ public class TradingAccount {
 
   public void setBalance(BigDecimal balance) {
     this.balance = balance;
-  }
-
-  public BigDecimal getEquity() {
-    return equity;
-  }
-
-  public void setEquity(BigDecimal equity) {
-    this.equity = equity;
-  }
-
-  public BigDecimal getFreeMargin() {
-    return freeMargin;
-  }
-
-  public void setFreeMargin(BigDecimal freeMargin) {
-    this.freeMargin = freeMargin;
   }
 
   public Instant getCreatedAt() {

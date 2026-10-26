@@ -1,8 +1,10 @@
 package com.brokerui.broker.netting;
 
+import com.brokerui.broker.AccountEquity;
 import com.brokerui.broker.BrokerOrder;
 import com.brokerui.broker.BrokerOrderRepository;
 import com.brokerui.broker.ContractSpecs;
+import com.brokerui.broker.PositionRepository;
 import com.brokerui.broker.TradingAccount;
 import com.brokerui.broker.TradingAccountRepository;
 import com.brokerui.broker.TradingFees;
@@ -42,12 +44,14 @@ public class NettingAdminController {
   private final InternalMatchRepository matchRepo;
   private final BrokerOrderRepository orderRepo;
   private final TradingAccountRepository accountRepo;
+  private final PositionRepository positionRepo;
   private final MarketPriceService priceService;
   private final EntityManager em;
 
   public NettingAdminController(NettingService netting, HouseLiquiditySimulator hls, NettingProperties props,
       NettingEventLog eventLog, InternalMatchRepository matchRepo, BrokerOrderRepository orderRepo,
-      TradingAccountRepository accountRepo, MarketPriceService priceService, EntityManager em) {
+      TradingAccountRepository accountRepo, PositionRepository positionRepo,
+      MarketPriceService priceService, EntityManager em) {
     this.netting = netting;
     this.hls = hls;
     this.props = props;
@@ -55,6 +59,7 @@ public class NettingAdminController {
     this.matchRepo = matchRepo;
     this.orderRepo = orderRepo;
     this.accountRepo = accountRepo;
+    this.positionRepo = positionRepo;
     this.priceService = priceService;
     this.em = em;
   }
@@ -431,7 +436,8 @@ public class NettingAdminController {
       a.put("email", ta.getUser().getEmail());
       a.put("displayName", ta.getUser().getDisplayName());
       a.put("balance", ta.getBalance());
-      a.put("equity", ta.getEquity());
+      a.put("equity", AccountEquity.equity(ta,
+          positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(id), priceService));
       a.put("commissionPaidTotal", ta.getCommissionPaidTotal());
       a.put("openPositions", num(em.createNativeQuery("SELECT COUNT(*) FROM position WHERE trading_account_id = ?1").setParameter(1, id).getSingleResult()));
       a.put("unrealizedPnl", dec(em.createNativeQuery("SELECT COALESCE(SUM(unrealized_pnl),0) FROM position WHERE trading_account_id = ?1").setParameter(1, id).getSingleResult()));

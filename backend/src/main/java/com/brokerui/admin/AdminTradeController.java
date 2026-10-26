@@ -5,6 +5,7 @@ import com.brokerui.broker.BrokerOrderRepository;
 import com.brokerui.broker.Position;
 import com.brokerui.broker.PositionRepository;
 import com.brokerui.broker.TradingAccountRepository;
+import com.brokerui.broker.AccountEquity;
 import com.brokerui.broker.AccountTransaction;
 import com.brokerui.broker.AccountTransactionRepository;
 import com.brokerui.broker.TradingAccount;
@@ -16,6 +17,7 @@ import com.brokerui.broker.MarginLoanLedger;
 import com.brokerui.broker.MarginLoanLedgerRepository;
 import com.brokerui.broker.MarginLoanService;
 import com.brokerui.broker.AuditLogService;
+import com.brokerui.market.MarketPriceService;
 import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,6 +58,7 @@ public class AdminTradeController {
   private final MarginLoanService marginLoanService;
   private final AuditLogService auditLogService;
   private final AppUserRepository userRepo;
+  private final MarketPriceService priceService;
 
   /**
    * Constructs the AdminTradeController with required repositories and services.
@@ -72,15 +75,18 @@ public class AdminTradeController {
    * @param marginLoanService the margin credit line service (interest/liquidation)
    * @param auditLogService records which admin changed what
    * @param userRepo resolves the acting admin for the audit log
+   * @param priceService live quotes for the same account value the cabinet shows
    */
   public AdminTradeController(BrokerOrderRepository orderRepo, PositionRepository positionRepo,
         TradingAccountRepository accountRepo, AccountTransactionRepository transactionRepo,
         KycCaseRepository kycRepo, NotificationRepository notifRepo,
         AuditLogRepository auditRepo, MT5ConnectionManager mt5ConnectionManager,
         MarginLoanLedgerRepository marginLedgerRepo,
-        MarginLoanService marginLoanService, AuditLogService auditLogService, AppUserRepository userRepo) {
+        MarginLoanService marginLoanService, AuditLogService auditLogService, AppUserRepository userRepo,
+        MarketPriceService priceService) {
     this.auditLogService = auditLogService;
     this.userRepo = userRepo;
+    this.priceService = priceService;
     this.orderRepo = orderRepo;
     this.positionRepo = positionRepo;
     this.accountRepo = accountRepo;
@@ -168,8 +174,11 @@ public class AdminTradeController {
     return accountRepo.findAll().stream()
       .map(a -> {
         BigDecimal level = marginLoanService.computeMarginLevel(a);
+        BigDecimal equity = AccountEquity.equity(a,
+            positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(a.getId()), priceService);
+        BigDecimal free = AccountEquity.freeCash(a, pendingWithdrawals(a.getId()));
         return new AccountDto(a.getId(), a.getUser().getId(), a.getAccountType(), a.getCurrency(), a.getLeverage(),
-            a.getStatus(), a.getBalance(), a.getEquity(), a.getFreeMargin(),
+            a.getStatus(), a.getBalance(), equity, free,
             a.getBorrowedBalance(), level == null ? null : level.multiply(BigDecimal.valueOf(100)),
             a.getInterestAccruedTotal(), a.getCommissionPaidTotal(), a.isSimulated());
       })
@@ -277,8 +286,6 @@ public class AdminTradeController {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "withdrawal_would_trigger_margin_call"));
     }
     ta.setBalance(ta.getBalance().subtract(tx.getAmount()));
-    ta.setEquity(storedEquity(ta));
-    ta.setFreeMargin(ta.getBalance());
     accountRepo.save(ta);
     tx.setStatus("APPROVED");
     tx.setProcessedAt(Instant.now());
@@ -289,12 +296,12 @@ public class AdminTradeController {
     return ResponseEntity.ok(Map.of("ok", true, "status", "APPROVED", "newBalance", ta.getBalance()));
   }
 
-  /** Cash plus the last stored floating P/L. Live quotes are refreshed on the next trade. */
-  private BigDecimal storedEquity(TradingAccount ta) {
-    BigDecimal floating = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()).stream()
-        .map(p -> p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl())
+  /** Withdrawals an admin has not paid or refused yet. Same sum the cabinet subtracts from free cash. */
+  private BigDecimal pendingWithdrawals(Long accountId) {
+    return transactionRepo.findByTradingAccountIdOrderByCreatedAtDesc(accountId).stream()
+        .filter(t -> "WITHDRAWAL".equals(t.getTxType()) && "PENDING".equals(t.getStatus()))
+        .map(AccountTransaction::getAmount)
         .reduce(BigDecimal.ZERO, BigDecimal::add);
-    return ta.getBalance().add(floating);
   }
 
   public record KycDto(Long id, Long userId, String status, Instant submittedAt, Instant reviewedAt, String note) {}
@@ -415,8 +422,6 @@ public class AdminTradeController {
                org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
       BigDecimal before = acc.getBalance();
       acc.setBalance(req.balance());
-      acc.setEquity(storedEquity(acc));
-      acc.setFreeMargin(acc.getBalance());
       accountRepo.save(acc);
       audit(auth, "ADMIN_BALANCE_SET",
           accountLabel(acc) + " balance " + before + " -> " + req.balance() + " " + acc.getCurrency(), request);

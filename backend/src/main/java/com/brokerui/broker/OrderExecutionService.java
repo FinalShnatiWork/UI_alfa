@@ -171,8 +171,6 @@ public class OrderExecutionService {
       BigDecimal refund = com.brokerui.broker.netting.FillBooking.outstandingReserve(order, ta);
       if (refund.compareTo(BigDecimal.ZERO) > 0) {
         marginLoanService.repaySettlementOrBorrow(ta, refund);
-        ta.setEquity(recalcEquity(ta));
-        ta.setFreeMargin(ta.getBalance());
         accountRepo.save(ta);
       }
     }
@@ -216,10 +214,6 @@ public class OrderExecutionService {
     if ("BUY".equals(side)) return last.compareTo(stop) >= 0;
     if ("SELL".equals(side)) return last.compareTo(stop) <= 0;
     return false;
-  }
-
-  private BigDecimal recalcEquity(TradingAccount ta) {
-    return AccountEquity.equity(ta, positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
   }
 
   private void checkPositionsSlTp() {
@@ -344,8 +338,6 @@ public class OrderExecutionService {
 
     marginLoanService.repaySettlementOrBorrow(ta, close.settlement());
     positionRepo.delete(pos);
-    ta.setEquity(recalcEquity(ta));
-    ta.setFreeMargin(ta.getBalance());
     accountRepo.save(ta);
     orderRepo.save(order);
 

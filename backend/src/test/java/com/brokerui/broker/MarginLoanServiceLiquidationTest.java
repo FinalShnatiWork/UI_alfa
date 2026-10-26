@@ -225,8 +225,6 @@ class MarginLoanServiceLiquidationTest {
     verify(netting, times(2)).offerClose(anyLong(), eq("LIQUIDATION"));
     assertTrue(livePositions.isEmpty());
     assertEquals(0, ta.getBorrowedBalance().compareTo(BigDecimal.ZERO), "unpayable debt is written off once nothing is open");
-    assertEquals(0, ta.getEquity().compareTo(ta.getBalance()),
-        "stored equity must be balance + floating P/L, not the margin-level collateral");
   }
 
   @Test

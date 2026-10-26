@@ -432,7 +432,6 @@ public class MarginLoanService {
           "Liquidation complete — residual debt written off");
       ta.setBorrowedBalance(BigDecimal.ZERO);
       stopInterestClockIfRepaid(ta);
-      ta.setEquity(AccountEquity.equity(ta, stillOpen, priceService));
       accountRepo.save(ta);
       auditLogService.log(ta.getUser(), "LIQUIDATION", "residual debt written off after positions closed", null);
     }
@@ -478,7 +477,6 @@ public class MarginLoanService {
 
     positionRepo.delete(pos);
     repaySettlementOrBorrow(ta, close.settlement());
-    ta.setEquity(AccountEquity.equity(ta, openPositions(ta), priceService));
     accountRepo.save(ta);
 
     try {

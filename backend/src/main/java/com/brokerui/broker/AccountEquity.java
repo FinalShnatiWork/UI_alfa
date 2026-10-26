@@ -33,11 +33,19 @@ public final class AccountEquity {
    * opened (prepaid-margin model), so it is not added back. This is the equity clients see.
    */
   public static BigDecimal equity(TradingAccount ta, List<Position> positions, MarketPriceService prices) {
-    BigDecimal total = ta.getBalance();
+    BigDecimal total = ta.getBalance() == null ? BigDecimal.ZERO : ta.getBalance();
+    if (positions == null) return total;
     for (Position p : positions) {
       total = total.add(floatingPnl(p, prices));
     }
     return total;
+  }
+
+  /** Cash still free to use: balance minus withdrawals an admin has not paid or refused yet. */
+  public static BigDecimal freeCash(TradingAccount ta, BigDecimal pendingWithdrawals) {
+    BigDecimal balance = ta.getBalance() == null ? BigDecimal.ZERO : ta.getBalance();
+    BigDecimal pending = pendingWithdrawals == null ? BigDecimal.ZERO : pendingWithdrawals;
+    return balance.subtract(pending);
   }
 
   /**

@@ -76,8 +76,6 @@ public class AuthBootstrap implements ApplicationRunner {
       acc.setAccountType("DEMO");
       acc.setCurrency("USD");
       acc.setBalance(new BigDecimal("10000.00"));
-      acc.setEquity(new BigDecimal("10000.00"));
-      acc.setFreeMargin(new BigDecimal("10000.00"));
       acc.setCreditLimit(new BigDecimal("10000.00"));
       acc.setDailyInterestRate(new BigDecimal("0.005"));
       acc.setLeverage(100);
@@ -118,8 +116,6 @@ public class AuthBootstrap implements ApplicationRunner {
       a.setAccountType("DEMO");
       a.setCurrency("USD");
       a.setBalance(new BigDecimal("5000.00"));
-      a.setEquity(new BigDecimal("5000.00"));
-      a.setFreeMargin(new BigDecimal("5000.00"));
       a.setCreditLimit(new BigDecimal("10000.00"));
       a.setDailyInterestRate(new BigDecimal("0.005"));
       a.setLeverage(100);
@@ -150,8 +146,6 @@ public class AuthBootstrap implements ApplicationRunner {
       a.setAccountType("DEMO");
       a.setCurrency("USD");
       a.setBalance(new BigDecimal("15000.00"));
-      a.setEquity(new BigDecimal("15000.00"));
-      a.setFreeMargin(new BigDecimal("15000.00"));
       a.setCreditLimit(new BigDecimal("25000.00"));
       a.setDailyInterestRate(new BigDecimal("0.003")); // 0.3%/day VIP rate
       a.setLeverage(100);
@@ -183,8 +177,6 @@ public class AuthBootstrap implements ApplicationRunner {
       a.setBorrowedBalance(new BigDecimal("1500.00"));
       a.setInterestAccruedTotal(new BigDecimal("17.50"));
       a.setLastInterestAt(Instant.now());
-      a.setEquity(new BigDecimal("2500.00"));
-      a.setFreeMargin(new BigDecimal("2500.00"));
       a.setCreditLimit(new BigDecimal("10000.00"));
       a.setDailyInterestRate(new BigDecimal("0.005"));
       a.setLeverage(100);
@@ -227,8 +219,6 @@ public class AuthBootstrap implements ApplicationRunner {
       a.setBorrowedBalance(new BigDecimal("3400.00"));
       a.setInterestAccruedTotal(new BigDecimal("45.00"));
       a.setLastInterestAt(Instant.now());
-      a.setEquity(new BigDecimal("3680.00"));
-      a.setFreeMargin(new BigDecimal("280.00"));
       a.setCreditLimit(new BigDecimal("10000.00"));
       a.setDailyInterestRate(new BigDecimal("0.007")); // 0.7%/day high risk rate
       a.setLeverage(100);
