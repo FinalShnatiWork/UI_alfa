@@ -895,62 +895,9 @@ export function ChartsPage() {
 
   const instruments = CATEGORY_CONFIG[category].instruments;
 
-  return (
-    <>
-      <BackPageHeader titleKey="charts.title" />
-
-      <div className="container mt-20">
-        <p className="charts-disclaimer mb-20">{t('charts.dataNote')}</p>
-
-        {/* Category tabs */}
-        <div className="horizontal-pills-scroll mb-12">
-          {(['forex', 'metals', 'crypto'] as Category[]).map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              className={`btn ${category === cat ? 'btn-primary' : 'btn-outline-dark'}`}
-              onClick={() => {
-                const newSym = CATEGORY_CONFIG[cat].instruments[0].id;
-                setCategory(cat); setSymbol(newSym);
-              }}
-            >
-              {t(`charts.cat${cat.charAt(0).toUpperCase() + cat.slice(1)}`)}
-            </button>
-          ))}
-        </div>
-
-        {/* Instrument buttons */}
-        <div className="horizontal-pills-scroll mb-12">
-          {instruments.map((instr) => (
-            <button
-              key={instr.id}
-              type="button"
-              className={`btn ${symbol === instr.id ? 'btn-primary' : 'btn-outline-dark'}`}
-              onClick={() => setSymbol(instr.id)}
-            >
-              {instr.title}
-            </button>
-          ))}
-        </div>
-
-        {/* Interval buttons */}
-        <div className="horizontal-pills-scroll mb-20">
-          {INTERVALS.map((iv) => (
-            <button
-              key={iv}
-              type="button"
-              className={`btn ${interval === iv ? 'btn-primary' : 'btn-outline-dark'}`}
-              style={{ padding: '8px 14px', fontSize: '0.85rem' }}
-              onClick={() => setInterval_(iv)}
-            >
-              {iv}
-            </button>
-          ))}
-        </div>
-
-        {/* Main layout */}
-        <div className="charts-main-layout">
-          {/* Left: chart */}
+  // Candle chart and the bid/ask line under it.
+  function chartPane() {
+    return (
           <div className="charts-left-col">
             <div className="card chart-preview-area" style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', top: 10, right: 12, zIndex: 10, display: 'flex', gap: 6, opacity: 0.75 }}>
@@ -974,8 +921,12 @@ export function ChartsPage() {
               <div className="text-sm text-secondary">{status}</div>
             </div>
           </div>
+    );
+  }
 
-          {/* Right: trading panel */}
+  // Order ticket: live price, volume, stops, buy and sell.
+  function orderTicket() {
+    return (
           <div className="charts-right-col">
             <div className="card trading-panel-card">
               {/* Live price banner */}
@@ -1088,9 +1039,12 @@ export function ChartsPage() {
               </div>
             </div>
           </div>
-        </div>
+    );
+  }
 
-        {/* Inline positions */}
+  // Open positions and waiting orders, table on a computer and cards on a phone.
+  function openBook() {
+    return (
         <div className="mt-20 charts-orders-section">
           <div className="charts-orders-toolbar">
             <div className="charts-orders-tabs">
@@ -1323,6 +1277,68 @@ export function ChartsPage() {
             )}
           </div>
         </div>
+    );
+  }
+
+  return (
+    <>
+      <BackPageHeader titleKey="charts.title" />
+
+      <div className="container mt-20">
+        <p className="charts-disclaimer mb-20">{t('charts.dataNote')}</p>
+
+        {/* Category tabs */}
+        <div className="horizontal-pills-scroll mb-12">
+          {(['forex', 'metals', 'crypto'] as Category[]).map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className={`btn ${category === cat ? 'btn-primary' : 'btn-outline-dark'}`}
+              onClick={() => {
+                const newSym = CATEGORY_CONFIG[cat].instruments[0].id;
+                setCategory(cat); setSymbol(newSym);
+              }}
+            >
+              {t(`charts.cat${cat.charAt(0).toUpperCase() + cat.slice(1)}`)}
+            </button>
+          ))}
+        </div>
+
+        {/* Instrument buttons */}
+        <div className="horizontal-pills-scroll mb-12">
+          {instruments.map((instr) => (
+            <button
+              key={instr.id}
+              type="button"
+              className={`btn ${symbol === instr.id ? 'btn-primary' : 'btn-outline-dark'}`}
+              onClick={() => setSymbol(instr.id)}
+            >
+              {instr.title}
+            </button>
+          ))}
+        </div>
+
+        {/* Interval buttons */}
+        <div className="horizontal-pills-scroll mb-20">
+          {INTERVALS.map((iv) => (
+            <button
+              key={iv}
+              type="button"
+              className={`btn ${interval === iv ? 'btn-primary' : 'btn-outline-dark'}`}
+              style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+              onClick={() => setInterval_(iv)}
+            >
+              {iv}
+            </button>
+          ))}
+        </div>
+
+        <div className="charts-main-layout">
+          {chartPane()}
+          {orderTicket()}
+        </div>
+
+        {openBook()}
       </div>
       {loanOffer && <LoanOfferModal {...loanOffer} />}
       {orderConfirm && (
