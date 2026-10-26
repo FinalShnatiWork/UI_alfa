@@ -1,0 +1,817 @@
+// Stand-in broker for the published site, where the Java server is not running.
+// api.ts forwards here only when IS_MOCK is on. Live screens never import this file.
+import { getLang } from '@/lib/i18n';
+import { ApiError } from '@/lib/apiError';
+import { getContractSize } from '@/lib/contractSize';
+
+const MOCK_DELAY = 150; // simulated latency
+
+const defaultOverview = {
+  tradingAccountId: 1001,
+  accountType: "DEMO",
+  currency: "USD",
+  leverage: 100,
+  balance: 100000.00,
+  equity: 100000.00,
+  marginUsed: 0.00,
+  freeMargin: 100000.00,
+  borrowedBalance: 0.00
+};
+
+const defaultNotifications = [
+  {
+    id: 1,
+    notifType: "INFO",
+    title: "notification.demoWelcome.title",
+    body: "notification.demoWelcome.body",
+    readAt: null,
+    createdAt: new Date().toISOString()
+  }
+];
+
+const defaultPreferences = () => ({
+  lang: getLang(),
+  theme: "dark"
+});
+
+function getStorage<T>(key: string, def: T): T {
+  const val = localStorage.getItem(key);
+  if (!val) {
+    localStorage.setItem(key, JSON.stringify(def));
+    return def;
+  }
+  try {
+    return JSON.parse(val);
+  } catch {
+    return def;
+  }
+}
+
+function setStorage<T>(key: string, val: T): void {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+function parseOverviewValue(val: any): number {
+  if (typeof val === 'number') return val;
+  return parseFloat(val || '0');
+}
+
+// Fetch live prices using Bybit directly for crypto (to match requested feed) and backend proxy as fallback/Forex.
+async function getLivePrice(symbol: string): Promise<number> {
+  const sym = symbol.replace('/', '').toUpperCase();
+  
+  if (sym.includes('BTC') || sym.includes('ETH') || sym.includes('SOL') || sym.includes('XRP')) {
+    try {
+      const mapped = sym.endsWith('USD') ? sym + 'T' : sym;
+      const res = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${mapped}`);
+      if (res.ok) {
+        const data = await res.json();
+        const priceStr = data.result?.list?.[0]?.lastPrice;
+        if (priceStr) return parseFloat(priceStr);
+      }
+    } catch (e) {
+      console.error("Bybit direct fetch failed, falling back to backend", e);
+    }
+  }
+
+  try {
+    const res = await fetch(`/api/market/price/${sym}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.price) return Number(data.price);
+    }
+  } catch (e) {
+    console.error("Backend price fetch failed", e);
+  }
+
+  // Fallbacks if both fail
+  if (symbol.includes('BTC')) return 103430.50;
+  if (symbol.includes('ETH')) return 2420.20;
+  if (symbol.includes('SOL')) return 170.80;
+  if (symbol.includes('XAU')) return 4660.00;
+  if (symbol.includes('XAG')) return 83.00;
+  return 1.17;
+}
+
+/**
+ * Background-like matching scheduler for offline mock portfolio mode.
+ * Evaluates pending LIMIT / STOP orders against live market quotes,
+ * deducts/adjusts margins, handles separate positions (hedging),
+ * and creates trade fills.
+ */
+async function processMockSlTp(): Promise<void> {
+  const positions = getStorage<any[]>('mock_positions', []);
+  if (positions.length === 0) return;
+
+  const overview = getStorage<any>('mock_overview', defaultOverview);
+  let balance = parseOverviewValue(overview.balance);
+  const history = getStorage<any[]>('mock_history', []);
+  const notifications = getStorage<any[]>('mock_notifications', defaultNotifications);
+
+  let changed = false;
+  const stillActive: any[] = [];
+
+  for (const pos of positions) {
+    const sl = pos.stopLoss ? parseFloat(pos.stopLoss) : 0;
+    const tp = pos.takeProfit ? parseFloat(pos.takeProfit) : 0;
+
+    if (sl <= 0 && tp <= 0) {
+      stillActive.push(pos);
+      continue;
+    }
+
+    const price = await getLivePrice(pos.symbolCode);
+    const qty = Math.abs(parseFloat(pos.quantity));
+    const avg = parseFloat(pos.avgPrice);
+    const isShort = pos.side === 'SHORT';
+
+    let shouldClose = false;
+    let triggerPrice = price;
+    let reason = '';
+
+    // Check Stop Loss
+    if (sl > 0) {
+      if (isShort) {
+        if (price >= sl) {
+          shouldClose = true;
+          triggerPrice = sl;
+          reason = 'STOP_LOSS';
+        }
+      } else {
+        if (price <= sl) {
+          shouldClose = true;
+          triggerPrice = sl;
+          reason = 'STOP_LOSS';
+        }
+      }
+    }
+
+    // Check Take Profit
+    if (tp > 0) {
+      if (isShort) {
+        if (price <= tp) {
+          shouldClose = true;
+          triggerPrice = tp;
+          reason = 'TAKE_PROFIT';
+        }
+      } else {
+        if (price >= tp) {
+          shouldClose = true;
+          triggerPrice = tp;
+          reason = 'TAKE_PROFIT';
+        }
+      }
+    }
+
+    if (shouldClose) {
+      changed = true;
+      const leverage = 100;
+      const contractSize = getContractSize(pos.symbolCode);
+      const pnl = isShort ? (avg - triggerPrice) * qty * contractSize : (triggerPrice - avg) * qty * contractSize;
+      const marginReturned = (qty * contractSize * avg) / leverage;
+
+      balance = balance + marginReturned + pnl;
+
+      // Add to history
+      history.unshift({
+        id: Date.now() + Math.random(),
+        symbolCode: pos.symbolCode,
+        side: isShort ? 'BUY' : 'SELL',
+        orderType: 'MARKET',
+        status: 'FILLED',
+        quantity: qty.toString(),
+        entryPrice: triggerPrice.toString(),
+        realizedPnl: pnl.toFixed(2),
+        createdAt: new Date().toISOString(),
+        filledAt: new Date().toISOString()
+      });
+
+      // Add notification
+      notifications.unshift({
+        id: Date.now() + Math.random(),
+        notifType: 'TRADE',
+        title: reason === 'STOP_LOSS' ? 'notification.tradeClosed.slTriggered' : 'notification.tradeClosed.tpTriggered',
+        body: JSON.stringify({
+          side: isShort ? 'SELL' : 'BUY',
+          qty: qty.toFixed(4),
+          symbol: pos.symbolCode,
+          price: triggerPrice.toFixed(5),
+          pnl: pnl.toFixed(2)
+        }),
+        readAt: null,
+        createdAt: new Date().toISOString()
+      });
+    } else {
+      stillActive.push(pos);
+    }
+  }
+
+  if (changed) {
+    overview.balance = balance.toFixed(2);
+    setStorage('mock_overview', overview);
+    setStorage('mock_positions', stillActive);
+    setStorage('mock_history', history);
+    setStorage('mock_notifications', notifications);
+  }
+}
+
+async function processMockPendingOrders(): Promise<void> {
+  await processMockSlTp();
+  const pending = getStorage<any[]>('mock_pending', []);
+  if (pending.length === 0) return;
+
+  const positions = getStorage<any[]>('mock_positions', []);
+  const overview = getStorage<any>('mock_overview', defaultOverview);
+  const history = getStorage<any[]>('mock_history', []);
+  const notifications = getStorage<any[]>('mock_notifications', defaultNotifications);
+
+  let balance = parseOverviewValue(overview.balance);
+  let changed = false;
+  const stillPending: any[] = [];
+
+  for (const order of pending) {
+    try {
+      const price = await getLivePrice(order.symbolCode);
+      const qty = parseFloat(order.quantity);
+      const limitVal = order.limitPrice ? parseFloat(order.limitPrice) : null;
+      const stopVal = order.stopPrice ? parseFloat(order.stopPrice) : null;
+      
+      let shouldFill = false;
+      if (order.orderType === 'LIMIT') {
+        if (order.side === 'BUY' && limitVal !== null) {
+          shouldFill = price <= limitVal;
+        } else if (order.side === 'SELL' && limitVal !== null) {
+          shouldFill = price >= limitVal;
+        }
+      } else if (order.orderType === 'STOP') {
+        if (order.side === 'BUY' && stopVal !== null) {
+          shouldFill = price >= stopVal;
+        } else if (order.side === 'SELL' && stopVal !== null) {
+          shouldFill = price <= stopVal;
+        }
+      }
+
+      if (shouldFill) {
+        changed = true;
+        const fillPrice = limitVal ?? stopVal ?? price;
+        const leverage = 100;
+        const contractSize = getContractSize(order.symbolCode);
+        const cost = (qty * contractSize * fillPrice) / leverage;
+
+        // Refund reserved funds, then deduct actual fill cost
+        const reservedPrice = limitVal ?? stopVal ?? fillPrice;
+        const reserved = (qty * contractSize * reservedPrice) / leverage;
+        
+        balance = balance + reserved - cost;
+
+        // Hedging model: BUY opens a LONG position, SELL opens a SHORT position (no opposite merges).
+        const sideTarget = order.side === 'BUY' ? 'LONG' : 'SHORT';
+        positions.push({
+          id: Date.now() + Math.random(),
+          symbolCode: order.symbolCode,
+          side: sideTarget,
+          quantity: qty.toString(),
+          avgPrice: fillPrice.toString(),
+          unrealizedPnl: '0.00',
+          openedAt: new Date().toISOString(),
+          takeProfit: order.takeProfit,
+          stopLoss: order.stopLoss
+        });
+
+        // Move to history as FILLED
+        history.unshift({
+          id: order.id,
+          symbolCode: order.symbolCode,
+          side: order.side,
+          orderType: order.orderType,
+          status: 'FILLED',
+          quantity: order.quantity,
+          limitPrice: order.limitPrice,
+          stopPrice: order.stopPrice,
+          entryPrice: fillPrice.toString(),
+          createdAt: order.createdAt,
+          filledAt: new Date().toISOString()
+        });
+
+        // Add trade notification
+        notifications.unshift({
+          id: Date.now() + Math.random(),
+          notifType: 'TRADE',
+          title: 'notification.tradeOpened.title',
+          body: JSON.stringify({ side: order.side, qty: qty.toFixed(4), symbol: order.symbolCode, price: fillPrice.toFixed(5) }),
+          readAt: null,
+          createdAt: new Date().toISOString()
+        });
+      } else {
+        stillPending.push(order);
+      }
+    } catch {
+      stillPending.push(order);
+    }
+  }
+
+  if (changed) {
+    overview.balance = balance;
+    setStorage('mock_overview', overview);
+    setStorage('mock_positions', positions);
+    setStorage('mock_history', history);
+    setStorage('mock_pending', stillPending);
+    setStorage('mock_notifications', notifications);
+  }
+}
+
+export async function mockGet(path: string): Promise<any> {
+  await new Promise(r => setTimeout(r, MOCK_DELAY));
+
+  if (path.includes('/api/auth/csrf')) {
+    return {};
+  }
+
+  if (path.includes('/api/health')) {
+    return { status: 'UP' };
+  }
+
+  if (path.includes('/api/auth/me')) {
+    if (localStorage.getItem('mock_logged_in') !== 'true') {
+      throw new ApiError(401, 'Unauthorized', path);
+    }
+    return {
+      id: 1,
+      email: localStorage.getItem('mock_user_email') || 'demo@tradeadge.com',
+      displayName: localStorage.getItem('mock_user_name') || 'Demo Trader',
+      role: 'USER',
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  if (path.includes('/api/broker/overview')) {
+    await processMockPendingOrders();
+    const overview = getStorage<any>('mock_overview', defaultOverview);
+    const positions = getStorage<any[]>('mock_positions', []);
+    
+    let unrealizedPnlTotal = 0;
+    for (const pos of positions) {
+      unrealizedPnlTotal += parseFloat(pos.unrealizedPnl || '0');
+    }
+    
+    const balance = parseOverviewValue(overview.balance);
+    const equity = balance + unrealizedPnlTotal;
+    
+    const updated = {
+      ...overview,
+      balance: balance.toFixed(2),
+      equity: equity.toFixed(2),
+      freeMargin: (equity - parseOverviewValue(overview.marginUsed)).toFixed(2)
+    };
+    
+    setStorage('mock_overview', updated);
+    return updated;
+  }
+
+  if (path.includes('/api/broker/positions')) {
+    await processMockPendingOrders();
+    const positions = getStorage<any[]>('mock_positions', []);
+    for (const pos of positions) {
+      const livePrice = await getLivePrice(pos.symbolCode);
+      const avgPrice = parseFloat(pos.avgPrice);
+      const qty = parseFloat(pos.quantity);
+      
+      let pnl: number;
+      const contractSize = getContractSize(pos.symbolCode);
+      if (pos.side === 'SHORT') {
+        pnl = (avgPrice - livePrice) * qty * contractSize;
+      } else {
+        pnl = (livePrice - avgPrice) * qty * contractSize;
+      }
+      pos.unrealizedPnl = pnl.toFixed(2);
+    }
+    setStorage('mock_positions', positions);
+    return positions;
+  }
+
+  if (path.includes('/api/broker/notifications')) {
+    return getStorage('mock_notifications', defaultNotifications);
+  }
+
+  if (path.includes('/api/broker/transactions')) {
+    return getStorage('mock_transactions', [
+      {
+        id: 1,
+        txType: "DEPOSIT",
+        amount: 100000.00,
+        method: "MOCK",
+        status: "COMPLETED",
+        createdAt: new Date().toISOString(),
+        note: "Initial demo funds"
+      }
+    ]);
+  }
+
+  if (path.includes('/api/broker/history')) {
+    return getStorage('mock_history', []);
+  }
+
+  if (path.includes('/api/broker/orders/pending')) {
+    await processMockPendingOrders();
+    return getStorage('mock_pending', []);
+  }
+
+  if (path.includes('/api/broker/preferences')) {
+    return getStorage('mock_preferences', defaultPreferences());
+  }
+
+  if (path.includes('/api/market/price/')) {
+    const parts = path.split('/');
+    const symbol = parts[parts.length - 1];
+    const price = await getLivePrice(symbol);
+    return { price };
+  }
+
+  if (path.includes('/candles')) {
+    const urlObj = new URL(path, window.location.origin);
+    const symbol = urlObj.searchParams.get('symbol') || 'BTCUSDT';
+    const cleanSymbol = symbol.replace('/', '').toUpperCase();
+    try {
+      const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=1h&limit=200`;
+      const res = await fetch(binanceUrl);
+      if (res.ok) {
+        const klines = await res.json();
+        return klines.map((k: any) => [
+          k[0], // Time
+          k[1], // Open
+          k[2], // High
+          k[3], // Low
+          k[4], // Close
+          k[5]  // Volume
+        ]);
+      }
+    } catch (e) {
+      console.error("Failed to fetch klines from binance", e);
+    }
+    // Fallback candles
+    const nowMs = Date.now();
+    const mockCandles = [];
+    let price = 50000;
+    for (let i = 0; i < 200; i++) {
+      const open = price + (Math.random() - 0.5) * 500;
+      const close = open + (Math.random() - 0.5) * 500;
+      const high = Math.max(open, close) + Math.random() * 200;
+      const low = Math.min(open, close) - Math.random() * 200;
+      mockCandles.push([
+        nowMs - (200 - i) * 3600000,
+        open.toString(),
+        high.toString(),
+        low.toString(),
+        close.toString(),
+        "100.0"
+      ]);
+      price = close;
+    }
+    return mockCandles;
+  }
+
+  return null;
+}
+
+export async function mockPost(path: string, body: any): Promise<Response> {
+  await new Promise(r => setTimeout(r, MOCK_DELAY));
+
+  if (path.includes('/api/auth/login')) {
+    let email = 'demo@tradeadge.com';
+    if (body instanceof URLSearchParams || typeof body === 'string') {
+      const params = new URLSearchParams(body);
+      email = params.get('username') || email;
+    } else if (body && typeof body === 'object') {
+      email = body.email || body.username || email;
+    }
+    
+    localStorage.setItem('mock_logged_in', 'true');
+    localStorage.setItem('mock_user_email', email);
+    localStorage.setItem('mock_user_name', email.split('@')[0]);
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/auth/register')) {
+    const email = body?.email || 'demo@tradeadge.com';
+    const name = body?.displayName || email.split('@')[0];
+    localStorage.setItem('mock_logged_in', 'true');
+    localStorage.setItem('mock_user_email', email);
+    localStorage.setItem('mock_user_name', name);
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/auth/logout')) {
+    localStorage.setItem('mock_logged_in', 'false');
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/broker/orders') && !path.includes('/cancel')) {
+    const orderReq = body;
+    const symbolCode = orderReq.symbolCode;
+    const side = orderReq.side;
+    const orderType = orderReq.orderType;
+    const quantity = parseFloat(orderReq.quantity || '0');
+    
+    const price = await getLivePrice(symbolCode);
+    const leverage = 100;
+    const contractSize = getContractSize(symbolCode);
+    const cost = (quantity * contractSize * price) / leverage;
+    
+    const overview = getStorage<any>('mock_overview', defaultOverview);
+    const balance = parseOverviewValue(overview.balance);
+    
+    if (orderType === 'MARKET') {
+      if (balance < cost) {
+        return new Response(JSON.stringify({ ok: false, error: 'insufficient_funds' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      
+      let newBalance = balance - cost;
+      
+      overview.balance = newBalance;
+      setStorage('mock_overview', overview);
+      
+      const positions = getStorage<any[]>('mock_positions', []);
+      const sideTarget = side === 'BUY' ? 'LONG' : 'SHORT';
+      
+      positions.push({
+        id: Date.now(),
+        symbolCode,
+        side: sideTarget,
+        quantity: quantity.toString(),
+        avgPrice: price.toString(),
+        unrealizedPnl: '0.00',
+        openedAt: new Date().toISOString(),
+        takeProfit: orderReq.takeProfit ? orderReq.takeProfit.toString() : undefined,
+        stopLoss: orderReq.stopLoss ? orderReq.stopLoss.toString() : undefined
+      });
+      setStorage('mock_positions', positions);
+      
+      const history = getStorage<any[]>('mock_history', []);
+      const newOrder = {
+        id: Date.now(),
+        symbolCode,
+        side,
+        orderType,
+        status: 'FILLED',
+        quantity: quantity.toString(),
+        entryPrice: price.toString(),
+        createdAt: new Date().toISOString(),
+        filledAt: new Date().toISOString()
+      };
+      history.unshift(newOrder);
+      setStorage('mock_history', history);
+      
+      const notifications = getStorage<any[]>('mock_notifications', defaultNotifications);
+      notifications.unshift({
+        id: Date.now(),
+        notifType: 'TRADE',
+        title: 'notification.tradeOpened.title',
+        body: JSON.stringify({ side, qty: quantity.toFixed(4), symbol: symbolCode, price: price.toFixed(5) }),
+        readAt: null,
+        createdAt: new Date().toISOString()
+      });
+      setStorage('mock_notifications', notifications);
+      
+      return new Response(JSON.stringify({
+        ok: true,
+        orderId: newOrder.id,
+        status: 'FILLED',
+        fillPrice: price.toString(),
+        newBalance: newBalance.toFixed(2)
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      
+    } else {
+      const limitPriceVal = orderReq.limitPrice ? parseFloat(orderReq.limitPrice.toString()) : 0;
+      const stopPriceVal = orderReq.stopPrice ? parseFloat(orderReq.stopPrice.toString()) : 0;
+      const reservePrice = limitPriceVal > 0 ? limitPriceVal : (stopPriceVal > 0 ? stopPriceVal : 0);
+      if (reservePrice <= 0) {
+        return new Response(JSON.stringify({ ok: false, error: 'limit_price_required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      
+      const reserved = reservePrice * quantity;
+      if (balance < reserved) {
+        return new Response(JSON.stringify({ ok: false, error: 'insufficient_funds' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      overview.balance = balance - reserved;
+      setStorage('mock_overview', overview);
+
+      // Classify into STOP or LIMIT dynamically based on relationship with current market price at creation:
+      let mappedOrderType: string;
+      let mappedLimitPrice = '';
+      let mappedStopPrice = '';
+
+      if (side === 'BUY') {
+        if (reservePrice > price) {
+          mappedOrderType = 'STOP';
+          mappedStopPrice = reservePrice.toString();
+        } else {
+          mappedOrderType = 'LIMIT';
+          mappedLimitPrice = reservePrice.toString();
+        }
+      } else { // SELL
+        if (reservePrice < price) {
+          mappedOrderType = 'STOP';
+          mappedStopPrice = reservePrice.toString();
+        } else {
+          mappedOrderType = 'LIMIT';
+          mappedLimitPrice = reservePrice.toString();
+        }
+      }
+
+      const pending = getStorage<any[]>('mock_pending', []);
+      const newOrder = {
+        id: Date.now(),
+        symbolCode,
+        side,
+        orderType: mappedOrderType,
+        status: 'NEW',
+        quantity: quantity.toString(),
+        limitPrice: mappedLimitPrice || undefined,
+        stopPrice: mappedStopPrice || undefined,
+        takeProfit: orderReq.takeProfit ? orderReq.takeProfit.toString() : undefined,
+        stopLoss: orderReq.stopLoss ? orderReq.stopLoss.toString() : undefined,
+        createdAt: new Date().toISOString()
+      };
+      pending.unshift(newOrder);
+      setStorage('mock_pending', pending);
+      
+      return new Response(JSON.stringify({
+        ok: true,
+        orderId: newOrder.id,
+        status: 'NEW',
+        newBalance: overview.balance.toFixed(2)
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
+  if (path.includes('/close')) {
+    const parts = path.split('/');
+    const posIdStr = parts[parts.length - 2];
+    const posId = parseInt(posIdStr);
+
+    const positions = getStorage<any[]>('mock_positions', []);
+    const posIdx = positions.findIndex(p => p.id === posId);
+    if (posIdx !== -1) {
+      const pos = positions[posIdx];
+      positions.splice(posIdx, 1);
+      setStorage('mock_positions', positions);
+
+      const qty = Math.abs(parseFloat(pos.quantity));
+      const avgPrice = parseFloat(pos.avgPrice);
+      const livePrice = await getLivePrice(pos.symbolCode);
+      const leverage = 100;
+      const contractSize = getContractSize(pos.symbolCode);
+      const pnl = pos.side === 'SHORT' ? (avgPrice - livePrice) * qty * contractSize : (livePrice - avgPrice) * qty * contractSize;
+      const marginReturned = (qty * contractSize * avgPrice) / leverage;
+
+      const overview = getStorage<any>('mock_overview', defaultOverview);
+      const balance = parseOverviewValue(overview.balance);
+      overview.balance = balance + marginReturned + pnl;
+      setStorage('mock_overview', overview);
+
+      const history = getStorage<any[]>('mock_history', []);
+      history.unshift({
+        id: Date.now(),
+        symbolCode: pos.symbolCode,
+        side: pos.side === 'SHORT' ? 'BUY' : 'SELL',
+        orderType: 'MARKET',
+        status: 'FILLED',
+        quantity: Math.abs(qty).toString(),
+        entryPrice: livePrice.toString(),
+        realizedPnl: pnl.toFixed(2),
+        createdAt: new Date().toISOString(),
+        filledAt: new Date().toISOString()
+      });
+      setStorage('mock_history', history);
+
+      const notifications = getStorage<any[]>('mock_notifications', defaultNotifications);
+      notifications.unshift({
+        id: Date.now(),
+        notifType: 'TRADE',
+        title: 'notification.tradeClosed.title',
+        body: JSON.stringify({ side: pos.side === 'SHORT' ? 'SELL' : 'BUY', qty: Math.abs(qty).toFixed(4), symbol: pos.symbolCode, price: livePrice.toFixed(5), pnl: pnl.toFixed(2) }),
+        readAt: null,
+        createdAt: new Date().toISOString()
+      });
+      setStorage('mock_notifications', notifications);
+
+      return new Response(JSON.stringify({ ok: true, closePnl: pnl.toFixed(2) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: false, error: 'position_not_found' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/cancel')) {
+    const parts = path.split('/');
+    const orderIdStr = parts[parts.length - 2];
+    const orderId = parseInt(orderIdStr);
+    
+    const pending = getStorage<any[]>('mock_pending', []);
+    const orderIdx = pending.findIndex(o => o.id === orderId);
+    if (orderIdx !== -1) {
+      const order = pending[orderIdx];
+      pending.splice(orderIdx, 1);
+      setStorage('mock_pending', pending);
+      
+      // Refund reserved funds!
+      const limitVal = order.limitPrice ? parseFloat(order.limitPrice) : 0;
+      const stopVal = order.stopPrice ? parseFloat(order.stopPrice) : 0;
+      const reservePrice = limitVal > 0 ? limitVal : (stopVal > 0 ? stopVal : 0);
+      const qty = parseFloat(order.quantity);
+      const reserved = reservePrice * qty;
+
+      const overview = getStorage<any>('mock_overview', defaultOverview);
+      overview.balance = parseOverviewValue(overview.balance) + reserved;
+      setStorage('mock_overview', overview);
+
+      const history = getStorage<any[]>('mock_history', []);
+      order.status = 'CANCELLED';
+      history.unshift(order);
+      setStorage('mock_history', history);
+      
+      return new Response(JSON.stringify({ ok: true, newBalance: overview.balance.toFixed(2) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: false, error: 'order_not_found' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/broker/preferences')) {
+    const current = getStorage('mock_preferences', defaultPreferences());
+    const updated = { ...current, ...body };
+    setStorage('mock_preferences', updated);
+    return new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/auth/profile')) {
+    const name = String(body?.displayName || '').trim();
+    if (!name) {
+      return new Response(JSON.stringify({ ok: false, error: 'invalid_name' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    localStorage.setItem('mock_user_name', name);
+    return new Response(JSON.stringify({ ok: true, displayName: name }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/auth/password')) {
+    const next = String(body?.newPassword || '');
+    if (!body?.currentPassword || next.length < 8) {
+      return new Response(JSON.stringify({ ok: false, error: next.length < 8 ? 'password_too_short' : 'wrong_password' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/api/broker/transactions')) {
+    const txReq = body;
+    const amount = parseFloat(txReq.amount || '0');
+    const txType = txReq.txType || 'DEPOSIT';
+    const method = txReq.method || 'MOCK';
+
+    const overview = getStorage<any>('mock_overview', defaultOverview);
+    const balance = parseOverviewValue(overview.balance);
+    const transactions = getStorage<any[]>('mock_transactions', []);
+
+    if (txType === 'WITHDRAWAL') {
+      const reserved = transactions
+        .filter((t) => String(t.txType).toUpperCase() === 'WITHDRAWAL' && String(t.status).toUpperCase() === 'PENDING')
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
+      if (balance - reserved < amount) {
+        return new Response(JSON.stringify({ ok: false, error: 'insufficient_funds' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      transactions.unshift({
+        id: Date.now(),
+        txType,
+        amount: amount.toString(),
+        method,
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+        note: txReq.note || 'Mock withdrawal request',
+      });
+      setStorage('mock_transactions', transactions);
+      return new Response(JSON.stringify({ ok: true, status: 'PENDING', newBalance: balance.toFixed(2) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    let debtRepaid = 0;
+    if (txType === 'DEPOSIT') {
+      const debt = Number(overview.borrowedBalance || 0);
+      if (debt > 0) {
+        debtRepaid = Math.min(debt, amount);
+        overview.borrowedBalance = debt - debtRepaid;
+      }
+    }
+    overview.balance = balance + (amount - debtRepaid);
+    setStorage('mock_overview', overview);
+
+    transactions.unshift({
+      id: Date.now(),
+      txType,
+      amount: amount.toString(),
+      method,
+      status: 'APPROVED',
+      createdAt: new Date().toISOString(),
+      note: txReq.note || `Mock transaction ${txType.toLowerCase()}`,
+    });
+    setStorage('mock_transactions', transactions);
+
+    return new Response(JSON.stringify({ ok: true, status: 'APPROVED', newBalance: Number(overview.balance).toFixed(2), debtRepaid, newDebt: Number(overview.borrowedBalance || 0) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
