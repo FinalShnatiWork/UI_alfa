@@ -5,11 +5,11 @@ import { useLogout } from '@/hooks/useLogout';
 import { adminGet, adminPost, adminPostResponse, healthOk } from '@/lib/adminApi';
 import { assetUrl } from '@/lib/assets';
 import { AdminDataTable, type AdminColumn } from './AdminDataTable';
-import { money, num, signedMoney, when } from './format';
+import { localDay, money, num, signedMoney, when } from './format';
 import { AdminNettingTab } from './AdminNettingTab';
 import type { AdminAccount, AdminAudit, AdminLoan, AdminTrade, AdminTx, AdminUser, NettingSummary, VenueHolding } from './types';
 
-type Tab = 'overview' | 'users' | 'trades' | 'finance' | 'transactions' | 'credit' | 'audit' | 'netting' | 'system';
+type Tab = 'overview' | 'users' | 'trades' | 'finance' | 'transactions' | 'credit' | 'audit' | 'netting';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -20,7 +20,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'credit', label: 'Credit line' },
   { id: 'audit', label: 'Audit' },
   { id: 'netting', label: 'Netting' },
-  { id: 'system', label: 'System' },
 ];
 
 /**
@@ -166,16 +165,6 @@ export function AdminPage() {
           {tab === 'credit' ? <CreditTab accounts={accounts} loans={loans} usersById={usersById} onChanged={load} /> : null}
           {tab === 'audit' ? <AuditTab audit={audit} usersById={usersById} /> : null}
           {tab === 'netting' ? <AdminNettingTab /> : null}
-          {tab === 'system' ? (
-            <div className="card admin-card" style={{ borderColor: 'var(--red)' }}>
-              <h3 style={{ color: 'var(--red)' }}>Critical</h3>
-              <button type="button" className="btn btn-danger" onClick={() => {
-                if (window.confirm('Restart backend?')) void adminPost('/server/restart');
-              }}>
-                Restart backend process
-              </button>
-            </div>
-          ) : null}
         </div>
       </div>
     </div>
@@ -198,8 +187,8 @@ function Overview({
   const computers = users.filter((u) => u.simulated).length;
   const totalBal = accounts.filter((a) => !a.simulated).reduce((s, a) => s + num(a.balance), 0);
   const openPos = trades.filter((t) => t.type === 'POSITION').length;
-  const today = new Date().toISOString().slice(0, 10);
-  const todayDep = txs.filter((t) => t.txType === 'DEPOSIT' && t.createdAt && String(t.createdAt).startsWith(today));
+  const today = localDay(new Date());
+  const todayDep = txs.filter((t) => t.txType === 'DEPOSIT' && localDay(t.createdAt) === today);
   const failures = audit.filter((a) => a.action === 'LOGIN_FAILURE').length;
   const exp = netting?.houseNetExposure ?? {};
   const bad = Object.entries(exp).filter(([, v]) => num(v) !== 0);

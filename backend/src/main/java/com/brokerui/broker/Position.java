@@ -38,9 +38,6 @@ public class Position {
   @Column(name = "avg_price", precision = 18, scale = 8)
   private BigDecimal avgPrice;
 
-  @Column(name = "realized_pnl", nullable = false, precision = 18, scale = 8)
-  private BigDecimal realizedPnl = BigDecimal.ZERO;
-
   @Column(name = "unrealized_pnl", nullable = false, precision = 18, scale = 8)
   private BigDecimal unrealizedPnl = BigDecimal.ZERO;
 
@@ -99,14 +96,6 @@ public class Position {
 
   public void setAvgPrice(BigDecimal avgPrice) {
     this.avgPrice = avgPrice;
-  }
-
-  public BigDecimal getRealizedPnl() {
-    return realizedPnl;
-  }
-
-  public void setRealizedPnl(BigDecimal realizedPnl) {
-    this.realizedPnl = realizedPnl;
   }
 
   public BigDecimal getUnrealizedPnl() {

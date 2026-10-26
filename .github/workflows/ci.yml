@@ -21,9 +21,7 @@ jobs:
           cache-dependency-path: UI-react/package-lock.json
       - run: npm ci
       - run: npm run build
-      # Not blocking yet: the existing code still has lint errors to clean up.
       - run: npm run lint
-        continue-on-error: true
 
   backend:
     runs-on: ubuntu-latest

@@ -83,6 +83,17 @@ public final class AccountEquity {
     return total.subtract(debt);
   }
 
+  /** Margin locked in open positions, at each position's entry price. */
+  public static BigDecimal marginUsed(TradingAccount ta, List<Position> positions, MarketPriceService prices) {
+    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
+    BigDecimal used = BigDecimal.ZERO;
+    if (positions == null) return used;
+    for (Position p : positions) {
+      used = used.add(lockedMargin(p, leverage, prices));
+    }
+    return used;
+  }
+
   /** Dollars of margin locked at the entry price. Zero when the cross rate is not live. */
   private static BigDecimal lockedMargin(Position p, BigDecimal leverage, MarketPriceService prices) {
     BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();

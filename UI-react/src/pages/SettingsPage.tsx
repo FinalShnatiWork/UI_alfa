@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
+import { PasswordStrength } from '@/components/PasswordStrength';
 import { usePreferences, useSavePreferences } from '@/hooks/useApi';
 import { Skeleton } from '@/components/Skeleton';
 import { apiPostJson } from '@/lib/api';
@@ -215,6 +216,7 @@ export function SettingsPage() {
                 <input id="currentPassword" type="password" className="form-control" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
                 <label className="font-bold" htmlFor="newPassword">{t('settings.newPassword')}</label>
                 <input id="newPassword" type="password" className="form-control" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                <PasswordStrength value={newPassword} />
                 <label className="font-bold" htmlFor="confirmPassword">{t('settings.confirmPassword')}</label>
                 <input id="confirmPassword" type="password" className="form-control" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
                 <button type="button" className="btn btn-primary" disabled={pwBusy} onClick={() => void handleChangePassword()}>

@@ -104,9 +104,20 @@ public class SessionRegistryService implements HttpSessionListener, HttpSessionI
    * @return how many sessions were ended
    */
   public static int invalidateUser(String email) {
+    return invalidateUserExcept(email, null);
+  }
+
+  /**
+   * Ends live sessions signed in as {@code email}, except the one that just changed the password.
+   *
+   * @param keepSessionId session that stays signed in, or null to end every session of that user
+   * @return how many sessions were ended
+   */
+  public static int invalidateUserExcept(String email, String keepSessionId) {
     if (email == null || email.isBlank()) return 0;
     int ended = 0;
     for (Map.Entry<String, HttpSession> e : SESSIONS.entrySet()) {
+      if (e.getKey().equals(keepSessionId)) continue;
       HttpSession s = e.getValue();
       try {
         Object ctx = s.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);

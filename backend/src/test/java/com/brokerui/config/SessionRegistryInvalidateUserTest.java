@@ -38,4 +38,21 @@ class SessionRegistryInvalidateUserTest {
     assertNotNull(SessionRegistryService.getSession(other.getId()));
     SessionRegistryService.unregister(other.getId());
   }
+
+  @Test
+  void passwordChangeKeepsTheTabThatChangedIt() {
+    MockHttpSession here = signedIn("week1-check@test.local");
+    MockHttpSession otherTab = signedIn("week1-check@test.local");
+    MockHttpSession stranger = signedIn("other@test.local");
+
+    int ended = SessionRegistryService.invalidateUserExcept("week1-check@test.local", here.getId());
+
+    assertEquals(1, ended);
+    assertFalse(here.isInvalid());
+    assertNotNull(SessionRegistryService.getSession(here.getId()));
+    assertTrue(otherTab.isInvalid());
+    assertFalse(stranger.isInvalid());
+    SessionRegistryService.unregister(here.getId());
+    SessionRegistryService.unregister(stranger.getId());
+  }
 }

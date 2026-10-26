@@ -106,7 +106,6 @@ public class BrokerApiController {
     ta.setStatus("ACTIVE");
     ta.setBalance(new BigDecimal("100000"));
     ta.setEquity(new BigDecimal("100000"));
-    ta.setMarginUsed(BigDecimal.ZERO);
     ta.setFreeMargin(new BigDecimal("100000"));
     return accountRepo.save(ta);
   }
@@ -119,7 +118,8 @@ public class BrokerApiController {
     BigDecimal liveEquity = recalcEquity(ta);
     BigDecimal marginLevel = marginLoanService.computeMarginLevel(ta);
     BigDecimal marginLevelPct = marginLevel == null ? null : marginLevel.multiply(BigDecimal.valueOf(100));
-    BigDecimal marginUsed = computeMarginUsed(ta);
+    BigDecimal marginUsed = AccountEquity.marginUsed(ta,
+        positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId()), priceService);
     // Prepaid-margin model: remaining cash is free, minus payouts still waiting for an admin.
     BigDecimal pendingOut = pendingWithdrawals(ta.getId());
     BigDecimal freeMargin = ta.getBalance().subtract(pendingOut);
@@ -288,29 +288,6 @@ public class BrokerApiController {
     BigDecimal usd = UsdQuote.toUsd(p.getSymbolCode(), quote, rate);
     if (usd != null) return usd;
     return p.getUnrealizedPnl() == null ? BigDecimal.ZERO : p.getUnrealizedPnl();
-  }
-
-  /**
-   * Margin currently locked into open positions (entry price basis, not live price), computed
-   * fresh from the position table rather than trusted from the {@code marginUsed} column —
-   * that column is only ever initialized to zero and never incremented/decremented as positions
-   * open and close, so it would otherwise always read back as zero.
-   */
-  private BigDecimal computeMarginUsed(TradingAccount ta) {
-    List<Position> positions = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
-    BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
-    BigDecimal used = BigDecimal.ZERO;
-    for (Position p : positions) {
-      BigDecimal avg = p.getAvgPrice() == null ? BigDecimal.ZERO : p.getAvgPrice();
-      BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
-      BigDecimal quote = avg.multiply(qty).multiply(getContractSize(p.getSymbolCode()));
-      java.util.function.Function<String, BigDecimal> rate = code -> code.equalsIgnoreCase(p.getSymbolCode())
-          ? avg
-          : priceService.marketPrice(code);
-      BigDecimal usd = UsdQuote.toUsd(p.getSymbolCode(), quote, rate);
-      if (usd != null) used = used.add(usd.divide(leverage, 4, RoundingMode.HALF_UP));
-    }
-    return used;
   }
 
   /** Margin in dollars. Null when a yen or krone cross rate is not live. */

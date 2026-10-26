@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,6 +8,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { saveUserProfile } from '@/lib/userProfile';
 import { AuthHeader } from '@/components/AuthHeader';
+import { PasswordStrength } from '@/components/PasswordStrength';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP'] as const;
 /** Every account is opened at 1:100 on the server. */
@@ -38,6 +39,7 @@ export function RegisterPage() {
   const { t } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
+  const [passwordDraft, setPasswordDraft] = useState('');
 
   const {
     register,
@@ -183,8 +185,9 @@ export function RegisterPage() {
                 className="form-control"
                 placeholder="••••••••"
                 autoComplete="new-password"
-                {...register('password')}
+                {...register('password', { onChange: (e) => setPasswordDraft(e.target.value) })}
               />
+              <PasswordStrength value={passwordDraft} />
               {errors.password && (
                 <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
                   {t(errors.password.message ?? '')}

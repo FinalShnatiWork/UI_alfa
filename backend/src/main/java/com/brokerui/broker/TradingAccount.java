@@ -46,9 +46,6 @@ public class TradingAccount {
   @Column(nullable = false, precision = 18, scale = 8)
   private BigDecimal equity = BigDecimal.ZERO;
 
-  @Column(name = "margin_used", nullable = false, precision = 18, scale = 8)
-  private BigDecimal marginUsed = BigDecimal.ZERO;
-
   @Column(name = "free_margin", nullable = false, precision = 18, scale = 8)
   private BigDecimal freeMargin = BigDecimal.ZERO;
 
@@ -149,14 +146,6 @@ public class TradingAccount {
 
   public void setEquity(BigDecimal equity) {
     this.equity = equity;
-  }
-
-  public BigDecimal getMarginUsed() {
-    return marginUsed;
-  }
-
-  public void setMarginUsed(BigDecimal marginUsed) {
-    this.marginUsed = marginUsed;
   }
 
   public BigDecimal getFreeMargin() {

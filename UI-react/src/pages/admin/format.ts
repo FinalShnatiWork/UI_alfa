@@ -32,16 +32,21 @@ export function isoDate(raw?: string): string {
   return String(raw).replace('T', ' ').replace(/\.\d+Z?$/, '').slice(0, 19);
 }
 
-/** The clock on this machine: three hours ahead of the server, all year. */
-const LOCAL_ZONE = 'Europe/Moscow';
+/** Calendar day on the computer that is looking at the page, YYYY-MM-DD. */
+export function localDay(raw?: string | Date | null): string {
+  if (raw == null || raw === '') return '';
+  const d = raw instanceof Date ? raw : new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
-/** Admin table clock in the local zone. Empty when the row has no timestamp. */
+/** Admin table clock in the timezone of this computer. Empty when the row has no timestamp. */
 export function when(raw?: string): string {
   if (!raw) return '–';
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return isoDate(raw) || '–';
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: LOCAL_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

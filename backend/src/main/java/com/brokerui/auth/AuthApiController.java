@@ -1,9 +1,12 @@
 package com.brokerui.auth;
 
+import com.brokerui.config.SessionRegistryService;
 import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
 import com.brokerui.user.UserDto;
 import com.brokerui.user.UserRole;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import java.util.Locale;
 import java.util.Map;
@@ -108,12 +111,14 @@ public class AuthApiController {
   }
 
   /**
-   * Replaces the password after the current one matches. The session stays signed in.
+   * Replaces the password after the current one matches.
+   * This tab stays signed in. Every other login of the same person is ended.
    */
   @PostMapping("/api/auth/password")
   @Transactional
   public ResponseEntity<?> changePassword(
-      @AuthenticationPrincipal User principal, @RequestBody Map<String, String> body) {
+      @AuthenticationPrincipal User principal, @RequestBody Map<String, String> body,
+      HttpServletRequest request) {
     AppUser u = repo.findByEmailIgnoreCase(principal.getUsername()).orElseThrow();
     String current = body == null ? null : body.get("currentPassword");
     String next = body == null ? null : body.get("newPassword");
@@ -128,6 +133,8 @@ public class AuthApiController {
     }
     u.setPasswordHash(encoder.encode(next));
     repo.save(u);
+    HttpSession here = request == null ? null : request.getSession(false);
+    SessionRegistryService.invalidateUserExcept(u.getEmail(), here == null ? null : here.getId());
     return ResponseEntity.ok(Map.of("ok", true));
   }
 }

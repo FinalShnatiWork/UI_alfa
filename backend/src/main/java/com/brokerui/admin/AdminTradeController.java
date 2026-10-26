@@ -20,8 +20,6 @@ import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
-import org.springframework.context.ApplicationContext;
-import org.springframework.boot.SpringApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,7 +52,6 @@ public class AdminTradeController {
   private final NotificationRepository notifRepo;
   private final AuditLogRepository auditRepo;
   private final MT5ConnectionManager mt5ConnectionManager;
-  private final ApplicationContext applicationContext;
   private final MarginLoanLedgerRepository marginLedgerRepo;
   private final MarginLoanService marginLoanService;
   private final AuditLogService auditLogService;
@@ -71,7 +68,6 @@ public class AdminTradeController {
    * @param notifRepo the repository for user alerts/notifications
    * @param auditRepo the repository for system audit logs
    * @param mt5ConnectionManager the manager for MT5 bridge socket connectivity
-   * @param applicationContext the Spring application context
    * @param marginLedgerRepo the repository for margin credit line ledger entries
    * @param marginLoanService the margin credit line service (interest/liquidation)
    * @param auditLogService records which admin changed what
@@ -81,7 +77,7 @@ public class AdminTradeController {
         TradingAccountRepository accountRepo, AccountTransactionRepository transactionRepo,
         KycCaseRepository kycRepo, NotificationRepository notifRepo,
         AuditLogRepository auditRepo, MT5ConnectionManager mt5ConnectionManager,
-        ApplicationContext applicationContext, MarginLoanLedgerRepository marginLedgerRepo,
+        MarginLoanLedgerRepository marginLedgerRepo,
         MarginLoanService marginLoanService, AuditLogService auditLogService, AppUserRepository userRepo) {
     this.auditLogService = auditLogService;
     this.userRepo = userRepo;
@@ -93,7 +89,6 @@ public class AdminTradeController {
     this.notifRepo = notifRepo;
     this.auditRepo = auditRepo;
     this.mt5ConnectionManager = mt5ConnectionManager;
-    this.applicationContext = applicationContext;
     this.marginLedgerRepo = marginLedgerRepo;
     this.marginLoanService = marginLoanService;
   }
@@ -107,29 +102,6 @@ public class AdminTradeController {
   private static String accountLabel(TradingAccount ta) {
     AppUser owner = ta.getUser();
     return "account #" + ta.getId() + (owner == null ? "" : " (" + owner.getEmail() + ")");
-  }
-
-  /**
-   * Gracefully shuts down the JVM after a short delay.
-   * The OS process manager (or the .bat start script) should relaunch it.
-   * The frontend polls /api/health until the server is back online.
-   *
-   * @return a map confirming the restart action has been initiated
-   */
-  @PostMapping("/server/restart")
-  public Map<String, String> restartServer(Authentication auth, HttpServletRequest request) {
-    audit(auth, "ADMIN_SERVER_RESTART", "server restart requested", request);
-    Thread restartThread = new Thread(() -> {
-      try {
-        Thread.sleep(500); // give response time to flush
-      } catch (InterruptedException ignored) {}
-      int exitCode = SpringApplication.exit(applicationContext, () -> 0);
-      System.exit(exitCode);
-    });
-    restartThread.setDaemon(false);
-    restartThread.setName("admin-restart");
-    restartThread.start();
-    return Map.of("status", "restarting");
   }
 
   public record TradeDto(Long id, Long accountId, String type, String symbol, String side, BigDecimal quantity, String status, Instant date, String executionRouting, BigDecimal commission, BigDecimal realizedPnl) {}
@@ -180,7 +152,7 @@ public class AdminTradeController {
   }
 
   public record AccountDto(Long id, Long userId, String accountType, String currency, int leverage, String status,
-      BigDecimal balance, BigDecimal equity, BigDecimal marginUsed, BigDecimal freeMargin,
+      BigDecimal balance, BigDecimal equity, BigDecimal freeMargin,
       BigDecimal borrowedBalance, BigDecimal marginLevelPct, BigDecimal interestAccruedTotal,
       BigDecimal commissionPaidTotal, boolean simulated) {}
 
@@ -197,7 +169,7 @@ public class AdminTradeController {
       .map(a -> {
         BigDecimal level = marginLoanService.computeMarginLevel(a);
         return new AccountDto(a.getId(), a.getUser().getId(), a.getAccountType(), a.getCurrency(), a.getLeverage(),
-            a.getStatus(), a.getBalance(), a.getEquity(), a.getMarginUsed(), a.getFreeMargin(),
+            a.getStatus(), a.getBalance(), a.getEquity(), a.getFreeMargin(),
             a.getBorrowedBalance(), level == null ? null : level.multiply(BigDecimal.valueOf(100)),
             a.getInterestAccruedTotal(), a.getCommissionPaidTotal(), a.isSimulated());
       })

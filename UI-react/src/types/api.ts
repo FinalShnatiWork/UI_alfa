@@ -65,7 +65,6 @@ export interface Position {
   quantity: string;
   avgPrice: string;
   unrealizedPnl?: string;
-  realizedPnl?: string;
   openedAt?: string;
 }
 

@@ -878,12 +878,12 @@ export function ChartsPage() {
             <div className="card chart-preview-area" style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', top: 10, right: 12, zIndex: 10, display: 'flex', gap: 6, opacity: 0.75 }}>
                 {[
-                  { id: 'zi', label: '+', action: () => { const ts = chartRef.current?.timeScale(); const r = ts?.getVisibleLogicalRange(); if (r) { const m = (r.from + r.to) / 2, h = (r.to - r.from) / 2 * 0.65; ts?.setVisibleLogicalRange({ from: m - h, to: m + h }); } } },
-                  { id: 'zo', label: '−', action: () => { const ts = chartRef.current?.timeScale(); const r = ts?.getVisibleLogicalRange(); if (r) { const m = (r.from + r.to) / 2, h = (r.to - r.from) / 2 * 1.45; ts?.setVisibleLogicalRange({ from: m - h, to: m + h }); } } },
-                  { id: 'fit', label: '⊡', action: () => chartRef.current?.timeScale().fitContent() },
-                  { id: 'now', label: '▶|', action: () => chartRef.current?.timeScale().scrollToRealTime() },
-                ].map(({ id, label, action }) => (
-                  <button key={id} type="button" className="chart-ctrl-btn" onClick={action}>{label}</button>
+                  { id: 'zi', label: '+', name: 'charts.zoomIn', action: () => { const ts = chartRef.current?.timeScale(); const r = ts?.getVisibleLogicalRange(); if (r) { const m = (r.from + r.to) / 2, h = (r.to - r.from) / 2 * 0.65; ts?.setVisibleLogicalRange({ from: m - h, to: m + h }); } } },
+                  { id: 'zo', label: '−', name: 'charts.zoomOut', action: () => { const ts = chartRef.current?.timeScale(); const r = ts?.getVisibleLogicalRange(); if (r) { const m = (r.from + r.to) / 2, h = (r.to - r.from) / 2 * 1.45; ts?.setVisibleLogicalRange({ from: m - h, to: m + h }); } } },
+                  { id: 'fit', label: '⊡', name: 'charts.zoomFit', action: () => chartRef.current?.timeScale().fitContent() },
+                  { id: 'now', label: '▶|', name: 'charts.zoomNow', action: () => chartRef.current?.timeScale().scrollToRealTime() },
+                ].map(({ id, label, name, action }) => (
+                  <button key={id} type="button" className="chart-ctrl-btn" aria-label={t(name)} title={t(name)} onClick={action}>{label}</button>
                 ))}
               </div>
               <div ref={mountRef} className="chart-mount" />

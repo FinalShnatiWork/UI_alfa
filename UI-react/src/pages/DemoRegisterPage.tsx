@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,6 +8,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { saveUserProfile } from '@/lib/userProfile';
 import { AuthHeader } from '@/components/AuthHeader';
+import { PasswordStrength } from '@/components/PasswordStrength';
 import { useAuth } from '@/hooks/useAuth';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP'] as const;
@@ -39,6 +40,7 @@ export function DemoRegisterPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const { refresh } = useAuth();
+  const [passwordDraft, setPasswordDraft] = useState('');
 
   useEffect(() => {
     document.title = t('titles.demoRegister');
@@ -154,7 +156,7 @@ export function DemoRegisterPage() {
                   id="demoFirstName"
                   type="text"
                   className="form-control"
-                  placeholder="John"
+                  placeholder={t('register.firstName')}
                   autoComplete="given-name"
                   {...register('firstName')}
                 />
@@ -165,7 +167,7 @@ export function DemoRegisterPage() {
                   id="demoLastName"
                   type="text"
                   className="form-control"
-                  placeholder="Doe"
+                  placeholder={t('register.lastName')}
                   autoComplete="family-name"
                   {...register('lastName')}
                 />
@@ -198,8 +200,9 @@ export function DemoRegisterPage() {
                 className="form-control"
                 placeholder="••••••••"
                 autoComplete="new-password"
-                {...register('password')}
+                {...register('password', { onChange: (e) => setPasswordDraft(e.target.value) })}
               />
+              <PasswordStrength value={passwordDraft} />
               {errors.password && (
                 <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
                   {t(errors.password.message ?? '')}
