@@ -59,6 +59,15 @@ interface PriceLevels {
     resistance?: number;
 }
 
+function meterLine(label: string, value: string, color?: string, last = false) {
+    return (
+        <div className={`flex-between analyzer-meter-line${last ? ' last' : ''}`}>
+            <span className="text-secondary">{label}</span>
+            <span className="font-bold" style={color ? { color } : undefined}>{value}</span>
+        </div>
+    );
+}
+
 function formatLevel(value: number): string {
     const abs = Math.abs(value);
     const digits = abs >= 100 ? 2 : abs >= 10 ? 3 : 5;
@@ -382,16 +391,7 @@ export function AnalyzerPage() {
                                 fontWeight: 600,
                             }}
                         >
-                            <span
-                                style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    background: 'var(--green)',
-                                    boxShadow: '0 0 8px var(--green)',
-                                    animation: 'pulseDot 2s infinite',
-                                }}
-                            />
+                            <span className="analyzer-live-dot" />
                             {t('analyzer.live')}
                         </span>
                     </div>
@@ -414,7 +414,7 @@ export function AnalyzerPage() {
                         }}
                     >
                         <div style={{ marginBottom: 14, flexShrink: 0 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <div className="flex-between mb-12">
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 8px var(--accent)' }} />
                                     <h3 style={{ fontSize: '1.02rem', fontWeight: 800, margin: 0, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>
@@ -788,13 +788,13 @@ export function AnalyzerPage() {
 
                                         {analysis.votes && analysis.available !== false ? (
                                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                                                <span className="analyzer-badge-buy" style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 8, fontWeight: 800 }}>
+                                                <span className="analyzer-badge-buy analyzer-count-pill">
                                                     {t('analyzer.buy')} {analysis.votes.buy}
                                                 </span>
-                                                <span className="analyzer-badge-neutral" style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 8, fontWeight: 800 }}>
+                                                <span className="analyzer-badge-neutral analyzer-count-pill">
                                                     {t('analyzer.neutral')} {analysis.votes.neutral}
                                                 </span>
-                                                <span className="analyzer-badge-sell" style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 8, fontWeight: 800 }}>
+                                                <span className="analyzer-badge-sell analyzer-count-pill">
                                                     {t('analyzer.sell')} {analysis.votes.sell}
                                                 </span>
                                             </div>
@@ -870,9 +870,9 @@ export function AnalyzerPage() {
                                     
                                     {/* 1. RSI CARD */}
                                     <div className="card" style={{ padding: 20, marginBottom: 0 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div className="flex-between mb-12">
                                             <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>RSI (14)</span>
-                                            <span className={getRecBadgeClass(analysis.indicators?.rsi?.status?.includes('OVERSOLD') ? 'BUY' : analysis.indicators?.rsi?.status?.includes('OVERBOUGHT') ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                                            <span className={getRecBadgeClass(analysis.indicators?.rsi?.status?.includes('OVERSOLD') ? 'BUY' : analysis.indicators?.rsi?.status?.includes('OVERBOUGHT') ? 'SELL' : 'HOLD') + ' analyzer-status-pill'}>
                                                 {pick(lang, analysis.indicators?.rsi?.status, analysis.indicators?.rsi?.statusHe, analysis.indicators?.rsi?.statusRu)}
                                             </span>
                                         </div>
@@ -906,23 +906,17 @@ export function AnalyzerPage() {
 
                                     {/* 2. MACD CARD */}
                                     <div className="card" style={{ padding: 20, marginBottom: 0 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div className="flex-between mb-12">
                                             <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>MACD (12, 26, 9)</span>
-                                            <span className={getRecBadgeClass(analysis.indicators?.macd?.status === 'BULLISH' ? 'BUY' : analysis.indicators?.macd?.status === 'BEARISH' ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                                            <span className={getRecBadgeClass(analysis.indicators?.macd?.status === 'BULLISH' ? 'BUY' : analysis.indicators?.macd?.status === 'BEARISH' ? 'SELL' : 'HOLD') + ' analyzer-status-pill'}>
                                                 {pick(lang, analysis.indicators?.macd?.status, analysis.indicators?.macd?.statusHe, analysis.indicators?.macd?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.macdLine')}</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.macd?.macdLine === 'number' ? analysis.indicators.macd.macdLine.toFixed(4) : '—'}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.signalLine')}</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.macd?.signalLine === 'number' ? analysis.indicators.macd.signalLine.toFixed(4) : '—'}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.histogram')}</span>
+                                            {meterLine(t('analyzer.macdLine'), typeof analysis.indicators?.macd?.macdLine === 'number' ? analysis.indicators.macd.macdLine.toFixed(4) : '—')}
+                                            {meterLine(t('analyzer.signalLine'), typeof analysis.indicators?.macd?.signalLine === 'number' ? analysis.indicators.macd.signalLine.toFixed(4) : '—')}
+                                            <div className="flex-between analyzer-meter-line last">
+                                                <span className="text-secondary">{t('analyzer.histogram')}</span>
                                                 <span style={{ fontWeight: 800, color: (analysis.indicators?.macd?.hist ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
                                                     {typeof analysis.indicators?.macd?.hist === 'number' ? analysis.indicators.macd.hist.toFixed(4) : '—'}
                                                 </span>
@@ -932,25 +926,15 @@ export function AnalyzerPage() {
 
                                     {/* 3. MOVING AVERAGES CARD */}
                                     <div className="card" style={{ padding: 20, marginBottom: 0 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div className="flex-between mb-12">
                                             <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{t('analyzer.movingAverages')}</span>
-                                            <span className={getRecBadgeClass(analysis.indicators?.sma?.status === 'BULLISH' ? 'BUY' : analysis.indicators?.sma?.status === 'BEARISH' ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                                            <span className={getRecBadgeClass(analysis.indicators?.sma?.status === 'BULLISH' ? 'BUY' : analysis.indicators?.sma?.status === 'BEARISH' ? 'SELL' : 'HOLD') + ' analyzer-status-pill'}>
                                                 {pick(lang, analysis.indicators?.sma?.status, analysis.indicators?.sma?.statusHe, analysis.indicators?.sma?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>SMA 20:</span>
-                                                <span style={{ fontWeight: 700, color: analysis.price > (analysis.indicators?.sma?.sma20 || 0) ? 'var(--green)' : 'var(--red)' }}>
-                                                    {typeof analysis.indicators?.sma?.sma20 === 'number' ? `$${analysis.indicators.sma.sma20.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>SMA 50:</span>
-                                                <span style={{ fontWeight: 700, color: analysis.price > (analysis.indicators?.sma?.sma50 || 0) ? 'var(--green)' : 'var(--red)' }}>
-                                                    {typeof analysis.indicators?.sma?.sma50 === 'number' ? `$${analysis.indicators.sma.sma50.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
-                                                </span>
-                                            </div>
+                                            {meterLine('SMA 20:', typeof analysis.indicators?.sma?.sma20 === 'number' ? `$${analysis.indicators.sma.sma20.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—', analysis.price > (analysis.indicators?.sma?.sma20 || 0) ? 'var(--green)' : 'var(--red)')}
+                                            {meterLine('SMA 50:', typeof analysis.indicators?.sma?.sma50 === 'number' ? `$${analysis.indicators.sma.sma50.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—', analysis.price > (analysis.indicators?.sma?.sma50 || 0) ? 'var(--green)' : 'var(--red)', true)}
                                         </div>
                                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 8, textAlign: 'center', fontStyle: 'italic' }}>
                                             {analysis.price > (analysis.indicators?.sma?.sma20 || 0)
@@ -961,25 +945,16 @@ export function AnalyzerPage() {
 
                                     {/* 4. BOLLINGER BANDS CARD */}
                                     <div className="card" style={{ padding: 20, marginBottom: 0 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div className="flex-between mb-12">
                                             <span style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{t('analyzer.bollinger')}</span>
-                                            <span className={getRecBadgeClass(analysis.indicators?.bb?.status?.includes('OVERSOLD') ? 'BUY' : analysis.indicators?.bb?.status?.includes('OVERBOUGHT') ? 'SELL' : 'HOLD')} style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                                            <span className={getRecBadgeClass(analysis.indicators?.bb?.status?.includes('OVERSOLD') ? 'BUY' : analysis.indicators?.bb?.status?.includes('OVERBOUGHT') ? 'SELL' : 'HOLD') + ' analyzer-status-pill'}>
                                                 {pick(lang, analysis.indicators?.bb?.status, analysis.indicators?.bb?.statusHe, analysis.indicators?.bb?.statusRu)}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.bbUpper')}</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.upper === 'number' ? `$${analysis.indicators.bb.upper.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0', borderBottom: '1px solid var(--border-light)' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.bbMiddle')}</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.middle === 'number' ? `$${analysis.indicators.bb.middle.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '5px 0' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>{t('analyzer.bbLower')}</span>
-                                                <span style={{ fontWeight: 700 }}>{typeof analysis.indicators?.bb?.lower === 'number' ? `$${analysis.indicators.bb.lower.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}</span>
-                                            </div>
+                                            {meterLine(t('analyzer.bbUpper'), typeof analysis.indicators?.bb?.upper === 'number' ? `$${analysis.indicators.bb.upper.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—')}
+                                            {meterLine(t('analyzer.bbMiddle'), typeof analysis.indicators?.bb?.middle === 'number' ? `$${analysis.indicators.bb.middle.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—')}
+                                            {meterLine(t('analyzer.bbLower'), typeof analysis.indicators?.bb?.lower === 'number' ? `$${analysis.indicators.bb.lower.toLocaleString(NUM_LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—', undefined, true)}
                                         </div>
                                     </div>
                                 </div>
@@ -1062,78 +1037,6 @@ export function AnalyzerPage() {
                 </div>
             </div>
 
-            <style>{`
-                @keyframes pulseDot {
-                    0% { transform: scale(0.95); opacity: 0.8; }
-                    50% { transform: scale(1.3); opacity: 1; }
-                    100% { transform: scale(0.95); opacity: 0.8; }
-                }
-                .analyzer-asset-board {
-                    transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
-                }
-                .analyzer-asset-board:hover {
-                    transform: none !important;
-                    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45) !important;
-                }
-                .analyzer-search-input:focus {
-                    border-color: rgba(234, 179, 8, 0.5) !important;
-                    box-shadow: 0 0 14px rgba(234, 179, 8, 0.2) !important;
-                    outline: none;
-                }
-                .analyzer-tab-btn {
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                }
-                .analyzer-tab-btn:hover:not([style*="linear-gradient"]) {
-                    background: var(--analyzer-chip-bg) !important;
-                    color: var(--text-primary) !important;
-                }
-                .analyzer-scroll-list {
-                    scrollbar-width: thin;
-                    scrollbar-color: var(--border) transparent;
-                }
-                .analyzer-scroll-list::-webkit-scrollbar {
-                    width: 5px;
-                }
-                .analyzer-scroll-list::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .analyzer-scroll-list::-webkit-scrollbar-thumb {
-                    background: rgba(255, 255, 255, 0.12);
-                    border-radius: 4px;
-                }
-                .analyzer-scroll-list::-webkit-scrollbar-thumb:hover {
-                    background: rgba(234, 179, 8, 0.4);
-                }
-                .analyzer-asset-item {
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                }
-                .analyzer-asset-item:hover:not(.selected) {
-                    background: var(--analyzer-item-hover-bg) !important;
-                    border-color: var(--border) !important;
-                    transform: translateX(${isRtl ? '-2px' : '2px'});
-                }
-                html[data-theme="light"] .analyzer-live-price {
-                    color: #92710a !important;
-                }
-                .analyzer-badge-buy {
-                    background: var(--green-glow);
-                    color: var(--green);
-                    border: 1px solid rgba(16, 185, 129, 0.35);
-                    box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
-                }
-                .analyzer-badge-sell {
-                    background: var(--red-glow);
-                    color: var(--red);
-                    border: 1px solid rgba(244, 63, 94, 0.35);
-                    box-shadow: 0 0 10px rgba(244, 63, 94, 0.15);
-                }
-                .analyzer-badge-neutral {
-                    background: var(--accent-glow);
-                    color: var(--accent);
-                    border: 1px solid rgba(234, 179, 8, 0.35);
-                    box-shadow: 0 0 10px rgba(234, 179, 8, 0.15);
-                }
-            `}</style>
         </>
     );
 }
