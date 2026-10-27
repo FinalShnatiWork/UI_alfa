@@ -3277,6 +3277,47 @@ html[data-theme="light"] .analyzer-live-price { color: #92710a !important; }
 .mobile-trading-card-head {
   text-align: start;
 }
+/* Registration. Real and demo share the form; the demo card is the gold one. */
+.register-shell { max-width: 600px; margin-top: 30px; }
+.register-shell.demo { max-width: 550px; margin-top: 40px; }
+.demo-register-card {
+  background: linear-gradient(135deg, rgba(3, 5, 9, 0.7) 0%, rgba(7, 11, 20, 0.7) 100%);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  box-shadow: 0 10px 40px rgba(234, 179, 8, 0.05);
+}
+.register-sub { color: var(--text-secondary); margin-bottom: 20px; }
+.demo-register-head { text-align: center; margin-bottom: 25px; }
+.demo-register-head h2 { margin-bottom: 8px; }
+.demo-register-head p { color: var(--text-secondary); font-size: 0.9rem; }
+.demo-register-badge {
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--accent);
+  padding: 6px 14px;
+  border-radius: 30px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+.field-error {
+  color: var(--danger, #ef4444);
+  font-size: 0.8rem;
+  margin-top: 4px;
+  display: block;
+}
+.field-error.tucked { margin-top: -8px; margin-bottom: 8px; }
+.field-error.tucked.roomy { margin-bottom: 12px; }
+.register-check label { margin: 0; }
+.demo-check { margin-bottom: 16px; }
+.demo-check.tight { margin-bottom: 8px; }
+.demo-check.risk { margin-bottom: 20px; }
+.demo-check.risk.tight { margin-bottom: 8px; }
+.demo-check label { margin: 0; font-size: 0.85rem; }
+.register-submit { width: 100%; margin-top: 10px; }
+.register-submit.demo { margin-top: 5px; padding: 16px 20px; }
+
 /* Email and other Latin-only inputs are typed left to right; the Hebrew placeholder still reads right to left. */
 html[dir="rtl"] input[dir="ltr"]:placeholder-shown {
   direction: rtl;
