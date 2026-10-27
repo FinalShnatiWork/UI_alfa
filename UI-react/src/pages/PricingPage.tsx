@@ -1,10 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useI18n } from '@/hooks/useI18n';
-import { useAuth } from '@/hooks/useAuth';
-import { useLogout } from '@/hooks/useLogout';
 import { AuthHeader } from '@/components/AuthHeader';
-import { DashboardHeader } from '@/components/DashboardHeader';
 import { getContractSize } from '@/lib/api';
 import { fmtMoney, fmtNumber } from '@/lib/format';
 import {
@@ -45,21 +42,17 @@ const EXAMPLES = [
 /** Public page with the fees the server actually charges. */
 export function PricingPage() {
   const { t } = useI18n();
-  const { status } = useAuth();
-  const { logout, loggingOut } = useLogout();
 
   useEffect(() => { document.title = t('titles.pricing'); }, [t]);
 
-  const header = status === 'authenticated'
-    ? <DashboardHeader onLogout={() => void logout()} loggingOut={loggingOut} />
-    : (
-      <AuthHeader>
-        <div className="flex-gap">
-          <Link to="/login" className="btn btn-outline">{t('landing.logIn')}</Link>
-          <Link to="/register" className="btn btn-primary">{t('landing.signUp')}</Link>
-        </div>
-      </AuthHeader>
-    );
+  const header = (
+    <AuthHeader>
+      <div className="flex-gap">
+        <Link to="/login" className="btn btn-outline">{t('landing.logIn')}</Link>
+        <Link to="/register" className="btn btn-primary">{t('landing.signUp')}</Link>
+      </div>
+    </AuthHeader>
+  );
 
   return (
     <>

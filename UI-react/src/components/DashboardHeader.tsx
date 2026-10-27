@@ -12,7 +12,6 @@ const NAV_LINKS = [
   { to: '/analyzer', key: 'nav.analyzer', icon: '🤖' },
   { to: '/finance', key: 'nav.finance', icon: '💳' },
   { to: '/history', key: 'nav.history', icon: '📜' },
-  { to: '/pricing', key: 'nav.pricing', icon: '🏷️' },
   { to: '/account', key: 'nav.account', icon: '👤' },
   { to: '/settings', key: 'nav.settings', icon: '⚙️' },
 ] as const;

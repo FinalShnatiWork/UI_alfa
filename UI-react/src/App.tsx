@@ -42,7 +42,7 @@ const queryClient = new QueryClient({
  */
 /** Signed-in app pages that show the bottom bar. Public pages (landing, login, register) and 404 do not. */
 const BOTTOM_NAV_ROUTES = new Set([
-  '/dashboard', '/positions', '/charts', '/analyzer', '/finance', '/history', '/account', '/settings', '/pricing',
+  '/dashboard', '/positions', '/charts', '/analyzer', '/finance', '/history', '/account', '/settings',
 ]);
 
 function AuthenticatedBottomNav() {
