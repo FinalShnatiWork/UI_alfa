@@ -114,10 +114,10 @@ export function DashboardPage() {
           ) : (
             <>
               <div className="card stat-card">
-                <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
+                <div className="dash-label label" >
                   {t('dashboard.balance')}
                 </div>
-                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}><bdi dir="ltr">{balance}</bdi></div>
+                <div className="dash-figure value" ><bdi dir="ltr">{balance}</bdi></div>
                 {pendingOut > 0 && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--warning, #f59e0b)', marginTop: 6 }}>
                     {t('dashboard.pendingOut', { amount: pendingOutLabel })}
@@ -125,24 +125,24 @@ export function DashboardPage() {
                 )}
               </div>
               <div className="card stat-card">
-                <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
+                <div className="dash-label label" >
                   {t('dashboard.equity')}
                 </div>
-                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}><bdi dir="ltr">{equity}</bdi></div>
+                <div className="dash-figure value" ><bdi dir="ltr">{equity}</bdi></div>
               </div>
               <div className="card stat-card">
-                <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
+                <div className="dash-label label" >
                   {t('dashboard.pl')}
                 </div>
-                <div className={`value ${plPositive ? 'text-success' : 'text-danger'}`} style={{ fontSize: '1.4rem', fontWeight: 700 }}>
+                <div className={`dash-figure value ${plPositive ? 'text-success' : 'text-danger'}`} >
                   <bdi dir="ltr">{pl}</bdi>
                 </div>
               </div>
               <div className="card stat-card">
-                <div className="label" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: 6 }}>
+                <div className="dash-label label" >
                   {t('dashboard.freeMargin')}
                 </div>
-                <div className="value" style={{ fontSize: '1.4rem', fontWeight: 700 }}><bdi dir="ltr">{freeMargin}</bdi></div>
+                <div className="dash-figure value" ><bdi dir="ltr">{freeMargin}</bdi></div>
               </div>
             </>
           )}
@@ -179,7 +179,7 @@ export function DashboardPage() {
             <div className="flex-between mb-20">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: '1.2rem' }}>📜</span>
-                <h3 style={{ margin: 0 }}>{t('dashboard.creditLineTitle')}</h3>
+                <h3 className="m-0" >{t('dashboard.creditLineTitle')}</h3>
               </div>
               <span
                 className="badge"
@@ -215,44 +215,44 @@ export function DashboardPage() {
             </div>
 
             <div className="dashboard-credit-grid">
-              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+              <div className="stat-tile" >
+                <div className="mini-label mb6 dashboard-small-label" >
                   {t('dashboard.borrowedDebt')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem', color: hasDebt ? 'var(--red)' : 'inherit' }}>
                   {fmtMoney(borrowedBalance, currency)}
                 </div>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="mini-label mt4 dashboard-small-label" >
                   / {fmtMoney(creditLimit, currency)} {t('dashboard.creditLimit')}
                 </div>
               </div>
 
-              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+              <div className="stat-tile" >
+                <div className="mini-label mb6 dashboard-small-label" >
                   {t('dashboard.availableCredit')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--green)' }}>
                   {fmtMoney(Math.max(0, creditLimit - borrowedBalance), currency)}
                 </div>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="mini-label mt4 dashboard-small-label" >
                   {t('dashboard.autoBorrowLimit')}
                 </div>
               </div>
 
-              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+              <div className="stat-tile" >
+                <div className="mini-label mb6 dashboard-small-label" >
                   {t('dashboard.interestAccrued')}
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '1.2rem' }}>
                   {fmtMoney(interestAccrued, currency)}
                 </div>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="mini-label mt4 dashboard-small-label" >
                   {dailyInterestStr}
                 </div>
               </div>
 
-              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10 }}>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+              <div className="stat-tile" >
+                <div className="mini-label mb6 dashboard-small-label" >
                   {t('dashboard.marginLevel')}
                 </div>
                 <div
@@ -264,7 +264,7 @@ export function DashboardPage() {
                 >
                   {marginLevelPct != null ? `${marginLevelPct.toFixed(1)}%` : `— ${t('dashboard.noDebt')}`}
                 </div>
-                <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="mini-label mt4 dashboard-small-label" >
                   {t('dashboard.liquidationNote')}
                 </div>
               </div>
@@ -280,7 +280,7 @@ export function DashboardPage() {
           {/* Trading Summary */}
           <div className="card dashboard-perf-card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 0 }}>
             <div className="flex-between" style={{ marginBottom: 20 }}>
-              <h3 style={{ margin: 0 }}>{t('dashboard.tradingPerformance')}</h3>
+              <h3 className="m-0" >{t('dashboard.tradingPerformance')}</h3>
               <span
                 style={{
                   background: 'var(--green-soft)',
@@ -314,13 +314,9 @@ export function DashboardPage() {
                   {/* PnL & Performance Breakdown Grid */}
                   <div className="dashboard-perf-grid">
                     <div
-                      style={{
-                        background: 'var(--bg-alt)',
-                        borderRadius: 10,
-                        padding: '14px 16px',
-                      }}
+                      className="stat-tile" 
                     >
-                      <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <div className="mini-label mb4 dashboard-small-label" >
                         {t('dashboard.realizedPnl')}
                       </div>
                       <div
@@ -333,19 +329,15 @@ export function DashboardPage() {
                       >
                         {money(todayRealizedPnl)}
                       </div>
-                      <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                      <div className="mini-label sm mt4 dashboard-small-label" >
                         {t('dashboard.closedToday')}
                       </div>
                     </div>
 
                     <div
-                      style={{
-                        background: 'var(--bg-alt)',
-                        borderRadius: 10,
-                        padding: '14px 16px',
-                      }}
+                      className="stat-tile" 
                     >
-                      <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <div className="mini-label mb4 dashboard-small-label" >
                         {t('dashboard.unrealizedPnl')}
                       </div>
                       <div
@@ -358,19 +350,15 @@ export function DashboardPage() {
                       >
                         {money(totalUnrealized)}
                       </div>
-                      <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                      <div className="mini-label sm mt4 dashboard-small-label" >
                         {positions.length} {t('dashboard.openPositions')}
                       </div>
                     </div>
 
                     <div
-                      style={{
-                        background: 'var(--bg-alt)',
-                        borderRadius: 10,
-                        padding: '14px 16px',
-                      }}
+                      className="stat-tile" 
                     >
-                      <div className="dashboard-small-label" style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <div className="mini-label mb4 dashboard-small-label" >
                         {t('dashboard.netPnl')}
                       </div>
                       <div
@@ -383,7 +371,7 @@ export function DashboardPage() {
                       >
                         <bdi dir="ltr">{pl}</bdi>
                       </div>
-                      <div className="dashboard-small-label" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                      <div className="mini-label sm mt4 dashboard-small-label" >
                         {t('dashboard.totalRealizedLive')}
                       </div>
                     </div>
@@ -392,7 +380,7 @@ export function DashboardPage() {
                   {/* Best / Worst */}
                   {positions.length > 0 && (
                     <div className="dashboard-best-worst-grid">
-                      <div style={{ fontSize: '0.8rem' }}>
+                      <div className="text-08" >
                         <div style={{ color: 'var(--text-secondary)', marginBottom: 3 }}>↑ {t('dashboard.bestPosition')}</div>
                         <span style={{ fontWeight: 600 }}>{best?.symbolCode}</span>{' '}
                         <span style={{ color: pnlColor(bestPnl), fontWeight: 600 }}>
@@ -400,7 +388,7 @@ export function DashboardPage() {
                         </span>
                       </div>
                       {positions.length > 1 && (
-                        <div style={{ fontSize: '0.8rem' }}>
+                        <div className="text-08" >
                           <div style={{ color: 'var(--text-secondary)', marginBottom: 3 }}>↓ {t('dashboard.worstPosition')}</div>
                           <span style={{ fontWeight: 600 }}>{worst?.symbolCode}</span>{' '}
                           <span style={{ color: pnlColor(worstPnl), fontWeight: 600 }}>
@@ -435,7 +423,7 @@ export function DashboardPage() {
           {/* Notifications */}
           <div className="card" style={{ padding: '24px 20px' }}>
             <div className="flex-between mb-20">
-              <h3 style={{ margin: 0 }}>{t('dashboard.alerts')}</h3>
+              <h3 className="m-0" >{t('dashboard.alerts')}</h3>
               {notifications.length > 0 && (
                 <span
                   style={{
@@ -520,7 +508,7 @@ export function DashboardPage() {
 
         {/* ── Open Positions table ── */}
         <div className="flex-between mb-20">
-          <h3 style={{ margin: 0 }}>
+          <h3 className="m-0" >
             {t('dashboard.openPositions')}
             {positions.length > 0 && (
               <span
@@ -567,7 +555,7 @@ export function DashboardPage() {
               </>
             ) : positions.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-muted text-sm" style={{ padding: 20, textAlign: 'center' }}>
+                <td colSpan={6} className="empty-note sm text-muted text-sm" >
                   {t('positions.empty')}
                 </td>
               </tr>
@@ -587,7 +575,7 @@ export function DashboardPage() {
                           {fmtPrice(livePrice)}
                         </span>
                       ) : (
-                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>{t('common.loading')}</span>
+                        <span className="text-08 text-muted" >{t('common.loading')}</span>
                       )}
                     </td>
                     <td className={`font-bold dir-ltr stack-pl ${pnlPos >= 0 ? 'text-success' : 'text-danger'}`} data-label={t('table.pl')}>

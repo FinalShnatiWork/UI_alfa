@@ -106,7 +106,7 @@ function TxModal({ type, currency, onClose, onConfirm, t }: TxModalProps) {
             padding: '18px 24px', borderBottom: '1px solid var(--border-light)',
           }}
         >
-          <h3 style={{ margin: 0 }}>{isDeposit ? t('finance.deposit') : t('finance.withdraw')}</h3>
+          <h3 className="m-0" >{isDeposit ? t('finance.deposit') : t('finance.withdraw')}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -384,11 +384,11 @@ export function FinancePage() {
 
         <div className="text-left" style={{ marginTop: 40 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-            <h3 className="text-xl font-bold" style={{ margin: 0 }}>{t('finance.ledger')}</h3>
+            <h3 className="m-0 text-xl font-bold" >{t('finance.ledger')}</h3>
             <button
               type="button"
-              className="btn btn-outline-dark"
-              style={{ padding: '7px 12px', fontSize: '0.85rem' }}
+              className="btn-compact btn btn-outline-dark"
+              
               disabled={allTransactions.length === 0}
               onClick={exportStatement}
             >
@@ -412,7 +412,7 @@ export function FinancePage() {
                   <SkeletonRow />
                 ) : transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-muted text-sm" style={{ padding: 20, textAlign: 'center' }}>
+                    <td colSpan={5} className="empty-note sm text-muted text-sm" >
                       {t('finance.noTransactions')}
                     </td>
                   </tr>
@@ -472,7 +472,7 @@ export function FinancePage() {
             <div className="text-left" style={{ marginTop: 40 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                 <span style={{ fontSize: '1.2rem' }}>📜</span>
-                <h3 className="text-xl font-bold" style={{ margin: 0 }}>{t('finance.creditHistory')}</h3>
+                <h3 className="m-0 text-xl font-bold" >{t('finance.creditHistory')}</h3>
               </div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 16 }}>
                 {t('finance.creditHistoryDesc')}
@@ -494,7 +494,7 @@ export function FinancePage() {
                       <SkeletonRow />
                     ) : ledger.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-muted text-sm" style={{ padding: 20, textAlign: 'center' }}>
+                        <td colSpan={6} className="empty-note sm text-muted text-sm" >
                           {t('finance.noCreditActivity')}
                         </td>
                       </tr>

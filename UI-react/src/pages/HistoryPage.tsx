@@ -168,25 +168,25 @@ export function HistoryPage() {
         <div className="card" style={{ padding: '12px 16px', marginBottom: 16 }}>
           <div className="history-filters-bar">
             <div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 3 }}>{t('common.from')}</div>
+              <div className="mini-label mb3" >{t('common.from')}</div>
               <input ref={dateFromRef} type="date" className="form-control" style={{ padding: '6px 8px', fontSize: '0.85rem' }} />
             </div>
             <div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 3 }}>{t('common.to')}</div>
+              <div className="mini-label mb3" >{t('common.to')}</div>
               <input ref={dateToRef} type="date" className="form-control" style={{ padding: '6px 8px', fontSize: '0.85rem' }} />
             </div>
             <div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 3 }}>{t('common.symbol')}</div>
+              <div className="mini-label mb3" >{t('common.symbol')}</div>
               <input ref={symbolRef} type="text" className="form-control" placeholder="EURUSD" style={{ padding: '6px 8px', fontSize: '0.85rem', width: 100 }} />
             </div>
             <div style={{ display: 'flex', gap: 6, paddingBottom: 1 }}>
               <button type="button" className="btn btn-primary" style={{ padding: '7px 16px', fontSize: '0.85rem' }} onClick={applyFilters}>
                 {t('common.filter')}
               </button>
-              <button type="button" className="btn btn-outline-dark" style={{ padding: '7px 12px', fontSize: '0.85rem' }} onClick={handleReset}>
+              <button type="button" className="btn-compact btn btn-outline-dark"  onClick={handleReset}>
                 {t('history.reset')}
               </button>
-              <button type="button" className="btn btn-outline-dark" style={{ padding: '7px 12px', fontSize: '0.85rem' }} onClick={() => exportCsv(filtered, t)}>
+              <button type="button" className="btn-compact btn btn-outline-dark"  onClick={() => exportCsv(filtered, t)}>
                 {t('finance.exportCsv')}
               </button>
             </div>
@@ -198,18 +198,18 @@ export function HistoryPage() {
         <table className="table-compact table-stack" style={{ marginTop: 8 }}>
           <thead>
             <tr>
-              <th style={{ width: 40 }}>#</th>
+              <th className="col-idx" >#</th>
               <th>{t('history.instrument')}</th>
               <th>{t('history.openTime')}</th>
               <th>{t('history.closeTime')}</th>
-              <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
-              <th style={{ textAlign: 'right' }}>{t('history.closePrice')}</th>
-              <th style={{ textAlign: 'right' }}>{t('history.volume')}</th>
-              <th style={{ textAlign: 'right' }}>{t('table.stopLoss')}</th>
-              <th style={{ textAlign: 'right' }}>{t('table.takeProfit')}</th>
-              <th style={{ textAlign: 'right' }}>{t('history.grossPl')}</th>
-              <th style={{ textAlign: 'right' }}>{t('history.commission')}</th>
-              <th style={{ textAlign: 'right' }}>{t('history.netPl')}</th>
+              <th className="align-right" >{t('table.openPrice')}</th>
+              <th className="align-right" >{t('history.closePrice')}</th>
+              <th className="align-right" >{t('history.volume')}</th>
+              <th className="align-right" >{t('table.stopLoss')}</th>
+              <th className="align-right" >{t('table.takeProfit')}</th>
+              <th className="align-right" >{t('history.grossPl')}</th>
+              <th className="align-right" >{t('history.commission')}</th>
+              <th className="align-right" >{t('history.netPl')}</th>
             </tr>
           </thead>
           <tbody>
@@ -217,7 +217,7 @@ export function HistoryPage() {
               <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={12} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                <td colSpan={12} className="empty-note text-muted text-sm" >
                   {t('history.noTrades')}
                 </td>
               </tr>
@@ -228,22 +228,22 @@ export function HistoryPage() {
                 const plClass = pl == null ? '' : pl >= 0 ? 'text-success' : 'text-danger';
                 return (
                   <tr key={trade.id}>
-                    <td className="text-muted text-sm stack-hide" style={{ width: 40 }}>{idx + 1}</td>
+                    <td className="col-idx text-muted text-sm stack-hide" >{idx + 1}</td>
                     <td className="font-bold stack-head">{trade.symbolCode}</td>
                     <td className="text-sm" data-label={t('history.openTime')}><bdi>{fmtTime(trade.openTime, lang)}</bdi></td>
                     <td className="text-sm" data-label={t('history.closeTime')}><bdi>{fmtTime(trade.closeTime, lang)}</bdi></td>
-                    <td className="dir-ltr" style={{ textAlign: 'right' }} data-label={t('table.openPrice')}>{fmtPrice(trade.openPrice)}</td>
-                    <td className="dir-ltr" style={{ textAlign: 'right' }} data-label={t('history.closePrice')}>{fmtPrice(trade.closePrice)}</td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('history.volume')}>{fmtQty(trade.quantity)}</td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('table.stopLoss')}>{fmtPrice(trade.stopLoss)}</td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('table.takeProfit')}>{fmtPrice(trade.takeProfit)}</td>
+                    <td className="align-right dir-ltr"  data-label={t('table.openPrice')}>{fmtPrice(trade.openPrice)}</td>
+                    <td className="align-right dir-ltr"  data-label={t('history.closePrice')}>{fmtPrice(trade.closePrice)}</td>
+                    <td className="align-right dir-ltr text-muted"  data-label={t('history.volume')}>{fmtQty(trade.quantity)}</td>
+                    <td className="align-right dir-ltr text-muted"  data-label={t('table.stopLoss')}>{fmtPrice(trade.stopLoss)}</td>
+                    <td className="align-right dir-ltr text-muted"  data-label={t('table.takeProfit')}>{fmtPrice(trade.takeProfit)}</td>
                     <td className="dir-ltr" style={{ textAlign: 'right', fontWeight: 600, color: grossPl != null ? (grossPl >= 0 ? 'var(--green)' : 'var(--red)') : 'inherit' }} data-label={t('history.grossPl')}>
                       {grossPl != null ? fmtPl(grossPl, currency) : '—'}
                     </td>
-                    <td className="dir-ltr text-muted" style={{ textAlign: 'right' }} data-label={t('history.commission')}>
+                    <td className="align-right dir-ltr text-muted"  data-label={t('history.commission')}>
                       {trade.commission != null ? `−${fmtMoney(trade.commission, currency)}` : '—'}
                     </td>
-                    <td className={`dir-ltr font-bold stack-pl ${plClass}`} style={{ textAlign: 'right' }} data-label={t('history.netPl')}>
+                    <td className={`align-right dir-ltr font-bold stack-pl ${plClass}`}  data-label={t('history.netPl')}>
                       {pl != null ? fmtPl(pl, currency) : '—'}
                     </td>
                   </tr>

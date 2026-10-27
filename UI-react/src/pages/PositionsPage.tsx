@@ -146,11 +146,11 @@ export function PositionsPage() {
                   <tr>
                     <th>{t('table.symbol')}</th>
                     <th>{t('table.type')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.currentPrice')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
-                    <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
+                    <th className="align-right" >{t('table.volume')}</th>
+                    <th className="align-right" >{t('table.openPrice')}</th>
+                    <th className="align-right" >{t('table.currentPrice')}</th>
+                    <th className="align-right" >{t('table.pl')}</th>
+                    <th className="text-center" >{t('table.action')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -158,7 +158,7 @@ export function PositionsPage() {
                     <SkeletonRow />
                   ) : filteredOpen.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                      <td colSpan={7} className="empty-note text-muted text-sm" >
                         {t('positions.empty')}
                       </td>
                     </tr>
@@ -179,9 +179,9 @@ export function PositionsPage() {
                               <span className="badge badge-success">{t('badge.long')}</span>
                             )}
                           </td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(qty)}</td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(avgPrice)}</td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>
+                          <td className="align-right dir-ltr" >{fmtQty(qty)}</td>
+                          <td className="align-right dir-ltr" >{fmtPrice(avgPrice)}</td>
+                          <td className="align-right dir-ltr" >
                             {livePrice != null ? (
                               <span className={`font-bold ${pnl != null && pnl >= 0 ? 'text-success' : 'text-danger'}`}>
                                 {fmtPrice(livePrice)}
@@ -190,12 +190,12 @@ export function PositionsPage() {
                               <span className="text-muted">—</span>
                             )}
                           </td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>
+                          <td className="align-right dir-ltr" >
                             <span className={`font-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`}>
                               {fmtSignedMoney(pnl, currency)}
                             </span>
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td className="text-center" >
                             <button
                               type="button"
                               className="btn btn-danger"
@@ -298,16 +298,16 @@ export function PositionsPage() {
               <table className="table-compact">
                 <thead>
                   <tr>
-                    <th style={{ width: 40 }}>#</th>
+                    <th className="col-idx" >#</th>
                     <th>{t('table.symbol')}</th>
                     <th>{t('history.openTime')}</th>
                     <th>{t('history.closeTime')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.openPrice')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('history.closePrice')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.stopLoss')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.takeProfit')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.pl')}</th>
+                    <th className="align-right" >{t('table.openPrice')}</th>
+                    <th className="align-right" >{t('history.closePrice')}</th>
+                    <th className="align-right" >{t('table.volume')}</th>
+                    <th className="align-right" >{t('table.stopLoss')}</th>
+                    <th className="align-right" >{t('table.takeProfit')}</th>
+                    <th className="align-right" >{t('table.pl')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -315,7 +315,7 @@ export function PositionsPage() {
                     <SkeletonRow />
                   ) : filteredClosed.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                      <td colSpan={10} className="empty-note text-muted text-sm" >
                         {t('history.noTrades')}
                       </td>
                     </tr>
@@ -325,16 +325,16 @@ export function PositionsPage() {
                       const plClass = pl == null ? '' : pl >= 0 ? 'text-success' : 'text-danger';
                       return (
                         <tr key={trade.id}>
-                          <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
+                          <td className="col-idx text-muted text-sm" >{idx + 1}</td>
                           <td className="font-bold">{trade.symbolCode}</td>
                           <td className="text-sm"><bdi>{fmtTime(trade.openTime)}</bdi></td>
                           <td className="text-sm"><bdi>{fmtTime(trade.closeTime)}</bdi></td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.openPrice)}</td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(trade.closePrice)}</td>
-                          <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtQty(trade.quantity)}</td>
-                          <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.stopLoss)}</td>
-                          <td className="dir-ltr text-muted" style={{ textAlign: 'right' }}>{fmtPrice(trade.takeProfit)}</td>
-                          <td className={`dir-ltr font-bold ${plClass}`} style={{ textAlign: 'right' }}>
+                          <td className="align-right dir-ltr" >{fmtPrice(trade.openPrice)}</td>
+                          <td className="align-right dir-ltr" >{fmtPrice(trade.closePrice)}</td>
+                          <td className="align-right dir-ltr text-muted" >{fmtQty(trade.quantity)}</td>
+                          <td className="align-right dir-ltr text-muted" >{fmtPrice(trade.stopLoss)}</td>
+                          <td className="align-right dir-ltr text-muted" >{fmtPrice(trade.takeProfit)}</td>
+                          <td className={`align-right dir-ltr font-bold ${plClass}`} >
                             {pl != null ? fmtSignedMoney(pl, currency) : '—'}
                           </td>
                         </tr>
@@ -400,15 +400,15 @@ export function PositionsPage() {
               <table className="table-compact">
                 <thead>
                   <tr>
-                    <th style={{ width: 40 }}>#</th>
+                    <th className="col-idx" >#</th>
                     <th>{t('table.symbol')}</th>
                     <th>{t('table.type')}</th>
                     <th>{t('common.side')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('table.volume')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('common.limitPrice')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('common.stopPrice')}</th>
+                    <th className="align-right" >{t('table.volume')}</th>
+                    <th className="align-right" >{t('common.limitPrice')}</th>
+                    <th className="align-right" >{t('common.stopPrice')}</th>
                     <th className="text-sm">{t('table.createdAt')}</th>
-                    <th style={{ textAlign: 'center' }}>{t('table.action')}</th>
+                    <th className="text-center" >{t('table.action')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -416,7 +416,7 @@ export function PositionsPage() {
                     <SkeletonRow />
                   ) : filteredPending.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-muted text-sm" style={{ padding: 24, textAlign: 'center' }}>
+                      <td colSpan={9} className="empty-note text-muted text-sm" >
                         {t('positions.noPending')}
                       </td>
                     </tr>
@@ -425,7 +425,7 @@ export function PositionsPage() {
                       const isCancelling = cancellingId === o.id;
                       return (
                         <tr key={o.id}>
-                          <td className="text-muted text-sm" style={{ width: 40 }}>{idx + 1}</td>
+                          <td className="col-idx text-muted text-sm" >{idx + 1}</td>
                           <td className="font-bold">{o.symbolCode}</td>
                           <td>
                             <span className="badge badge-primary">
@@ -437,11 +437,11 @@ export function PositionsPage() {
                               {o.side === 'BUY' ? t('badge.buy') : t('badge.sell')}
                             </span>
                           </td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtQty(o.quantity)}</td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</td>
-                          <td className="dir-ltr" style={{ textAlign: 'right' }}>{fmtPrice(o.stopPrice)}</td>
+                          <td className="align-right dir-ltr" >{fmtQty(o.quantity)}</td>
+                          <td className="align-right dir-ltr" >{o.orderType === 'CLOSE' ? '—' : fmtPrice(o.limitPrice)}</td>
+                          <td className="align-right dir-ltr" >{fmtPrice(o.stopPrice)}</td>
                           <td className="text-sm">{fmtTime(o.createdAt)}</td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td className="text-center" >
                             <button
                               type="button"
                               className="btn btn-outline-danger"
