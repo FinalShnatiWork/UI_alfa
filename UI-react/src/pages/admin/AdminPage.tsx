@@ -695,7 +695,7 @@ function TxTab({ txs, accounts, usersById, onChanged }: { txs: AdminTx[]; accoun
             render: (tx) => usersById[accUser[tx.accountId]]?.email || `#${tx.accountId}`,
           },
           { id: 'type', label: 'Type', firstDir: 'asc', sort: (tx) => tx.txType || '', render: (tx) => tx.txType },
-          { id: 'amount', label: 'Amount', firstDir: 'desc', sort: (tx) => num(tx.amount), render: (tx) => money(tx.amount) },
+          { id: 'amount', label: 'Amount', firstDir: 'desc', sort: (tx) => num(tx.amount), render: (tx) => (tx.txType === 'ADJUSTMENT' ? signedMoney(tx.amount) : money(tx.amount)) },
           { id: 'method', label: 'Method', firstDir: 'asc', sort: (tx) => tx.method || tx.currency || '', render: (tx) => <span className="text-muted">{tx.method || tx.currency || '–'}</span> },
           {
             id: 'status', label: 'Status', firstDir: 'asc', sort: (tx) => tx.status || '',

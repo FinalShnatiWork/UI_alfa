@@ -15,7 +15,6 @@ export const QK = {
   pendingOrders: ['broker', 'orders', 'pending'] as const,
   me: ['auth', 'me'] as const,
   preferences: ['broker', 'preferences'] as const,
-  livePrice: (sym: string) => ['market', 'price', sym.toUpperCase()] as const,
 };
 
 /**
@@ -93,23 +92,6 @@ export function useTransactions() {
     queryFn: () => apiGet<Transaction[]>('/api/broker/transactions'),
     staleTime: 10_000,
     retry: 1,
-  });
-}
-
-/**
- * Custom hook to query live pricing quotes for a single asset symbol.
- *
- * @param symbol asset symbol string
- * @returns React Query query result object
- */
-export function useLivePrice(symbol: string | null) {
-  return useQuery({
-    queryKey: symbol ? QK.livePrice(symbol) : ['market', 'price', '__none__'],
-    queryFn: () => apiGet<{ price: number }>(`/api/market/price/${encodeURIComponent(symbol!)}`),
-    enabled: !!symbol,
-    staleTime: 1000,
-    refetchInterval: ACCOUNT_POLL_MS,
-    retry: 0,
   });
 }
 

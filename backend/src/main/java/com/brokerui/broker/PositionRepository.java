@@ -19,24 +19,8 @@ public interface PositionRepository extends JpaRepository<Position, Long> {
    */
   List<Position> findByTradingAccountIdOrderByOpenedAtDescIdDesc(Long tradingAccountId);
 
-  Optional<Position> findByTradingAccountIdAndSymbolCode(Long tradingAccountId, String symbolCode);
-
   Optional<Position> findByTradingAccountIdAndSymbolCodeAndSide(
       Long tradingAccountId, String symbolCode, String side);
-
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("SELECT p FROM Position p WHERE p.tradingAccount.id = :accountId AND p.symbolCode = :symbolCode AND p.side = :side")
-  Optional<Position> findByTradingAccountIdAndSymbolCodeAndSideForUpdate(
-      @Param("accountId") Long accountId, @Param("symbolCode") String symbolCode, @Param("side") String side);
-
-  /**
-   * Pessimistic write lock on a single position – used when placing a SELL order
-   * or executing order matching where side isn't explicitly known.
-   */
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("SELECT p FROM Position p WHERE p.tradingAccount.id = :accountId AND p.symbolCode = :symbolCode")
-  Optional<Position> findByTradingAccountIdAndSymbolCodeForUpdate(
-      @Param("accountId") Long accountId, @Param("symbolCode") String symbolCode);
 
   /**
    * Pessimistic write lock by position id – used when closing a position.

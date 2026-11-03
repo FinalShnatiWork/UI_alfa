@@ -78,7 +78,7 @@ Frontend URL: http://localhost:3001
 
 ### 5. Optional: neural network trainer
 
-Used only for `/api/nn/predict` shadow advice. Training and weights stay in `buysellmodel`.
+Used only for shadow advice recorded after each netting decision. Training and weights stay in `buysellmodel`.
 
 ```bash
 cd buysellmodel

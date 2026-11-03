@@ -68,6 +68,8 @@ class PlaceOrderGuardsTest {
     when(accountRepo.findByIdForUpdate(7L)).thenReturn(Optional.of(ta));
     when(symbolRepo.findByCode(anyString())).thenReturn(Optional.of(symbol(true)));
     when(priceService.getLivePrice(anyString())).thenReturn(90_000.0);
+    when(priceService.executionQuote(anyString()))
+        .thenReturn(new com.brokerui.market.MarketPriceService.ExecutionQuote(90_000.0, true));
     when(orderRepo.save(any(BrokerOrder.class))).thenAnswer(i -> {
       BrokerOrder o = i.getArgument(0);
       o.setId(100L);
@@ -85,11 +87,24 @@ class PlaceOrderGuardsTest {
   private ResponseEntity<?> place(String symbol, String qty, String type, String limit) {
     return controller.placeOrder(auth, new BrokerApiController.PlaceOrderRequest(
         symbol, "BUY", type, new BigDecimal(qty), limit == null ? null : new BigDecimal(limit),
-        null, null, null, null, null), null);
+        null, null, null, null, null, null), null);
   }
 
   private static Object error(ResponseEntity<?> r) {
     return ((Map<?, ?>) r.getBody()).get("error");
+  }
+
+  @Test
+  void stalePriceIsRefusedUntilTheUserAcceptsTheDemoPrice() {
+    when(priceService.executionQuote("BTCUSD"))
+        .thenReturn(new MarketPriceService.ExecutionQuote(90_000.0, false));
+
+    ResponseEntity<?> r = place("BTCUSD", "0.01", "MARKET", null);
+
+    assertEquals(400, r.getStatusCode().value());
+    assertEquals("stale_price", error(r));
+    assertEquals(true, ((Map<?, ?>) r.getBody()).get("demo"));
+    verify(marginLoanService, never()).tryCoverShortfall(any(), any(), any(), any());
   }
 
   @Test

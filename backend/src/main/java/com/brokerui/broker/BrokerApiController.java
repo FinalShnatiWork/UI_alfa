@@ -133,11 +133,6 @@ public class BrokerApiController {
         settledValue, pendingOut));
   }
 
-  @Transactional(readOnly = true)@GetMapping("/symbols")
-  public List<Symbol> symbols() {
-    return symbolRepo.findByEnabledTrueOrderByKindAscCodeAsc();
-  }
-
   @Transactional(readOnly = true)@GetMapping("/positions")
   public ResponseEntity<?> positions(Authentication auth) {
     AppUser u = requireUser(auth);
@@ -307,8 +302,11 @@ public class BrokerApiController {
    */
   public record PlaceOrderRequest(String symbolCode, String side, String orderType,
       BigDecimal quantity, BigDecimal limitPrice, BigDecimal stopPrice,
-      BigDecimal takeProfit, BigDecimal stopLoss, Boolean acceptLoan, Boolean strictLimit) {
+      BigDecimal takeProfit, BigDecimal stopLoss, Boolean acceptLoan, Boolean strictLimit,
+      Boolean acceptStalePrice) {
   }
+
+  public record ClosePositionRequest(Boolean acceptStalePrice) {}
 
   /** Result of the placement transaction: either a finished response, or an order to execute next. */
   private record Placement(ResponseEntity<?> response, Long executeOrderId, String auditAction) {}
@@ -394,16 +392,19 @@ public class BrokerApiController {
 
     // ── Pending (LIMIT / STOP) orders – basic validation + fund reservation ─
     if (!"MARKET".equals(orderType)) {
-      double currentPrice;
+      com.brokerui.market.MarketPriceService.ExecutionQuote quote;
       try {
-        currentPrice = priceService.getLivePrice(symbolCode);
-        if (currentPrice <= 0) {
-          return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
-        }
+        quote = priceService.executionQuote(symbolCode);
       } catch (Exception e) {
+        quote = null;
+      }
+      if (quote == null || !(quote.price() > 0)) {
         return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
       }
-      BigDecimal bdPrice = BigDecimal.valueOf(currentPrice);
+      if (!quote.live() && !Boolean.TRUE.equals(body.acceptStalePrice())) {
+        return done(stalePrice(quote.price()));
+      }
+      BigDecimal bdPrice = BigDecimal.valueOf(quote.price());
 
       BigDecimal targetPrice = body.limitPrice() != null ? body.limitPrice()
           : (body.stopPrice() != null ? body.stopPrice() : BigDecimal.ZERO);
@@ -477,16 +478,20 @@ public class BrokerApiController {
           "newBalance", ta.getBalance())));
     }
 
-    // ── MARKET order – fetch live price ──────────────────────────────────────
-    double price;
+    // ── MARKET order – a real feed, or the last real price after the user agrees ──
+    com.brokerui.market.MarketPriceService.ExecutionQuote quote;
     try {
-      price = priceService.getLivePrice(symbolCode);
-      if (price <= 0) {
-        return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
-      }
+      quote = priceService.executionQuote(symbolCode);
     } catch (Exception e) {
+      quote = null;
+    }
+    if (quote == null || !(quote.price() > 0)) {
       return done(ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable")));
     }
+    if (!quote.live() && !Boolean.TRUE.equals(body.acceptStalePrice())) {
+      return done(stalePrice(quote.price()));
+    }
+    double price = quote.price();
     BigDecimal rawPrice = BigDecimal.valueOf(price);
     BigDecimal leverage = BigDecimal.valueOf(ta.getLeverage() > 0 ? ta.getLeverage() : 100);
     boolean isBuy = "BUY".equals(side);
@@ -573,41 +578,67 @@ public class BrokerApiController {
     return new Placement(response, null, null);
   }
 
+  /** Demo only: the feeds are silent, so the trade can continue at the last real price if the user agrees. */
+  private static ResponseEntity<Map<String, Object>> stalePrice(double lastPrice) {
+    Map<String, Object> body = new java.util.LinkedHashMap<>();
+    body.put("ok", false);
+    body.put("error", "stale_price");
+    body.put("lastPrice", lastPrice);
+    body.put("demo", true);
+    return ResponseEntity.badRequest().body(body);
+  }
+
   // ───────────────────────────────────────────────────────────────────────────
   // Close full position (POST /api/broker/positions/{id}/close)
   // ───────────────────────────────────────────────────────────────────────────
 
   @PostMapping("/positions/{id}/close")
   public ResponseEntity<?> closePosition(Authentication auth,
-      @PathVariable Long id, HttpServletRequest request) {
+      @PathVariable Long id,
+      @RequestBody(required = false) ClosePositionRequest body,
+      HttpServletRequest request) {
     AppUser u = requireUser(auth);
-    Long owned = inTransaction(() -> {
+    boolean acceptStale = body != null && Boolean.TRUE.equals(body.acceptStalePrice());
+    record CloseTarget(Long id, String symbol) {}
+    CloseTarget owned = inTransaction(() -> {
       TradingAccount ta = ensurePrimaryAccount(u);
       Position pos = positionRepo.findById(id).orElse(null);
       if (pos == null || pos.getTradingAccount() == null || !pos.getTradingAccount().getId().equals(ta.getId())) {
         return null;
       }
-      return pos.getId();
+      return new CloseTarget(pos.getId(), pos.getSymbolCode());
     });
     if (owned == null) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "position_not_found"));
     }
+    com.brokerui.market.MarketPriceService.ExecutionQuote quote;
+    try {
+      quote = priceService.executionQuote(owned.symbol());
+    } catch (Exception e) {
+      quote = null;
+    }
+    if (quote == null || !(quote.price() > 0)) {
+      return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("ok", false, "error", "price_unavailable"));
+    }
+    if (!quote.live() && !acceptStale) {
+      return stalePrice(quote.price());
+    }
     if (nettingService == null) {
       return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("ok", false, "error", "netting_unavailable"));
     }
-    com.brokerui.broker.netting.NettingService.Result r = nettingService.offerClose(owned);
+    com.brokerui.broker.netting.NettingService.Result r = nettingService.offerClose(owned.id());
     if (r == null) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("ok", false, "error", "position_not_found"));
     }
     auditLogService.log(u, "POSITION_CLOSED",
         "offered close order " + r.orderId() + " status=" + r.status(), request);
-    Map<String, Object> body = new java.util.LinkedHashMap<>();
-    body.put("ok", true);
-    body.put("orderId", r.orderId());
-    body.put("status", r.status());
-    body.put("routing", r.routing() == null ? "" : r.routing());
-    if ("PENDING_NET".equals(r.status())) body.put("waiting", true);
-    return ResponseEntity.ok(body);
+    Map<String, Object> resp = new java.util.LinkedHashMap<>();
+    resp.put("ok", true);
+    resp.put("orderId", r.orderId());
+    resp.put("status", r.status());
+    resp.put("routing", r.routing() == null ? "" : r.routing());
+    if ("PENDING_NET".equals(r.status())) resp.put("waiting", true);
+    return ResponseEntity.ok(resp);
   }
 
   @Transactional(readOnly = true)@GetMapping("/notifications")

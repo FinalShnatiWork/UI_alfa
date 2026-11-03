@@ -66,7 +66,7 @@ export function RegisterForm({ kind }: { kind: 'real' | 'demo' }) {
         displayName,
         password: data.password,
       });
-      if (res.status === 201) {
+      if (res.ok) {
         saveUserProfile({
           firstName: data.firstName?.trim() ?? '',
           lastName: data.lastName?.trim() ?? '',

@@ -9,11 +9,8 @@ import com.brokerui.broker.AccountEquity;
 import com.brokerui.broker.AccountTransaction;
 import com.brokerui.broker.AccountTransactionRepository;
 import com.brokerui.broker.TradingAccount;
-import com.brokerui.broker.KycCaseRepository;
-import com.brokerui.broker.NotificationRepository;
 import com.brokerui.broker.AuditLogRepository;
 import com.brokerui.broker.MT5ConnectionManager;
-import com.brokerui.broker.MarginLoanLedger;
 import com.brokerui.broker.MarginLoanLedgerRepository;
 import com.brokerui.broker.MarginLoanService;
 import com.brokerui.broker.AuditLogService;
@@ -50,8 +47,6 @@ public class AdminTradeController {
   private final PositionRepository positionRepo;
   private final TradingAccountRepository accountRepo;
   private final AccountTransactionRepository transactionRepo;
-  private final KycCaseRepository kycRepo;
-  private final NotificationRepository notifRepo;
   private final AuditLogRepository auditRepo;
   private final MT5ConnectionManager mt5ConnectionManager;
   private final MarginLoanLedgerRepository marginLedgerRepo;
@@ -67,8 +62,6 @@ public class AdminTradeController {
    * @param positionRepo the repository for open positions
    * @param accountRepo the repository for trading accounts
    * @param transactionRepo the repository for ledger transactions
-   * @param kycRepo the repository for KYC/verification cases
-   * @param notifRepo the repository for user alerts/notifications
    * @param auditRepo the repository for system audit logs
    * @param mt5ConnectionManager the manager for MT5 bridge socket connectivity
    * @param marginLedgerRepo the repository for margin credit line ledger entries
@@ -79,7 +72,6 @@ public class AdminTradeController {
    */
   public AdminTradeController(BrokerOrderRepository orderRepo, PositionRepository positionRepo,
         TradingAccountRepository accountRepo, AccountTransactionRepository transactionRepo,
-        KycCaseRepository kycRepo, NotificationRepository notifRepo,
         AuditLogRepository auditRepo, MT5ConnectionManager mt5ConnectionManager,
         MarginLoanLedgerRepository marginLedgerRepo,
         MarginLoanService marginLoanService, AuditLogService auditLogService, AppUserRepository userRepo,
@@ -91,8 +83,6 @@ public class AdminTradeController {
     this.positionRepo = positionRepo;
     this.accountRepo = accountRepo;
     this.transactionRepo = transactionRepo;
-    this.kycRepo = kycRepo;
-    this.notifRepo = notifRepo;
     this.auditRepo = auditRepo;
     this.mt5ConnectionManager = mt5ConnectionManager;
     this.marginLedgerRepo = marginLedgerRepo;
@@ -304,38 +294,6 @@ public class AdminTradeController {
         .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
-  public record KycDto(Long id, Long userId, String status, Instant submittedAt, Instant reviewedAt, String note) {}
-
-  /**
-   * Retrieves all KYC/verification submissions.
-   * The goal is to support administrative verification approvals.
-   *
-   * @return a list of all KYC cases
-   */
-  @GetMapping("/kyc")
-  @Transactional(readOnly = true)
-  public List<KycDto> getKyc() {
-    return kycRepo.findAll().stream()
-      .map(k -> new KycDto(k.getId(), k.getUser().getId(), k.getStatus(), k.getSubmittedAt(), k.getReviewedAt(), k.getNote()))
-      .collect(Collectors.toList());
-  }
-
-  public record NotifDto(Long id, Long userId, String notifType, String title, String body, boolean read, Instant createdAt) {}
-
-  /**
-   * Retrieves all system-wide user alerts/notifications.
-   * The goal is to audit notifications sent to client dashboards.
-   *
-   * @return a list of all user notifications
-   */
-  @GetMapping("/notifications")
-  @Transactional(readOnly = true)
-  public List<NotifDto> getNotifications() {
-    return notifRepo.findAll().stream()
-      .map(n -> new NotifDto(n.getId(), n.getUser().getId(), n.getNotifType(), n.getTitle(), n.getBody(), n.getReadAt() != null, n.getCreatedAt()))
-      .collect(Collectors.toList());
-  }
-
   public record AuditDto(Long id, Long userId, String action, String detail, String ip, Instant createdAt) {}
 
   /**
@@ -387,18 +345,6 @@ public class AdminTradeController {
       return Map.of("connected", success);
   }
 
-  /**
-   * Instructs the manager to disconnect from the MT5 bridge.
-   * The goal is to switch off MT5 synchronization for testing or debugging.
-   *
-   * @return a map confirming disconnection status
-   */
-  @PostMapping("/mt5/disconnect")
-  public Map<String, Boolean> disconnectMt5() {
-      mt5ConnectionManager.setConnected(false);
-      return Map.of("connected", false);
-  }
-
   public record UpdateBalanceRequest(BigDecimal balance) {}
 
   /**
@@ -420,51 +366,25 @@ public class AdminTradeController {
       var acc = accountRepo.findByIdForUpdate(id)
           .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
-      BigDecimal before = acc.getBalance();
+      BigDecimal before = acc.getBalance() == null ? BigDecimal.ZERO : acc.getBalance();
+      BigDecimal delta = req.balance().subtract(before);
       acc.setBalance(req.balance());
       accountRepo.save(acc);
+      if (delta.signum() != 0) {
+        AccountTransaction tx = new AccountTransaction();
+        tx.setTradingAccount(acc);
+        tx.setTxType("ADJUSTMENT");
+        tx.setStatus("APPROVED");
+        tx.setAmount(delta);
+        tx.setCurrency(acc.getCurrency());
+        tx.setMethod("admin");
+        tx.setNote("Admin balance " + before.toPlainString() + " -> " + req.balance().toPlainString());
+        tx.setProcessedAt(java.time.Instant.now());
+        transactionRepo.save(tx);
+      }
       audit(auth, "ADMIN_BALANCE_SET",
           accountLabel(acc) + " balance " + before + " -> " + req.balance() + " " + acc.getCurrency(), request);
       return Map.of("ok", true);
-  }
-
-  public record UpdateLoanRequest(BigDecimal borrowedBalance) {}
-
-  /**
-   * Updates the margin loan borrowed balance of a specific trading account for demo testing.
-   *
-   * @param id the target trading account ID
-   * @param req the request containing the new borrowedBalance value
-   * @return a map indicating the success of the update
-   */
-  @PostMapping("/accounts/{id}/loan")
-  @org.springframework.transaction.annotation.Transactional
-  public Map<String, Object> updateLoan(@PathVariable Long id, @RequestBody UpdateLoanRequest req,
-      Authentication auth, HttpServletRequest request) {
-      var acc = accountRepo.findByIdForUpdate(id)
-          .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-               org.springframework.http.HttpStatus.NOT_FOUND, "account not found"));
-      BigDecimal debtBefore = acc.getBorrowedBalance();
-      BigDecimal newBorrowed = (req != null && req.borrowedBalance() != null) ? req.borrowedBalance() : new BigDecimal("3500.00");
-      acc.setBorrowedBalance(newBorrowed);
-      if (acc.getInterestAccruedTotal() == null || acc.getInterestAccruedTotal().compareTo(BigDecimal.ZERO) == 0) {
-        acc.setInterestAccruedTotal(new BigDecimal("17.50"));
-      }
-      acc.setLastInterestAt(newBorrowed.signum() > 0 ? Instant.now() : null);
-      accountRepo.save(acc);
-
-      MarginLoanLedger entry = new MarginLoanLedger();
-      entry.setTradingAccount(acc);
-      entry.setEntryType("BORROW");
-      entry.setAmount(newBorrowed);
-      entry.setBorrowedAfter(newBorrowed);
-      entry.setBalanceAfter(acc.getBalance());
-      entry.setNote("Manual margin loan activation for demo");
-      marginLedgerRepo.save(entry);
-      audit(auth, "ADMIN_DEBT_SET",
-          accountLabel(acc) + " debt " + debtBefore + " -> " + newBorrowed + " " + acc.getCurrency(), request);
-
-      return Map.of("ok", true, "borrowedBalance", acc.getBorrowedBalance());
   }
 }
 

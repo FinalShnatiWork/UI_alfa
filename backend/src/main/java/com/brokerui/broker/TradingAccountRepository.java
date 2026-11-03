@@ -11,8 +11,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface TradingAccountRepository extends JpaRepository<TradingAccount, Long> {
 
-  List<TradingAccount> findByUserIdOrderByIdAsc(Long userId);
-
   Optional<TradingAccount> findFirstByUserIdOrderByIdAsc(Long userId);
 
   /**

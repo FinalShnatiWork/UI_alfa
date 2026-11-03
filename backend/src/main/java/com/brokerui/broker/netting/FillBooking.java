@@ -23,9 +23,8 @@ import org.springframework.stereotype.Component;
  * The one place that books a fill into an account — shared by internal crosses, external fills
  * and resting LIMIT/LIQUIDITY fills, so the money logic exists once.
  *
- * Same economics as the pre-netting {@code OrderExecutionService.executeFilled}: the cash that was
- * reserved when the order was placed is compared with what the fill really costs (margin +
- * commission). Unused reserve is returned via {@link MarginLoanService#repaySettlementOrBorrow};
+ * The cash that was reserved when the order was placed is compared with what the fill really
+ * costs (margin + commission). Unused reserve is returned via {@link MarginLoanService#repaySettlementOrBorrow};
  * a more expensive fill borrows the difference via {@link MarginLoanService#tryCoverShortfall}
  * (credit-limit checked). Partial fills consume the reserve proportionally.
  */
@@ -242,7 +241,7 @@ public class FillBooking {
       try {
         Notification n = new Notification();
         n.setUser(ta.getUser());
-        n.setNotifType("TRADE");
+        n.setNotifType("LIQUIDATION".equals(o.getClientTag()) ? "LIQUIDATION" : "TRADE");
         n.setTitle(closeNotificationTitle(o.getClientTag()));
         n.setBody(String.format(java.util.Locale.US,
             "{\"side\":\"%s\",\"qty\":\"%.4f\",\"symbol\":\"%s\",\"price\":\"%.4f\",\"pnl\":\"%.2f\"}",

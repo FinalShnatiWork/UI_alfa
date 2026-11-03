@@ -42,9 +42,6 @@ broker:
       ttl-seconds: 30
       market-rate-per-min: 6
       position-ttl-minutes: 10
-  market:
-    finnhub-api-key: ${FINNHUB_API_KEY:}
-    rapidapi-key: ${RAPIDAPI_KEY:}
   mt5:
     auto-connect: ${MT5_AUTO_CONNECT:false}
     base-path: ${MT5_BASE_PATH:}

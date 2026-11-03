@@ -4,17 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,27 +37,7 @@ public class YahooFinanceService {
      */
     public YahooFinanceService(ObjectMapper om) {
         this.om = om;
-        this.httpClient = buildHttpClient();
-    }
-
-    private static HttpClient buildHttpClient() {
-        try {
-            TrustManager[] trustAll = { new X509TrustManager() {
-                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                public void checkClientTrusted(X509Certificate[] c, String a) {}
-                public void checkServerTrusted(X509Certificate[] c, String a) {}
-            }};
-            SSLContext sc = SSLContext.getInstance("TLS");
-            sc.init(null, trustAll, new SecureRandom());
-            return HttpClient.newBuilder()
-                    .sslContext(sc)
-                    .followRedirects(HttpClient.Redirect.ALWAYS)
-                    .build();
-        } catch (Exception e) {
-            return HttpClient.newBuilder()
-                    .followRedirects(HttpClient.Redirect.ALWAYS)
-                    .build();
-        }
+        this.httpClient = FeedHttpClient.create();
     }
 
     public boolean isConfigured() {

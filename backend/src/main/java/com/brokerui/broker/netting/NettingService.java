@@ -127,7 +127,6 @@ public class NettingService {
   public record Result(Long orderId, String status, BigDecimal quantity, BigDecimal filledQty,
       BigDecimal internalQty, BigDecimal externalQty, BigDecimal avgPrice, String routing,
       BigDecimal newBalance, int matches) {
-    public boolean anyFill() { return filledQty != null && filledQty.signum() > 0; }
   }
 
   // ───────────────────────────────────────────────────────────────────────────

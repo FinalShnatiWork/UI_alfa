@@ -2,13 +2,13 @@ package com.brokerui.market;
 
 import com.brokerui.broker.MT5IntegrationService;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 /**
  * Aggregator service that coordinates fetching live prices from multiple adapters
- * (Binance for crypto, MT5 for FX/metals, Yahoo Finance as secondary, and synthetic fallback).
+ * (Binance for crypto, MT5 for FX/metals, Yahoo Finance as secondary).
+ * When every feed is silent, callers can use the last real price of this server run.
  */
 @Service
 public class MarketPriceService {
@@ -18,8 +18,13 @@ public class MarketPriceService {
     private final YahooFinanceService yahoo;
     private final BinanceService binance;
     private final ConcurrentHashMap<String, CachedQuote> cache = new ConcurrentHashMap<>();
+    /** Last price a real feed actually returned. Kept for this server run, not only for 1.5 seconds. */
+    private final ConcurrentHashMap<String, Double> lastReal = new ConcurrentHashMap<>();
 
     private record CachedQuote(double price, long fetchedAtMs) {}
+
+    /** A price for an order. {@code live} is false when the feeds are silent and this is the last real price. */
+    public record ExecutionQuote(double price, boolean live) {}
 
     /**
      * Constructs the MarketPriceService with required data adapters.
@@ -54,14 +59,38 @@ public class MarketPriceService {
             return cached.price();
         }
 
-        double price = fetchLivePriceUncached(sym);
-        cache.put(sym, new CachedQuote(price, now));
-        return price;
+        ExecutionQuote quote = executionQuote(sym);
+        if (quote == null) return 0.0;
+        cache.put(sym, new CachedQuote(quote.price(), now));
+        return quote.price();
     }
 
     /**
-     * A quote from a real feed or a test override. Null when the only fallback
-     * would be a made-up demo price. Used to convert yen and kroner into dollars.
+     * Price for a user order. A live feed wins. If every feed is silent, the last real
+     * price from this server run is returned with {@code live=false}. A made-up demo
+     * price is never returned.
+     */
+    public ExecutionQuote executionQuote(String symbol) {
+        String sym = symbol == null ? "" : symbol.trim().toUpperCase();
+        if (sym.isEmpty()) return null;
+
+        TestOverride override = getTestOverride(sym);
+        if (override != null) return new ExecutionQuote(override.mid(), true);
+
+        double real = fetchRealPrice(sym);
+        if (real > 0) {
+            lastReal.put(sym, real);
+            return new ExecutionQuote(real, true);
+        }
+        Double last = lastReal.get(sym);
+        if (last != null && last > 0) return new ExecutionQuote(last, false);
+        return null;
+    }
+
+    /**
+     * A quote from a real feed, the last real quote of this server run, or a test override.
+     * Null when this server has never seen a real price for the symbol.
+     * Used to convert yen and kroner into dollars.
      */
     public BigDecimal marketPrice(String symbol) {
         String sym = symbol == null ? "" : symbol.trim().toUpperCase();
@@ -69,18 +98,9 @@ public class MarketPriceService {
         TestOverride override = getTestOverride(sym);
         if (override != null) return BigDecimal.valueOf(override.mid());
 
-        long now = System.currentTimeMillis();
-        CachedQuote cached = realCache.get(sym);
-        if (cached != null && now - cached.fetchedAtMs() < CACHE_TTL_MS && cached.price() > 0) {
-            return BigDecimal.valueOf(cached.price());
-        }
-        double price = fetchRealPrice(sym);
-        if (!(price > 0)) return null;
-        realCache.put(sym, new CachedQuote(price, now));
-        return BigDecimal.valueOf(price);
+        ExecutionQuote quote = executionQuote(sym);
+        return quote == null ? null : BigDecimal.valueOf(quote.price());
     }
-
-    private final ConcurrentHashMap<String, CachedQuote> realCache = new ConcurrentHashMap<>();
 
     private double fetchRealPrice(String sym) {
         // 0. Try Binance for crypto
@@ -99,7 +119,7 @@ public class MarketPriceService {
             } catch (Exception ignored) {}
         }
 
-        // 2. Try Yahoo Finance (RapidAPI) if configured
+        // 2. Try Yahoo Finance
         if (yahoo.isConfigured()) {
             try {
                 double p = yahoo.getLivePrice(sym);
@@ -108,11 +128,6 @@ public class MarketPriceService {
         }
 
         return 0;
-    }
-
-    private double fetchLivePriceUncached(String sym) {
-        double real = fetchRealPrice(sym);
-        return real > 0 ? real : syntheticDemoPrice(sym).doubleValue();
     }
 
     /**
@@ -126,37 +141,6 @@ public class MarketPriceService {
                symbol.startsWith("SOL") || symbol.startsWith("XRP") || 
                symbol.startsWith("DOGE") || symbol.startsWith("LTC") || 
                symbol.startsWith("ADA") || symbol.startsWith("BNB"));
-    }
-
-    /**
-     * Generates a deterministic synthetic quote based on time bucket for demo trades when off-line.
-     *
-     * @param symbol instrument code
-     * @return base price BigDecimal
-     */
-    private static BigDecimal syntheticDemoPrice(String symbol) {
-        String s = symbol == null ? "" : symbol.trim().toUpperCase();
-        if (s.isEmpty()) return BigDecimal.ZERO;
-        long nowSec = System.currentTimeMillis() / 1000L;
-        long bucket = nowSec / 3L;
-        long h = 1125899906842597L;
-        for (int i = 0; i < s.length(); i++) h = 31L * h + s.charAt(i);
-        long mix = h ^ (bucket * 0x9e3779b97f4a7c15L);
-        double u = ((mix >>> 11) & ((1L << 53) - 1)) / (double) (1L << 53);
-
-        BigDecimal base;
-        int scale;
-        if (s.endsWith("JPY"))      { base = new BigDecimal("158.000"); scale = 3; }
-        else if (s.startsWith("XAU")) { base = new BigDecimal("4660.00"); scale = 2; }
-        else if (s.startsWith("XAG")) { base = new BigDecimal("83.00");   scale = 2; }
-        else if (s.startsWith("BTC")) { base = new BigDecimal("103000.00"); scale = 2; }
-        else if (s.startsWith("ETH")) { base = new BigDecimal("2400.00"); scale = 2; }
-        else if (s.startsWith("SOL")) { base = new BigDecimal("170.00");  scale = 2; }
-        else if (s.startsWith("XRP")) { base = new BigDecimal("2.40");    scale = 5; }
-        else                          { base = new BigDecimal("1.17000"); scale = 5; }
-
-        return base.multiply(BigDecimal.valueOf(0.99 + (u * 0.02)))
-                   .setScale(scale, RoundingMode.HALF_UP);
     }
 
     // ─── Test-only price overrides (netting scenarios, admin test endpoints) ─────

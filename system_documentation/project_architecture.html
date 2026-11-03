@@ -456,7 +456,6 @@
   <table>
     <tr><th>method</th><th>path</th><th class="ru">таблицы</th><th class="en">tables</th></tr>
     <tr><td>GET</td><td>/overview</td><td colspan="2">trading_account + live equity</td></tr>
-    <tr><td>GET</td><td>/symbols</td><td colspan="2">symbol</td></tr>
     <tr><td>GET</td><td>/positions</td><td colspan="2">position</td></tr>
     <tr><td>GET</td><td>/orders , /orders/pending</td><td colspan="2">broker_order</td></tr>
     <tr><td>POST</td><td>/orders</td><td colspan="2">broker_order, position, trading_account, ledger</td></tr>
@@ -471,12 +470,12 @@
   <h3>/api/market</h3>
   <table>
     <tr><th>GET</th><th>/api/market/price/{symbol}</th><th class="ru">живая цена, БД не пишет</th><th class="en">live quote, no DB write</th></tr>
-    <tr><td>GET</td><td>/forex/candles , /metals/candles , /stock/candles</td><td class="ru">свечи с фидов</td><td class="en">candles from feeds</td></tr>
+    <tr><td>GET</td><td>/forex/candles , /metals/candles , /crypto/candles</td><td class="ru">свечи с фидов</td><td class="en">candles from feeds</td></tr>
     <tr><td>GET</td><td>/api/market/analysis</td><td class="ru">теханализ, считает Java</td><td class="en">technical analysis, computed in Java</td></tr>
   </table>
   <h3>/api/admin (только localhost)</h3>
-  <p class="ru">users CRUD/ban, trades, accounts, balance/loan patch, margin-loans + ручной interest/liquidation, transactions, kyc, notifications, audit, mt5 connect, netting summary/book/invariants.</p>
-  <p class="en">users CRUD/ban, trades, accounts, balance/loan patch, margin-loans + manual interest/liquidation, transactions, kyc, notifications, audit, mt5 connect, netting summary/book/invariants.</p>
+  <p class="ru">users CRUD/ban, trades, accounts, balance (с проводкой ADJUSTMENT), margin-loans + ручной interest/liquidation, transactions, audit, mt5 status/connect, netting summary/book/invariants и тестовый пульт неттинга.</p>
+  <p class="en">users CRUD/ban, trades, accounts, balance (with an ADJUSTMENT row), margin-loans + manual interest/liquidation, transactions, audit, mt5 status/connect, netting summary/book/invariants and the netting test console.</p>
   <p>GET /api/health — liveness.</p>
 </section>
 
@@ -487,7 +486,7 @@
     <div class="box">
       <h3 class="ru">Сущности = таблицы</h3>
       <h3 class="en">Entities = tables</h3>
-      <p>AppUser, TradingAccount, Symbol, BrokerOrder, Position, AccountTransaction, MarginLoanLedger, KycCase, Notification, AuditLog, UserPreference</p>
+      <p>AppUser, TradingAccount, Symbol, BrokerOrder, Position, AccountTransaction, MarginLoanLedger, Notification, AuditLog, UserPreference</p>
     </div>
     <div class="box">
       <h3 class="ru">Вход с улицы</h3>
@@ -502,11 +501,11 @@
     <div class="box">
       <h3 class="ru">Рынок и MT5</h3>
       <h3 class="en">Market and MT5</h3>
-      <p>MarketPriceService (кэш), BinancePriceService, BinanceService, YahooFinanceService, FinnhubMarketService, NNPredictorClient, MT5IntegrationService, MT5ConnectionManager, MT5PositionSyncService</p>
+      <p>MarketPriceService (кэш и последняя настоящая цена), BinanceService (Bybit), YahooFinanceService, NNPredictorClient, MT5IntegrationService, MT5ConnectionManager, MT5PositionSyncService</p>
     </div>
   </div>
-  <p class="ru muted">Репозитории — тонкие Spring Data интерфейсы, по одному на сущность. DTO: BrokerOverviewDto, ClosedTradeDto, UserDto, RegisterRequest.</p>
-  <p class="en muted">Repositories are thin Spring Data interfaces, one per entity. DTOs: BrokerOverviewDto, ClosedTradeDto, UserDto, RegisterRequest.</p>
+  <p class="ru muted">Репозитории — тонкие Spring Data интерфейсы, по одному на сущность. DTO: BrokerOverviewDto, UserDto, RegisterRequest.</p>
+  <p class="en muted">Repositories are thin Spring Data interfaces, one per entity. DTOs: BrokerOverviewDto, UserDto, RegisterRequest.</p>
 </section>
 
 <section id="ui">

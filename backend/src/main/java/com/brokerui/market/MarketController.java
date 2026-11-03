@@ -80,20 +80,6 @@ public class MarketController {
     }
 
     /**
-     * Retrieves historical stock candlestick series.
-     *
-     * @param symbol stock ticker (e.g. AAPL)
-     * @param interval chart interval code (e.g. 1h, 1d)
-     * @return list of CandleBars
-     */
-    @GetMapping("/api/market/stock/candles")
-    public ResponseEntity<?> stockCandles(
-            @RequestParam String symbol,
-            @RequestParam(defaultValue = "1h") String interval) {
-        return candlesResponse(symbol, interval);
-    }
-
-    /**
      * Crypto candles (BTCUSD, ETHUSD, …). Same lookup chain as the other categories.
      */
     @GetMapping("/api/market/crypto/candles")
@@ -164,36 +150,5 @@ public class MarketController {
                symbol.startsWith("SOL") || symbol.startsWith("XRP") || 
                symbol.startsWith("DOGE") || symbol.startsWith("LTC") || 
                symbol.startsWith("ADA") || symbol.startsWith("BNB"));
-    }
-
-    /**
-     * Generates a deterministic synthetic quote for demo trades when all api connections are offline.
-     *
-     * @param symbol instrument code
-     * @return rounded base price
-     */
-    private static BigDecimal syntheticDemoPrice(String symbol) {
-        String s = symbol == null ? "" : symbol.trim().toUpperCase();
-        if (s.isEmpty()) return BigDecimal.ZERO;
-        long nowSec = System.currentTimeMillis() / 1000L;
-        long bucket = nowSec / 3L;
-        long h = 1125899906842597L;
-        for (int i = 0; i < s.length(); i++) h = 31L * h + s.charAt(i);
-        long mix = h ^ (bucket * 0x9e3779b97f4a7c15L);
-        double u = ((mix >>> 11) & ((1L << 53) - 1)) / (double) (1L << 53);
-
-        BigDecimal base;
-        int scale;
-        if (s.endsWith("JPY"))      { base = new BigDecimal("158.000"); scale = 3; }
-        else if (s.startsWith("XAU")) { base = new BigDecimal("4660.00"); scale = 2; }
-        else if (s.startsWith("XAG")) { base = new BigDecimal("83.00");   scale = 2; }
-        else if (s.startsWith("BTC")) { base = new BigDecimal("103000.00"); scale = 2; }
-        else if (s.startsWith("ETH")) { base = new BigDecimal("2400.00"); scale = 2; }
-        else if (s.startsWith("SOL")) { base = new BigDecimal("170.00");  scale = 2; }
-        else if (s.startsWith("XRP")) { base = new BigDecimal("2.40");    scale = 5; }
-        else                          { base = new BigDecimal("1.17000"); scale = 5; }
-
-        return base.multiply(BigDecimal.valueOf(0.99 + (u * 0.02)))
-                   .setScale(scale, RoundingMode.HALF_UP);
     }
 }

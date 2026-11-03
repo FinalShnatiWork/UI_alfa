@@ -53,15 +53,6 @@ public class MT5ConnectionManager {
     }
 
     /**
-     * Programmatically sets the connected state flag.
-     *
-     * @param connected targeted state flag
-     */
-    public void setConnected(boolean connected) {
-        this.isConnected = connected;
-    }
-
-    /**
      * Returns the underlying MT5 integration service.
      *
      * @return MT5IntegrationService instance

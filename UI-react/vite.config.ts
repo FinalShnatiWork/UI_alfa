@@ -39,8 +39,6 @@ export default defineConfig({
       'react-hook-form',
       '@hookform/resolvers/zod',
       'zod',
-      'sockjs-client',
-      '@stomp/stompjs',
     ],
   },
   build: {

@@ -17,12 +17,6 @@ public interface BrokerOrderRepository extends JpaRepository<BrokerOrder, Long> 
 
   List<BrokerOrder> findByTradingAccountIdAndStatusOrderByFilledAtDesc(Long tradingAccountId, String status);
 
-  List<BrokerOrder> findByTradingAccountIdAndStatusOrderByCreatedAtDesc(Long tradingAccountId, String status);
-
-  List<BrokerOrder> findTop50ByStatusOrderByCreatedAtAsc(String status);
-
-  long countBySymbolCodeAndSideAndStatus(String symbolCode, String side, String status);
-
   /**
    * Pessimistic write lock on the order row. Use inside {@code @Transactional} methods that
    * either fill or cancel a pending order so the two paths cannot both observe status=NEW

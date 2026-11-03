@@ -428,10 +428,10 @@ public class MarginLoanService {
     List<Position> stillOpen = positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(ta.getId());
     boolean positionsRemain = stillOpen != null && !stillOpen.isEmpty();
     if (remainingDebt.compareTo(BigDecimal.ZERO) > 0 && !positionsRemain) {
-      writeLedger(ta, "LIQUIDATION", remainingDebt,
-          "Liquidation complete — residual debt written off");
       ta.setBorrowedBalance(BigDecimal.ZERO);
       stopInterestClockIfRepaid(ta);
+      writeLedger(ta, "LIQUIDATION", remainingDebt,
+          "Liquidation complete — residual debt written off");
       accountRepo.save(ta);
       auditLogService.log(ta.getUser(), "LIQUIDATION", "residual debt written off after positions closed", null);
     }

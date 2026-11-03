@@ -75,11 +75,19 @@ export function PositionsPage() {
     }
   }
 
-  async function closePosition(pos: Position) {
+  async function closePosition(pos: Position, acceptStale = false) {
     setClosing(pos.id);
     try {
-      const res = await apiPostJson(`/api/broker/positions/${pos.id}/close`, {});
-      const data = (await res.json()) as { ok: boolean; closePnl?: string; status?: string; error?: string };
+      const res = await apiPostJson(`/api/broker/positions/${pos.id}/close`, acceptStale ? { acceptStalePrice: true } : {});
+      const data = (await res.json()) as { ok: boolean; closePnl?: string; status?: string; error?: string; lastPrice?: number };
+      if (!res.ok && data.error === 'stale_price') {
+        const last = Number(data.lastPrice);
+        setConfirm({
+          message: t('trading.stalePriceDemo', { price: Number.isFinite(last) ? String(last) : '' }),
+          run: () => { void closePosition(pos, true); },
+        });
+        return;
+      }
       if (res.ok && data.ok) {
         const msg = t('alerts.closeOk', { symbol: pos.symbolCode }) + (data.closePnl ? ` (${fmtSignedMoney(data.closePnl, currency)})` : '');
         toast.show(msg, { variant: 'success' });

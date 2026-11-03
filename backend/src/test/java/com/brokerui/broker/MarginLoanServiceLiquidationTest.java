@@ -113,6 +113,23 @@ class MarginLoanServiceLiquidationTest {
   }
 
   @Test
+  void writeOffRowShowsZeroDebtAfter() {
+    TradingAccount ta = account(BigDecimal.ZERO, new BigDecimal("250"), 100);
+    ta.setLastInterestAt(Instant.now());
+    setUp(ta, List.of());
+
+    service.finishLiquidation(1L);
+
+    org.mockito.ArgumentCaptor<MarginLoanLedger> row = org.mockito.ArgumentCaptor.forClass(MarginLoanLedger.class);
+    verify(ledgerRepo).save(row.capture());
+    assertEquals("LIQUIDATION", row.getValue().getEntryType());
+    assertEquals(0, row.getValue().getAmount().compareTo(new BigDecimal("250")));
+    assertEquals(0, row.getValue().getBorrowedAfter().signum());
+    assertEquals(0, ta.getBorrowedBalance().signum());
+    assertEquals(null, ta.getLastInterestAt());
+  }
+
+  @Test
   void doesNotWriteOffDebt_whenMarginLevelRecoversBeforeAllPositionsClosed() {
     // Position A: worst (biggest loss) -> closed first.
     Position posA = position("BTCUSD", "LONG", BigDecimal.ONE, new BigDecimal("100"));

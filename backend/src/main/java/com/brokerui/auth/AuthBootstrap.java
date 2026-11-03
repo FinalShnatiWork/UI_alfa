@@ -184,20 +184,41 @@ public class AuthBootstrap implements ApplicationRunner {
       return accountRepo.save(a);
     });
 
-    if (ledgerRepo.findByTradingAccountIdOrderByCreatedAtDesc(acc.getId()).isEmpty()) {
-      MarginLoanLedger entry = new MarginLoanLedger();
-      entry.setTradingAccount(acc);
-      entry.setEntryType("BORROW");
-      entry.setAmount(new BigDecimal("1500.00"));
-      entry.setBorrowedAfter(new BigDecimal("1500.00"));
-      entry.setBalanceAfter(new BigDecimal("2500.00"));
-      entry.setNote("Standard margin credit line utilization");
-      ledgerRepo.save(entry);
-    }
+    seedDebtLedger(acc, new BigDecimal("1500.00"), new BigDecimal("17.50"), new BigDecimal("2500.00"),
+        "Standard margin credit line utilization");
 
     if (positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(acc.getId()).isEmpty()) {
       createPosition(acc, "BTCUSD", "LONG", new BigDecimal("0.0500"), new BigDecimal("65700.00"));
     }
+  }
+
+  /**
+   * Seeded debt already includes its interest, so the journal shows the borrow and then the
+   * interest charge, ending at the same debt the account shows. Only while the account still
+   * holds exactly the seeded numbers and has no journal yet.
+   */
+  private void seedDebtLedger(TradingAccount acc, BigDecimal debt, BigDecimal interest, BigDecimal balance, String note) {
+    if (!ledgerRepo.findByTradingAccountIdOrderByCreatedAtDesc(acc.getId()).isEmpty()) return;
+    if (acc.getBorrowedBalance() == null || acc.getBorrowedBalance().compareTo(debt) != 0) return;
+    if (acc.getInterestAccruedTotal() == null || acc.getInterestAccruedTotal().compareTo(interest) != 0) return;
+    BigDecimal principal = debt.subtract(interest);
+    MarginLoanLedger borrow = new MarginLoanLedger();
+    borrow.setTradingAccount(acc);
+    borrow.setEntryType("BORROW");
+    borrow.setAmount(principal);
+    borrow.setBorrowedAfter(principal);
+    borrow.setBalanceAfter(balance);
+    borrow.setNote(note);
+    ledgerRepo.save(borrow);
+
+    MarginLoanLedger charge = new MarginLoanLedger();
+    charge.setTradingAccount(acc);
+    charge.setEntryType("INTEREST");
+    charge.setAmount(interest);
+    charge.setBorrowedAfter(debt);
+    charge.setBalanceAfter(balance);
+    charge.setNote("Daily interest charge");
+    ledgerRepo.save(charge);
   }
 
   private void bootstrapHighRiskTrader() {
@@ -225,6 +246,9 @@ public class AuthBootstrap implements ApplicationRunner {
       a.setStatus("ACTIVE");
       return accountRepo.save(a);
     });
+
+    seedDebtLedger(acc, new BigDecimal("3400.00"), new BigDecimal("45.00"), new BigDecimal("280.00"),
+        "High-risk margin credit line utilization");
 
     if (positionRepo.findByTradingAccountIdOrderByUpdatedAtDesc(acc.getId()).isEmpty()) {
       createPosition(acc, "BTCUSD", "LONG", new BigDecimal("0.0500"), new BigDecimal("65700.00"));

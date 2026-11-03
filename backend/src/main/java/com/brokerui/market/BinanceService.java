@@ -35,9 +35,7 @@ public class BinanceService {
      */
     public BinanceService(ObjectMapper om) {
         this.om = om;
-        this.httpClient = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.ALWAYS)
-                .build();
+        this.httpClient = FeedHttpClient.create();
     }
 
     /**

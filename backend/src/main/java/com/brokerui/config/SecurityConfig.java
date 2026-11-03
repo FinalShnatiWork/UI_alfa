@@ -177,10 +177,6 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/market/price/**")
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/nn/predict")
-                    .authenticated()
-                    .requestMatchers(HttpMethod.GET, "/api/broker/symbols")
-                    .permitAll()
                     .requestMatchers("/api/broker/**")
                     .authenticated()
                     // LocalhostOnlyFilter still drops remote callers.
@@ -197,16 +193,13 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers("/error")
                     .permitAll()
-                    .requestMatchers("/ws/**")
-                    .permitAll()
                     .requestMatchers("/", "/index.html", "/assets/**", "/*.js", "/*.css", "/*.ico", "/*.png", "/*.svg")
                     .permitAll()
                     // HTML5 routes (BrowserRouter): GET /landing, /admin, … must reach index.html
                     .requestMatchers(
                         request ->
                             "GET".equalsIgnoreCase(request.getMethod())
-                                && !request.getServletPath().startsWith("/api")
-                                && !request.getServletPath().startsWith("/ws"))
+                                && !request.getServletPath().startsWith("/api"))
                     .permitAll()
                     .anyRequest()
                     .denyAll())

@@ -51,13 +51,6 @@ export interface BrokerOverview {
 }
 
 
-export interface TradingAccount {
-  id: number;
-  balance: string;
-  equity: string;
-  currency?: string;
-}
-
 export interface Position {
   id: number;
   symbolCode: string;
@@ -90,15 +83,6 @@ export interface BrokerOrder {
   commission?: string;
   /** Set on orders that close a position through netting. */
   closesPositionId?: number | null;
-}
-
-export interface PlaceOrderRequest {
-  symbolCode: string;
-  side: 'BUY' | 'SELL';
-  orderType: 'MARKET' | 'LIMIT' | 'STOP';
-  quantity: number;
-  limitPrice?: number;
-  stopPrice?: number;
 }
 
 export interface PlaceOrderResponse {
