@@ -81,7 +81,8 @@ Without this system, a client who used all their $100,000 would be unable to ope
 | `daily_interest_rate` | DECIMAL(18,8) | 0.005 | Daily interest rate (0.5% = 0.005) |
 | `last_interest_at` | TIMESTAMP | NULL | When interest was last charged. NULL means: never borrowed yet |
 | `interest_accrued_total` | DECIMAL(18,8) | 0 | Lifetime sum of all interest ever charged (for reporting/admin) |
-| `equity` | DECIMAL(18,8) | 0 | Stored equity snapshot, updated on trade events |
+
+Equity is not a column. When a screen asks, it is `balance` plus the live floating P/L of open trades.
 
 - **Java entity:** `TradingAccount.java`
 - **Repository:** `TradingAccountRepository.java`
@@ -474,8 +475,8 @@ Examples:
 
 | Method | Formula | Purpose |
 |---|---|---|
-| `BrokerApiController.recalcEquity()` | `balance + unrealizedPnl` | Dashboard display only |
-| `MarginLoanService.liveEquity()` | `balance + marginLocked + unrealizedPnl` | Margin level calculations only |
+| `AccountEquity.equity()` | `balance + unrealizedPnl` | Dashboard display only |
+| `AccountEquity.collateral()` | `balance + marginLocked + unrealizedPnl` | Margin level calculations only |
 
 **Why the difference?**
 
@@ -588,7 +589,7 @@ Method:    checkLiquidationsTick()
 | `closedCount > 0` AND `recovered` | Keep remaining debt, ledger: `"margin level recovered"` |
 | `closedCount > 0` AND positions still remain (some skipped) | Keep debt, ledger: `"incomplete, debt kept"` |
 
-**Step 5:** Recalculate equity, save account, write audit log.
+**Step 5:** Save the account and write the audit log. Equity is not stored.
 
 ---
 
@@ -802,7 +803,8 @@ private void writeLedger(TradingAccount ta, String type, BigDecimal amount, Stri
 | `daily_interest_rate` | DECIMAL(18,8) | 0.005 | שיעור ריבית יומי (0.5% = 0.005) |
 | `last_interest_at` | TIMESTAMP | NULL | מתי חויבה ריבית לאחרונה. NULL = מעולם לא לווה |
 | `interest_accrued_total` | DECIMAL(18,8) | 0 | סכום כל הריבית שנגבתה לכל החיים (לדיווח/ניהול) |
-| `equity` | DECIMAL(18,8) | 0 | תמונת מצב הון עצמי מאוחסנת, מתעדכנת באירועי עסקה |
+
+הון עצמי אינו עמודה. כשמסך שואל, זה `balance` ועוד רווח או הפסד צף חי של פוזיציות פתוחות.
 
 - **יישות Java:** `TradingAccount.java`
 - **Repository:** `TradingAccountRepository.java`
@@ -1112,8 +1114,8 @@ amount = refund;  // ללא עמלה
 
 | מתודה | נוסחה | מטרה |
 |---|---|---|
-| `BrokerApiController.recalcEquity()` | `balance + unrealizedPnl` | הצגת לוח מחוונים בלבד |
-| `MarginLoanService.liveEquity()` | `balance + marginLocked + unrealizedPnl` | חישובי רמת מרג'ין בלבד |
+| `AccountEquity.equity()` | `balance + unrealizedPnl` | הצגת לוח מחוונים בלבד |
+| `AccountEquity.collateral()` | `balance + marginLocked + unrealizedPnl` | חישובי רמת מרג'ין בלבד |
 
 **למה ההבדל?** במודל מרג'ין משולם מראש, המרג'ין מנוכה מ-`balance` בפתיחת פוזיציה. שימוש ב-`balance + unrealizedPnl` לרמת מרג'ין היה מייצג כל פוזיציה ממונפת כ-Margin Call מיידי שגוי. `liveEquity()` מוסיפה בחזרה את המרג'ין הנעול להצגת ערך הביטחונות האמיתי.
 
@@ -1182,7 +1184,7 @@ balance=$5,000, debt=$8,000, liveEquity=$9,000
    - כל הפוזיציות נסגרו + לא התאושש → **מחיקת חוב**
    - התאושש מוקדם → שמור חוב שנותר
    - פוזיציות נותרות → שמור חוב
-5. חשב מחדש הון עצמי, שמור, כתוב ביקורת
+5. שמור חשבון וכתוב ביקורת. הון עצמי לא נשמר כעמודה.
 
 **למה הגרועים ביותר ראשון?** סגירת ההפסדים הגדולים ביותר ממקסמת את המזומן שנגבה בכל סגירה — מינימום פוזיציות שנסגרות.
 
@@ -1369,7 +1371,8 @@ ledgerRepo.save(entry);                // INSERT בלבד
 | `daily_interest_rate` | DECIMAL(18,8) | 0.005 | Дневная процентная ставка (0.5% = 0.005) |
 | `last_interest_at` | TIMESTAMP | NULL | Когда последний раз начислялись проценты. NULL = ещё никогда не занимал |
 | `interest_accrued_total` | DECIMAL(18,8) | 0 | Суммарные проценты за всё время (для отчётности/администратора) |
-| `equity` | DECIMAL(18,8) | 0 | Сохранённый снимок капитала, обновляется при торговых событиях |
+
+Капитал больше не колонка. Когда экран его спрашивает, это `balance` плюс живая плавающая прибыль открытых сделок.
 
 - **Java-сущность:** `TradingAccount.java`
 - **Repository:** `TradingAccountRepository.java`
@@ -1753,8 +1756,8 @@ amount = refund;
 
 | Метод | Формула | Назначение |
 |---|---|---|
-| `BrokerApiController.recalcEquity()` | `balance + unrealizedPnl` | Только отображение дашборда |
-| `MarginLoanService.liveEquity()` | `balance + marginLocked + unrealizedPnl` | Только расчёты уровня маржи |
+| `AccountEquity.equity()` | `balance + unrealizedPnl` | Только отображение дашборда |
+| `AccountEquity.collateral()` | `balance + marginLocked + unrealizedPnl` | Только расчёты уровня маржи |
 
 **Почему разница?**
 
@@ -1860,7 +1863,7 @@ amount = refund;
 | `closedCount > 0` + `recovered` | Сохранить оставшийся долг, гроссбух: `"margin level recovered"` |
 | `closedCount > 0` + позиции ещё есть (некоторые пропущены) | Сохранить долг, гроссбух: `"incomplete, debt kept"` |
 
-**Шаг 5:** Пересчитать капитал, сохранить аккаунт, записать в журнал аудита.
+**Шаг 5:** Сохранить аккаунт и записать аудит. Капитал в базе не хранится.
 
 ---
 

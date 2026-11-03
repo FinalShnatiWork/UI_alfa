@@ -99,7 +99,7 @@
   <div class="band"><b>HTTP :8080</b><div class="chips"><span class="chip">/api/auth</span><span class="chip">/api/broker</span><span class="chip">/api/market</span><span class="chip">/api/admin</span><span class="chip">/api/health</span></div></div>
   <div class="band"><b class="ru">Мозг</b><b class="en">Domain</b><div class="chips"><span class="chip">OrderExecutionService</span><span class="chip">MarginLoanService</span><span class="chip">TradingFees</span><span class="chip">PositionCloseMath</span><span class="chip">MarketPriceService</span></div></div>
   <div class="band"><b class="ru">Снаружи</b><b class="en">Outside</b><div class="chips"><span class="chip">Binance</span><span class="chip">Yahoo / Finnhub</span><span class="chip">NN Predictor</span><span class="chip">MT5 bridge</span></div></div>
-  <div class="band"><b class="ru">Память</b><b class="en">Storage</b><div class="chips"><span class="chip">PostgreSQL broker_ui</span><span class="chip">Flyway V1–V33</span><span class="chip">JPA entities</span></div></div>
+  <div class="band"><b class="ru">Память</b><b class="en">Storage</b><div class="chips"><span class="chip">PostgreSQL broker_ui</span><span class="chip">Flyway V1–V39</span><span class="chip">JPA entities</span></div></div>
 </section>
 
 <section id="simple">
@@ -209,8 +209,8 @@
   <p class="simple en">Plain: the visitor’s ID card. It holds no money.</p>
 
   <h3>4.2 trading_account — ядро денег</h3>
-  <p class="ru tech">Один кошелёк. <code>user_id → app_user.id</code> ON DELETE CASCADE. Модель маржи предоплаченная: при открытии сделки кэш уже уменьшили, поэтому <code>free_margin</code> в overview = оставшийся <code>balance</code>, а не equity − marginUsed.</p>
-  <p class="en tech">One wallet. <code>user_id → app_user.id</code> ON DELETE CASCADE. Prepaid-margin model: cash is already reduced on open, so overview <code>free_margin</code> = leftover <code>balance</code>, not equity − marginUsed.</p>
+  <p class="ru tech">Один кошелёк. <code>user_id → app_user.id</code> ON DELETE CASCADE. Маржа предоплачена: при открытии кэш уже уменьшили. Капитал, занятая маржа и свободные деньги в базе не хранятся. Капитал на экране = <code>balance</code> + живая плавающая прибыль. Свободные деньги = <code>balance</code> минус вывод, который ещё не одобрили. Для уровня маржи залог прибавляют обратно, иначе открытая позиция ложно выглядит как маржин-колл.</p>
+  <p class="en tech">One wallet. <code>user_id → app_user.id</code> ON DELETE CASCADE. Margin is prepaid: cash is already reduced on open. Equity, margin used, and free cash are not stored. Screen equity = <code>balance</code> + live floating P/L. Free cash = <code>balance</code> minus a withdrawal still waiting for approval. The margin-level check adds the locked margin back, otherwise an open position looks like a false margin call.</p>
   <table>
     <tr><th>column</th><th>type</th><th class="ru">зачем</th><th class="en">why</th></tr>
     <tr><td><code>id</code></td><td>BIGSERIAL PK</td><td class="ru">номер счёта (его показывают как UID)</td><td class="en">account number (shown as UID)</td></tr>
@@ -220,9 +220,6 @@
     <tr><td><code>leverage</code></td><td>INT default 100</td><td class="ru">плечо 1:100 — залог в 100 раз меньше номинала</td><td class="en">1:100 — margin is notional/100</td></tr>
     <tr><td><code>status</code></td><td>ACTIVE / DISABLED</td><td class="ru">можно ли торговать</td><td class="en">can it trade</td></tr>
     <tr><td><code>balance</code></td><td>NUMERIC(18,8)</td><td class="ru">кэш в кармане после всех списаний</td><td class="en">cash after every debit</td></tr>
-    <tr><td><code>equity</code></td><td>NUMERIC(18,8)</td><td class="ru">живой капитал = кэш + плавающий P/L (пересчитывается)</td><td class="en">live worth = cash + floating P/L</td></tr>
-    <tr><td><code>margin_used</code></td><td>NUMERIC(18,8)</td><td class="ru">сколько залога занято открытыми позициями</td><td class="en">margin locked in open positions</td></tr>
-    <tr><td><code>free_margin</code></td><td>NUMERIC(18,8)</td><td class="ru">колонка в БД; API отдаёт balance как free cash</td><td class="en">DB column; API returns balance as free cash</td></tr>
     <tr><td><code>borrowed_balance</code></td><td>NUMERIC(18,8)</td><td class="ru">сколько должны брокеру по кредитке</td><td class="en">current credit-line debt</td></tr>
     <tr><td><code>interest_accrued_total</code></td><td>NUMERIC(18,8)</td><td class="ru">сколько процентов начислили за всю жизнь</td><td class="en">lifetime interest charged</td></tr>
     <tr><td><code>last_interest_at</code></td><td>TIMESTAMP</td><td class="ru">чтобы не драть процент чаще раза в сутки</td><td class="en">so interest is at most daily</td></tr>
@@ -285,7 +282,6 @@
     <tr><td><code>side</code></td><td>LONG / SHORT</td><td class="ru">купили вверх или продали вниз</td><td class="en">long or short</td></tr>
     <tr><td><code>quantity</code></td><td>NUMERIC</td><td class="ru">сколько лотов открыто</td><td class="en">open lots</td></tr>
     <tr><td><code>avg_price</code></td><td>NUMERIC</td><td class="ru">средняя цена входа</td><td class="en">average entry</td></tr>
-    <tr><td><code>realized_pnl</code></td><td>NUMERIC</td><td class="ru">обычно 0 пока открыта</td><td class="en">usually 0 while open</td></tr>
     <tr><td><code>unrealized_pnl</code></td><td>NUMERIC</td><td class="ru">кэш плавающего P/L (экран чаще считает live)</td><td class="en">cached float; UI usually recomputes live</td></tr>
     <tr><td><code>stop_loss</code> / <code>take_profit</code></td><td>NUMERIC</td><td class="ru">автозакрытие по цене</td><td class="en">price auto-close</td></tr>
     <tr><td><code>opened_at</code> / <code>updated_at</code></td><td>ts</td><td class="ru">когда открыли / тик</td><td class="en">opened / last tick</td></tr>
@@ -534,8 +530,8 @@
 </section>
 
 <section id="mig">
-  <h2 class="ru">11. Зачем 33 миграции, коротко</h2>
-  <h2 class="en">11. Why 33 migrations, short</h2>
+  <h2 class="ru">11. Зачем миграции, коротко</h2>
+  <h2 class="en">11. Why the migrations, short</h2>
   <table>
     <tr><th>#</th><th class="ru">суть</th><th class="en">point</th></tr>
     <tr><td>V1</td><td class="ru">app_user</td><td class="en">app_user</td></tr>
@@ -556,6 +552,9 @@
     <tr><td>V29–V31</td><td class="ru">снимок живой базы для друга + sequences</td><td class="en">live DB snapshot for teammate + sequences</td></tr>
     <tr><td>V32</td><td class="ru">неттинг: internal_match, компьютер, routing, старые сделки помечены LEGACY</td><td class="en">netting: internal_match, the computer, routing, older fills marked LEGACY</td></tr>
     <tr><td>V33</td><td class="ru">сохранённая комиссия площадки пересчитана: крипта 0,10% с каждой стороны, форекс $3,50 за лот</td><td class="en">stored venue fee restated: crypto 0.10% per side, forex $3.50 per lot</td></tr>
+    <tr><td>V34–V36</td><td class="ru">закрытие через книгу; размер SOL равен 1; на позицию одно открытое закрытие</td><td class="en">close through the book; SOL size is 1; one open close per position</td></tr>
+    <tr><td>V37–V38</td><td class="ru">убраны хранимая занятая маржа и пустая прибыль на позиции</td><td class="en">dropped stored margin-used and the empty profit column on a position</td></tr>
+    <tr><td>V39</td><td class="ru">убраны хранимые капитал и свободные деньги; сведение ссылается на строку символа. Номеров 7 и 9 не было</td><td class="en">dropped stored equity and free cash; a match points at the symbol row. Versions 7 and 9 never existed</td></tr>
   </table>
 </section>
 

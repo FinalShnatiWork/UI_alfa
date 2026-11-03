@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: broker
       POSTGRES_PASSWORD: broker
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - broker_ui_pgdata:/var/lib/postgresql/data
     healthcheck:

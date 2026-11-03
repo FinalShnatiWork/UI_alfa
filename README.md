@@ -234,11 +234,15 @@ taskkill /PID <NUMBER> /F
 ```
 
 ### Flyway migration failed
-Reset the database (WARNING: deletes all data):
+On startup the server checks that each migration file still matches the copy that was applied. A changed old file, or a file that was applied and then removed, stops the start. The usual fix is to reset the database. That deletes every account and trade, then the files are applied again from the beginning:
 ```bash
 cd backend
 docker compose down -v
 docker compose up -d
+```
+Version 26 was corrected after it had already run. The result of the two wordings is the same. If the error names version 26, this keeps the data and only updates the stored fingerprint:
+```powershell
+docker exec broker_ui_db psql -U broker -d broker_ui -c "UPDATE flyway_schema_history SET checksum = 1502269684 WHERE version = '26';"
 ```
 
 ### JAVA_HOME is not set

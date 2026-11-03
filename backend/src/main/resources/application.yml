@@ -21,8 +21,8 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    ignore-missing-migrations: true
-    validate-on-migrate: false
+    ignore-missing-migrations: false
+    validate-on-migrate: true
 
 broker:
   # Real netting (client vs client / client vs computer) — see buysellmodel/NETTING_IMPLEMENTATION_PLAN.md
