@@ -780,7 +780,7 @@ export function ChartsPage() {
     });
   }
 
-  async function placeOrder(side: 'BUY' | 'SELL', acceptLoan = false, acceptStale = false) {
+  async function placeOrder(side: 'BUY' | 'SELL', acceptLoan = false) {
     const qty = Number(volume);
     try {
       const payload: Record<string, unknown> = {
@@ -791,7 +791,6 @@ export function ChartsPage() {
         takeProfit: takeProfit ? Number(takeProfit) : undefined,
         stopLoss: stopLoss ? Number(stopLoss) : undefined,
         acceptLoan: acceptLoan ? true : undefined,
-        acceptStalePrice: acceptStale ? true : undefined,
       };
       if (orderType === 'LIMIT') payload.limitPrice = Number(entryPrice);
       const res = await apiPostJson('/api/broker/orders', payload);
@@ -801,7 +800,6 @@ export function ChartsPage() {
         cashBalance?: number;
         creditLimit?: number;
         dailyInterestRate?: number;
-        lastPrice?: number;
       };
       if (res.ok) {
         if (data.status === 'NEW') {
@@ -813,14 +811,6 @@ export function ChartsPage() {
         setStopLoss('');
         invalidateAfterTrade();
       } else {
-        if (data.error === 'stale_price') {
-          const last = Number(data.lastPrice);
-          setConfirmAction({
-            message: t('trading.stalePriceDemo', { price: Number.isFinite(last) ? String(last) : '' }),
-            run: () => { void placeOrder(side, acceptLoan, true); },
-          });
-          return;
-        }
         if (data.error === 'credit_offer_available') {
           setLoanOffer({
             shortfall: Number(data.shortfall ?? 0),
@@ -833,7 +823,7 @@ export function ChartsPage() {
             currency: overviewData?.currency,
             onConfirm: () => {
               setLoanOffer(null);
-              void placeOrder(side, true, acceptStale);
+              void placeOrder(side, true);
             },
             onCancel: () => setLoanOffer(null),
           });
@@ -874,24 +864,16 @@ export function ChartsPage() {
     }
   }
 
-  async function closeInlinePosition(id: number, sym: string, acceptStale = false) {
+  async function closeInlinePosition(id: number, sym: string) {
     try {
-      const res = await apiPostJson(`/api/broker/positions/${id}/close`, acceptStale ? { acceptStalePrice: true } : {});
-      const data = await res.json() as ClosePositionResponse & { error?: string; lastPrice?: number };
-      if (!res.ok && data.error === 'stale_price') {
-        const last = Number(data.lastPrice);
-        setConfirmAction({
-          message: t('trading.stalePriceDemo', { price: Number.isFinite(last) ? String(last) : '' }),
-          run: () => { void closeInlinePosition(id, sym, true); },
-        });
-        return;
-      }
+      const res = await apiPostJson(`/api/broker/positions/${id}/close`, {});
+      const data = await res.json() as ClosePositionResponse;
       if (res.ok && data.ok) {
         const msg = t('alerts.closeOk', { symbol: sym }) + (data.closePnl ? ` (${fmtSignedMoney(data.closePnl, currency)})` : '');
         toast.show(msg, { variant: 'success' });
         invalidateAfterTrade();
       } else {
-        toast.show(t('alerts.closeFail'), { variant: 'error' });
+        toast.show(t(data.error === 'price_unavailable' ? 'trading.errPriceUnavailable' : 'alerts.closeFail'), { variant: 'error' });
       }
     } catch { toast.show(t('alerts.closeFail'), { variant: 'error' }); }
   }

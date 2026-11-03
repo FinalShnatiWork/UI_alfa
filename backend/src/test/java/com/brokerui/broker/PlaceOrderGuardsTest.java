@@ -68,8 +68,6 @@ class PlaceOrderGuardsTest {
     when(accountRepo.findByIdForUpdate(7L)).thenReturn(Optional.of(ta));
     when(symbolRepo.findByCode(anyString())).thenReturn(Optional.of(symbol(true)));
     when(priceService.getLivePrice(anyString())).thenReturn(90_000.0);
-    when(priceService.executionQuote(anyString()))
-        .thenReturn(new com.brokerui.market.MarketPriceService.ExecutionQuote(90_000.0, true));
     when(orderRepo.save(any(BrokerOrder.class))).thenAnswer(i -> {
       BrokerOrder o = i.getArgument(0);
       o.setId(100L);
@@ -87,7 +85,7 @@ class PlaceOrderGuardsTest {
   private ResponseEntity<?> place(String symbol, String qty, String type, String limit) {
     return controller.placeOrder(auth, new BrokerApiController.PlaceOrderRequest(
         symbol, "BUY", type, new BigDecimal(qty), limit == null ? null : new BigDecimal(limit),
-        null, null, null, null, null, null), null);
+        null, null, null, null, null), null);
   }
 
   private static Object error(ResponseEntity<?> r) {
@@ -95,16 +93,17 @@ class PlaceOrderGuardsTest {
   }
 
   @Test
-  void stalePriceIsRefusedUntilTheUserAcceptsTheDemoPrice() {
-    when(priceService.executionQuote("BTCUSD"))
-        .thenReturn(new MarketPriceService.ExecutionQuote(90_000.0, false));
+  void noLivePriceMeansNoTradeAndNothingReserved() {
+    when(priceService.getLivePrice("BTCUSD")).thenReturn(0.0);
 
-    ResponseEntity<?> r = place("BTCUSD", "0.01", "MARKET", null);
+    ResponseEntity<?> market = place("BTCUSD", "0.01", "MARKET", null);
+    ResponseEntity<?> limit = place("BTCUSD", "0.01", "LIMIT", "80000");
 
-    assertEquals(400, r.getStatusCode().value());
-    assertEquals("stale_price", error(r));
-    assertEquals(true, ((Map<?, ?>) r.getBody()).get("demo"));
+    assertEquals(502, market.getStatusCode().value());
+    assertEquals("price_unavailable", error(market));
+    assertEquals("price_unavailable", error(limit));
     verify(marginLoanService, never()).tryCoverShortfall(any(), any(), any(), any());
+    verify(orderRepo, never()).save(any(BrokerOrder.class));
   }
 
   @Test

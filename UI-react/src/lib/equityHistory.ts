@@ -31,9 +31,9 @@ function nextDay(t: number): number {
 }
 
 /**
- * Everything that changes the settled account value: deposits, approved withdrawals, the net
- * result of each closed trade (both commissions already deducted), credit interest and debt the
- * broker wrote off.
+ * Everything that changes the settled account value: deposits, approved withdrawals, signed
+ * balance adjustments, the net result of each closed trade (both commissions already deducted),
+ * credit interest and debt the broker wrote off.
  */
 function movements(transactions: Transaction[], orders: BrokerOrder[], ledger: CreditLedgerEntry[]): Movement[] {
   const moves: Movement[] = [];
@@ -47,6 +47,9 @@ function movements(transactions: Transaction[], orders: BrokerOrder[], ledger: C
     } else if (type === 'WITHDRAWAL' && status === 'APPROVED') {
       const t = ms(tx.processedAt) ?? ms(tx.createdAt);
       if (t != null) moves.push({ ms: t, delta: -amount });
+    } else if (type === 'ADJUSTMENT' && status === 'APPROVED') {
+      const t = ms(tx.processedAt) ?? ms(tx.createdAt);
+      if (t != null) moves.push({ ms: t, delta: amount });
     }
   }
   for (const o of orders) {
@@ -68,8 +71,8 @@ function movements(transactions: Transaction[], orders: BrokerOrder[], ledger: C
 /**
  * Settled account value (no floating P/L) at the end of each day, rebuilt backwards from the
  * server's current value: a past day is today's value minus everything that happened after it.
- * Starting from the present keeps the opening demo balance and any admin balance edit outside
- * the movements from breaking the curve.
+ * Starting from the present keeps the opening demo balance and admin edits made before
+ * adjustments were recorded from breaking the curve.
  */
 export function dailyAccountValue(
   settledNow: number,

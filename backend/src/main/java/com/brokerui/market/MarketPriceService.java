@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 /**
  * Aggregator service that coordinates fetching live prices from multiple adapters
  * (Binance for crypto, MT5 for FX/metals, Yahoo Finance as secondary).
- * When every feed is silent, callers can use the last real price of this server run.
+ * When every feed is silent there is no price: callers get 0 or null and must not trade.
  */
 @Service
 public class MarketPriceService {
@@ -18,13 +18,8 @@ public class MarketPriceService {
     private final YahooFinanceService yahoo;
     private final BinanceService binance;
     private final ConcurrentHashMap<String, CachedQuote> cache = new ConcurrentHashMap<>();
-    /** Last price a real feed actually returned. Kept for this server run, not only for 1.5 seconds. */
-    private final ConcurrentHashMap<String, Double> lastReal = new ConcurrentHashMap<>();
 
     private record CachedQuote(double price, long fetchedAtMs) {}
-
-    /** A price for an order. {@code live} is false when the feeds are silent and this is the last real price. */
-    public record ExecutionQuote(double price, boolean live) {}
 
     /**
      * Constructs the MarketPriceService with required data adapters.
@@ -40,11 +35,11 @@ public class MarketPriceService {
     }
 
     /**
-     * Attempts to query live price quote from all configured feeds in sequence.
-     * The goal is to return a valid non-zero quote.
+     * Live quote from the first feed that answers, or a test override.
+     * A quote younger than {@link #CACHE_TTL_MS} is reused; an older one is never.
      *
      * @param symbol symbol code (e.g. BTCUSD, EURUSD)
-     * @return live quote as double
+     * @return live quote, or 0 when every feed is silent
      */
     public double getLivePrice(String symbol) {
         String sym = symbol == null ? "" : symbol.trim().toUpperCase();
@@ -59,47 +54,19 @@ public class MarketPriceService {
             return cached.price();
         }
 
-        ExecutionQuote quote = executionQuote(sym);
-        if (quote == null) return 0.0;
-        cache.put(sym, new CachedQuote(quote.price(), now));
-        return quote.price();
-    }
-
-    /**
-     * Price for a user order. A live feed wins. If every feed is silent, the last real
-     * price from this server run is returned with {@code live=false}. A made-up demo
-     * price is never returned.
-     */
-    public ExecutionQuote executionQuote(String symbol) {
-        String sym = symbol == null ? "" : symbol.trim().toUpperCase();
-        if (sym.isEmpty()) return null;
-
-        TestOverride override = getTestOverride(sym);
-        if (override != null) return new ExecutionQuote(override.mid(), true);
-
         double real = fetchRealPrice(sym);
-        if (real > 0) {
-            lastReal.put(sym, real);
-            return new ExecutionQuote(real, true);
-        }
-        Double last = lastReal.get(sym);
-        if (last != null && last > 0) return new ExecutionQuote(last, false);
-        return null;
+        if (!(real > 0)) return 0.0;
+        cache.put(sym, new CachedQuote(real, now));
+        return real;
     }
 
     /**
-     * A quote from a real feed, the last real quote of this server run, or a test override.
-     * Null when this server has never seen a real price for the symbol.
+     * The same live quote as a BigDecimal, or null when every feed is silent.
      * Used to convert yen and kroner into dollars.
      */
     public BigDecimal marketPrice(String symbol) {
-        String sym = symbol == null ? "" : symbol.trim().toUpperCase();
-        if (sym.isEmpty()) return null;
-        TestOverride override = getTestOverride(sym);
-        if (override != null) return BigDecimal.valueOf(override.mid());
-
-        ExecutionQuote quote = executionQuote(sym);
-        return quote == null ? null : BigDecimal.valueOf(quote.price());
+        double p = getLivePrice(symbol);
+        return p > 0 ? BigDecimal.valueOf(p) : null;
     }
 
     private double fetchRealPrice(String sym) {

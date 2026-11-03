@@ -1,20 +1,19 @@
 package com.brokerui.market;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.brokerui.broker.MT5IntegrationService;
+import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
-/** A silent feed must not invent a price. The last real quote of this server run is kept. */
+/** A silent feed gives no price: neither a made-up one nor an old one. */
 class MarketPriceServiceTest {
 
   @Test
-  void silentFeedReturnsNothingUntilARealPriceWasSeen() throws Exception {
+  void silentFeedGivesNoPriceAndAnOldQuoteIsNotReused() throws Exception {
     MT5IntegrationService mt5 = mock(MT5IntegrationService.class);
     YahooFinanceService yahoo = mock(YahooFinanceService.class);
     BinanceService binance = mock(BinanceService.class);
@@ -23,15 +22,14 @@ class MarketPriceServiceTest {
     when(binance.getLivePrice("BTCUSD")).thenReturn(101_000.0, 0.0);
     MarketPriceService prices = new MarketPriceService(mt5, yahoo, binance);
 
-    assertNull(prices.executionQuote("EURUSD"));
     assertEquals(0.0, prices.getLivePrice("EURUSD"), 0.0);
+    assertNull(prices.marketPrice("EURUSD"));
 
-    MarketPriceService.ExecutionQuote live = prices.executionQuote("BTCUSD");
-    assertTrue(live.live());
-    assertEquals(101_000.0, live.price(), 0.0);
+    assertEquals(101_000.0, prices.getLivePrice("BTCUSD"), 0.0);
+    assertEquals(0, prices.marketPrice("BTCUSD").compareTo(BigDecimal.valueOf(101_000.0)));
 
-    MarketPriceService.ExecutionQuote stale = prices.executionQuote("BTCUSD");
-    assertFalse(stale.live());
-    assertEquals(101_000.0, stale.price(), 0.0);
+    Thread.sleep(1_600);
+    assertEquals(0.0, prices.getLivePrice("BTCUSD"), 0.0);
+    assertNull(prices.marketPrice("BTCUSD"));
   }
 }

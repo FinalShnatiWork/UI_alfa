@@ -15,7 +15,15 @@ const METHOD_KEYS: Record<string, string> = {
   card: 'finance.methodCard',
   bank: 'finance.methodBank',
   crypto: 'finance.methodCrypto',
+  admin: 'finance.methodBroker',
 };
+
+/** Deposits add cash; a balance adjustment is stored with its own sign; the rest takes cash away. */
+function signedAmount(r: { txType: string; amount?: string | number | null }): number {
+  const amt = Number(r.amount ?? 0);
+  const typ = r.txType.toUpperCase();
+  return typ === 'DEPOSIT' || typ === 'ADJUSTMENT' ? amt : -amt;
+}
 
 type Tr = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -237,15 +245,16 @@ export function FinancePage() {
 
   const allTransactions = (Array.isArray(txData) ? txData : []).filter((r) => {
     const typ = (r.txType || '').toUpperCase();
-    return typ === 'DEPOSIT' || typ === 'WITHDRAWAL' || typ === 'COMMISSION';
+    return typ === 'DEPOSIT' || typ === 'WITHDRAWAL' || typ === 'COMMISSION' || typ === 'ADJUSTMENT';
   });
   const transactions = allTransactions.slice(0, 50);
 
   function typeLabelOf(txType: string): string {
     const typ = txType.toUpperCase();
-    return typ === 'DEPOSIT'
-      ? t('finance.depositType')
-      : typ === 'COMMISSION' ? t('finance.commissionType') : t('finance.withdrawType');
+    if (typ === 'DEPOSIT') return t('finance.depositType');
+    if (typ === 'COMMISSION') return t('finance.commissionType');
+    if (typ === 'ADJUSTMENT') return t('finance.adjustmentType');
+    return t('finance.withdrawType');
   }
 
   function methodLabelOf(r: (typeof allTransactions)[number]): string {
@@ -268,8 +277,7 @@ export function FinancePage() {
   function exportStatement() {
     const headers = [t('table.dateTime'), t('table.type'), t('table.amount'), t('finance.csvCurrency'), t('table.method'), t('table.status')];
     const rows = allTransactions.map((r) => {
-      const amt = Number(r.amount ?? 0);
-      const signed = r.txType.toUpperCase() === 'DEPOSIT' ? amt : -amt;
+      const signed = signedAmount(r);
       return [
         fmtCsvDateTime(r.createdAt),
         typeLabelOf(r.txType),
@@ -418,8 +426,9 @@ export function FinancePage() {
                   </tr>
                 ) : (
                   transactions.map((r) => {
-                    const isDeposit = r.txType.toUpperCase() === 'DEPOSIT';
-                    const amt = Number(r.amount ?? 0);
+                    const signed = signedAmount(r);
+                    const isDeposit = signed >= 0;
+                    const amt = Math.abs(signed);
                     const statusUpper = (r.status || '').toUpperCase();
                     const badgeClass =
                       statusUpper === 'APPROVED' || statusUpper === 'COMPLETED'
