@@ -39,6 +39,10 @@ public class OrderExecutionService {
   @Autowired(required = false) @Lazy
   private com.brokerui.broker.netting.NettingService nettingService;
 
+  /** With several backend copies only the leader runs the schedulers. Empty in unit tests. */
+  @Autowired(required = false)
+  private com.brokerui.SchedulerLeader schedulerLeader;
+
   /**
    * Constructs the OrderExecutionService with required components.
    *
@@ -81,6 +85,7 @@ public class OrderExecutionService {
    */
   @Scheduled(fixedDelay = 2000)
   public void tick() {
+    if (schedulerLeader != null && !schedulerLeader.isLeader()) return;
     // NEW + PARTIALLY_FILLED + PENDING_NET, never the simulator's LIQUIDITY orders (they only fill by netting).
     List<BrokerOrder> open = orderRepo.findExecutable(com.brokerui.broker.netting.NettingService.OPEN_STATUSES,
         org.springframework.data.domain.PageRequest.of(0, 50));

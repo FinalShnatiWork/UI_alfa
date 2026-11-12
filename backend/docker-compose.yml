@@ -16,5 +16,17 @@ services:
       timeout: 3s
       retries: 20
 
+  # Load balancer for two backend copies on 8081 and 8082. Starts only with:
+  #   docker compose --profile lb up -d
+  lb:
+    image: nginx:alpine
+    container_name: broker_ui_lb
+    profiles: ["lb"]
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+
 volumes:
   broker_ui_pgdata:

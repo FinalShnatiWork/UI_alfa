@@ -37,7 +37,11 @@ echo.
 
 :: ─── Step 0.5: Free up ports from any previous run ───────────────────────────
 echo Cleaning up leftover processes from previous runs...
-call :free_port 8080 "Backend"
+cd /d "%~dp0backend"
+docker compose --profile lb stop lb >nul 2>&1
+call :free_port 8080 "Load balancer"
+call :free_port 8081 "Backend copy a"
+call :free_port 8082 "Backend copy b"
 call :free_port 3001 "Frontend"
 call :free_port 3005 "NN Server"
 echo.
@@ -65,12 +69,18 @@ if %ERRORLEVEL% NEQ 0 (
 echo       Database is healthy.
 echo.
 
-:: ─── Step 3: Start Java Backend ──────────────────────────────────────────────
-echo [3/3] Starting Java Backend (Spring Boot)...
+:: ─── Step 3: Two backend copies and Nginx ─────────────────────────────────────
+echo [3/4] Starting two backend copies and Nginx...
 cd /d "%~dp0backend"
-start "Backend - Spring Boot" cmd /k "mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=postgres & pause"
-echo       Backend starting on http://localhost:8080
-echo       (Wait ~15 seconds for Spring Boot to boot fully)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start-two-copies.ps1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] The two backend copies did not start. See backend\target\lb-logs
+    pause
+    exit /b 1
+)
+echo       Copy a : http://localhost:8081
+echo       Copy b : http://localhost:8082
+echo       Nginx  : http://localhost:8080
 echo.
 
 :: ─── Step 4: Start React Frontend ────────────────────────────────────────────
@@ -90,7 +100,9 @@ echo.
 echo  ============================================
 echo   All services started!
 echo   - PostgreSQL    : localhost:5433
-echo   - Backend       : http://localhost:8080
+echo   - Nginx         : http://localhost:8080
+echo   - Backend copy a: http://localhost:8081
+echo   - Backend copy b: http://localhost:8082
 echo   - Frontend      : http://localhost:3001
 echo   - Admin Hub     : http://localhost:3001/#/admin
 echo   - NN trainer    : localhost:3005 (optional)

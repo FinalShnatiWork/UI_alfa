@@ -8,13 +8,19 @@ echo   BROKER PLATFORM - Stopping All Services
 echo  ============================================
 echo.
 
-:: Kill Java backend (runs on port 8080)
-echo [1/3] Stopping Java Backend (port 8080)...
+:: Kill Nginx on 8080 and both backend copies
+echo [1/4] Stopping Nginx and both backend copies...
 powershell -NoProfile -Command ^
     "$conns = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue; " ^
     "if ($conns) { $conns | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ -ne 0 } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }"
 :: Fallback in case PowerShell/Get-NetTCPConnection is unavailable
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr /r ":8080[^0-9]*LISTENING"') do (
+    taskkill /PID %%a /T /F >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr /r ":8081[^0-9]*LISTENING"') do (
+    taskkill /PID %%a /T /F >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr /r ":8082[^0-9]*LISTENING"') do (
     taskkill /PID %%a /T /F >nul 2>&1
 )
 :: Verify the port was actually released
@@ -37,9 +43,9 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3005" ^| findstr "LISTENING
 echo       Done.
 
 :: Stop Docker containers
-echo [4/4] Stopping Docker (PostgreSQL)...
+echo [4/4] Stopping Docker (PostgreSQL and Nginx)...
 cd /d "%~dp0backend"
-docker compose down
+docker compose --profile lb down
 echo       Done.
 
 echo.

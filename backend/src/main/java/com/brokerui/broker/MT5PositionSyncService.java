@@ -22,6 +22,10 @@ public class MT5PositionSyncService {
     private final PositionRepository positionRepo;
     private final TradingAccountRepository accountRepo;
 
+    /** With several backend copies only the leader runs the schedulers. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.brokerui.SchedulerLeader schedulerLeader;
+
     /**
      * Constructs the MT5PositionSyncService.
      *
@@ -43,6 +47,7 @@ public class MT5PositionSyncService {
     @Transactional
     public void sync() {
         if (!mt5Service.isConfigured()) return;
+        if (schedulerLeader != null && !schedulerLeader.isLeader()) return;
         try {
             JSONArray mt5Positions = mt5Service.getOpenPositions();
             if (mt5Positions == null) return;

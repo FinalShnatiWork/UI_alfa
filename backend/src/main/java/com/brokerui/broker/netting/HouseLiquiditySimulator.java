@@ -47,6 +47,9 @@ public class HouseLiquiditySimulator {
   private final Environment env;
 
   private final AtomicBoolean enabled;
+  /** With several backend copies only the leader runs the schedulers. Empty in unit tests. */
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  private com.brokerui.SchedulerLeader schedulerLeader;
   @Value("${broker.netting.sim.symbols:BTCUSD,EURUSD,XAUUSD}")
   private String[] symbols;
   @Value("${broker.netting.sim.orders-per-side:3}")
@@ -89,6 +92,7 @@ public class HouseLiquiditySimulator {
 
   @Scheduled(fixedDelayString = "${broker.netting.sim.tick-ms:3000}", initialDelay = 5000)
   public void tick() {
+    if (schedulerLeader != null && !schedulerLeader.isLeader()) return;
     if (!enabled.get()) {
       // Kill switch: a quote placed by a tick that was already running when the simulator was
       // switched off is withdrawn here, on the next tick.

@@ -55,6 +55,10 @@ public class MarginLoanService {
   @Autowired(required = false) @Lazy
   private NettingService nettingService;
 
+  /** With several backend copies only the leader runs the schedulers. Empty in unit tests. */
+  @Autowired(required = false)
+  private com.brokerui.SchedulerLeader schedulerLeader;
+
   public MarginLoanService(
       TradingAccountRepository accountRepo,
       PositionRepository positionRepo,
@@ -286,6 +290,7 @@ public class MarginLoanService {
    */
   @Scheduled(fixedDelay = 60L * 60 * 1000, initialDelay = 30_000)
   public void accrueDueInterestTick() {
+    if (schedulerLeader != null && !schedulerLeader.isLeader()) return;
     try {
       self.accrueDueInterest();
     } catch (Exception e) {
@@ -341,6 +346,7 @@ public class MarginLoanService {
    */
   @Scheduled(fixedDelay = 10_000)
   public void checkLiquidationsTick() {
+    if (schedulerLeader != null && !schedulerLeader.isLeader()) return;
     try {
       self.checkLiquidations();
     } catch (Exception e) {

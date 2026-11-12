@@ -135,6 +135,24 @@ public class SessionRegistryService implements HttpSessionListener, HttpSessionI
     return ended;
   }
 
+  /** Emails of everyone signed in on this copy (lower case, no duplicates). */
+  public static java.util.Set<String> signedInEmails() {
+    java.util.Set<String> out = new java.util.HashSet<>();
+    for (Map.Entry<String, HttpSession> e : SESSIONS.entrySet()) {
+      try {
+        Object ctx = e.getValue().getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+        if (ctx instanceof SecurityContext sc && sc.getAuthentication() != null
+            && !(sc.getAuthentication() instanceof org.springframework.security.authentication.AnonymousAuthenticationToken)
+            && sc.getAuthentication().getName() != null) {
+          out.add(sc.getAuthentication().getName().toLowerCase(java.util.Locale.ROOT));
+        }
+      } catch (IllegalStateException alreadyInvalid) {
+        SESSIONS.remove(e.getKey());
+      }
+    }
+    return out;
+  }
+
   /**
    * Returns current active session count.
    */

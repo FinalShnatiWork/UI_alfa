@@ -21,7 +21,7 @@ Maven does not have to be installed separately: `backend/mvnw.cmd` downloads it.
 
 Double-click **`start-project.bat`** — it starts:
 - PostgreSQL (Docker)
-- Spring Boot backend (trading, netting, technical analysis)
+- Two copies of the Spring Boot backend, on ports 8081 and 8082, and Nginx on port 8080 in front of them
 - React frontend (trading UI + admin hub)
 
 The neural-network trainer on port 3005 is optional (shadow advisor). Technical analysis no longer uses a separate Node server.
@@ -39,7 +39,7 @@ git clone https://github.com/FinalShnatiWork/UI_alfa.git
 cd UI_alfa
 ```
 
-`main` is the stable branch, `develop` is the working one.
+`main` is the stable branch. `develop-new` is the working branch: two backend copies behind Nginx.
 
 ### 2. Start the database (Docker)
 
@@ -48,14 +48,16 @@ cd backend
 docker compose up -d
 ```
 
-### 3. Start the backend
+### 3. Start the two backend copies and Nginx
 
 ```bash
 cd backend
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=postgres"
+powershell -ExecutionPolicy Bypass -File .\start-two-copies.ps1
 ```
 
-Wait for: `Started BackendApplication in XX seconds`
+The script builds the jar, starts copy "a" on 8081, waits until it answers, starts copy "b" on 8082, then starts Nginx on 8080. The site keeps sending `/api` to 8080. Logs are in `backend/target/lb-logs/`.
+
+Wait until the script prints `Nginx is up on 8080`.
 
 > On first run, Flyway applies migrations V1–V36.
 > V32 adds netting (internal matches, the computer accounts, legacy routing).
@@ -97,6 +99,59 @@ The GitHub Pages copy (https://finalshnatiwork.github.io/UI_alfa/) has no server
 
 ---
 
+## Two Backend Copies Behind Nginx (Load Balancing)
+
+This is how the project runs. Two copies of the same backend share one database, on 8081 and 8082, and Nginx sits on 8080 in front of them. The frontend does not change, because it still sends `/api` to 8080.
+
+```
+Browser ──> Vite :3001 ──/api──> Nginx :8080 ──┬──> backend copy "a" :8081 ──┐
+                                               └──> backend copy "b" :8082 ──┴──> PostgreSQL :5433
+```
+
+### Start
+
+1. Start the database: `cd backend` and then `docker compose up -d`.
+2. Make sure nothing else listens on 8080, 8081 or 8082.
+3. Start both copies and Nginx: `powershell -ExecutionPolicy Bypass -File .\start-two-copies.ps1` (from `backend`).
+   - The script builds the jar, starts copy "a", waits until it answers, then starts copy "b", then Nginx.
+   - Logs go to `backend/target/lb-logs/`.
+   - `-NoBuild` skips the build when the jar is already fresh.
+4. Start the frontend as usual: `cd UI-react` and then `npm run dev`.
+5. Stop everything: `powershell -ExecutionPolicy Bypass -File .\start-two-copies.ps1 -Stop`.
+
+The same by hand:
+
+```bash
+cd backend
+.\mvnw.cmd -DskipTests package
+java -jar target\backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=postgres --server.port=8081 --broker.node-name=a
+java -jar target\backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=postgres --server.port=8082 --broker.node-name=b
+docker compose --profile lb up -d
+```
+
+Start copy "b" only after copy "a" prints `Started BackendApplication`, so the database migrations are checked once.
+
+### How it works
+
+1. **Routing.** Nginx (`backend/nginx/nginx.conf`) sends requests without a session to both copies in turn.
+2. **Sessions stay on their copy.** Sign-in sessions are kept in the memory of the copy that created them. With `--broker.node-name=a` every session id ends with `.a`, and Nginx reads that ending from the `X-Session-Id` header and sends the tab back to copy "a".
+3. **Health check.** If a copy does not answer, Nginx marks it down for 10 seconds and uses the other copy. Requests without a session continue at once. A tab that was signed in on the stopped copy is asked to sign in again, and the new session is created on the working copy.
+4. **Background jobs run once.** Order execution, SL/TP, liquidation, interest and the simulated liquidity run only on the copy that holds a PostgreSQL advisory lock (`SchedulerLeader`). If that copy stops, the database releases the lock and the other copy takes over within a few seconds. So interest is never charged twice and a position is never liquidated twice.
+5. **Bans.** A ban or a deleted user ends that user's sessions on both copies within 5 seconds.
+6. **Which copy answered.** Every response through Nginx has an `X-Upstream` header with the copy's port.
+7. **Admin.** Admin pages still work only from this computer: Nginx runs in Docker on the same machine and reaches the copies from 127.0.0.1.
+
+### Demo: the service keeps working when one copy stops
+
+1. Sign in on http://localhost:3001 in two browsers with two different users. In DevTools → Network, the `X-Upstream` header shows `:8081` for one tab and `:8082` for the other (sign in again if both landed on the same copy).
+2. Refresh a tab. It stays on the same copy and stays signed in.
+3. Stop one copy: find its process with `netstat -ano | findstr :8081` and end it in Task Manager, or close its window.
+4. The site keeps working. The tab on the other copy does not notice anything. The tab on the stopped copy shows the sign-in page, and after signing in it continues on the working copy.
+5. In `target/lb-logs/copy-b.log` the line `This copy now runs the broker schedulers` shows that the background jobs moved to the working copy.
+6. Start the stopped copy again with its `java -jar ...` line. Nginx starts sending new sessions to it within 10 seconds.
+
+---
+
 ## Demo Credentials
 
 | Email | Password | Role |
@@ -117,7 +172,9 @@ The GitHub Pages copy (https://finalshnatiwork.github.io/UI_alfa/) has no server
 ```
 UI_alfa/
 ├── backend/                        # Spring Boot application
-│   ├── docker-compose.yml          # PostgreSQL in Docker (port 5433)
+│   ├── docker-compose.yml          # PostgreSQL in Docker (port 5433); Nginx with --profile lb
+│   ├── nginx/nginx.conf            # Load balancer for the two-copy demo
+│   ├── start-two-copies.ps1        # Starts / stops two backend copies and Nginx
 │   ├── pom.xml                     # Maven build config
 │   └── src/main/
 │       ├── java/com/brokerui/      # Java source code
@@ -148,6 +205,7 @@ UI_alfa/
 |---------|------|
 | Frontend (React) | 3001 |
 | Backend (Spring Boot) | 8080 |
+| Load-balancing demo: Nginx / backend copy "a" / copy "b" | 8080 / 8081 / 8082 |
 | PostgreSQL (Docker) | 5433 |
 | Neural Network trainer (optional) | 3005 |
 
