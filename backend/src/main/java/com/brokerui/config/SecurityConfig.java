@@ -19,6 +19,7 @@ import org.springframework.security.web.access.expression.WebExpressionAuthoriza
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.authentication.DisabledException;
@@ -105,14 +106,12 @@ public class SecurityConfig {
    *
    * @param http HttpSecurity configuration builder
    * @param daoAuthenticationProvider configured database user auth provider
-   * @param headerSessionFilter filter that binds requests with X-Session-Id to tab-isolated HttpSessions
    * @return the final constructed SecurityFilterChain bean
    * @throws Exception if security building fails
    */
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http,
-                                         DaoAuthenticationProvider daoAuthenticationProvider,
-                                         HeaderSessionFilter headerSessionFilter)
+                                         DaoAuthenticationProvider daoAuthenticationProvider)
       throws Exception {
     CookieCsrfTokenRepository csrfRepo = CookieCsrfTokenRepository.withHttpOnlyFalse();
     csrfRepo.setCookiePath("/");
@@ -127,9 +126,6 @@ public class SecurityConfig {
               auditLogService.log(user, "LOGIN_SUCCESS", "email=" + email, request));
           jakarta.servlet.http.HttpSession session = request.getSession(false);
           String sid = session != null ? session.getId() : "";
-          if (session != null) {
-            SessionRegistryService.register(session);
-          }
           response.setStatus(200);
           response.setContentType("application/json;charset=UTF-8");
           response.setHeader("X-Session-Id", sid);
@@ -150,9 +146,10 @@ public class SecurityConfig {
           }
         };
 
-    http.addFilterBefore(headerSessionFilter, org.springframework.security.web.context.SecurityContextHolderFilter.class);
-
     http.authenticationProvider(daoAuthenticationProvider)
+        // A JSON API has no page to return to after login, and a saved request would write a
+        // session row to the database for every anonymous 401.
+        .requestCache(cache -> cache.requestCache(new NullRequestCache()))
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .csrf(
             csrf ->
@@ -216,10 +213,6 @@ public class SecurityConfig {
                 logout.logoutUrl("/api/auth/logout")
                     .logoutSuccessHandler(
                         (request, response, authentication) -> {
-                          String sid = request.getHeader("X-Session-Id");
-                          if (sid != null) {
-                            SessionRegistryService.unregister(sid);
-                          }
                           response.setStatus(200);
                           response.setContentType("application/json;charset=UTF-8");
                           response.getWriter().write("{\"ok\":true}");

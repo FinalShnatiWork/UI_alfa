@@ -461,8 +461,15 @@ public class NettingService {
   private Long stageClose(Long positionId, String reason) {
     Position pos = positionRepo.findById(positionId).orElse(null);
     if (pos == null || pos.getTradingAccount() == null) return null;
-    Long accountId = pos.getTradingAccount().getId();
+    TradingAccount seen = pos.getTradingAccount();
+    Long accountId = seen.getId();
+    if (em.contains(seen)) {
+      em.detach(seen);
+    }
     TradingAccount ta = accountRepo.findByIdForUpdate(accountId).orElse(null);
+    if (ta != null) {
+      em.refresh(ta);
+    }
     if (ta == null) return null;
     pos = positionRepo.findByIdForUpdate(positionId).orElse(null);
     if (pos == null || pos.getQuantity() == null || pos.getQuantity().signum() <= 0) return null;

@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 
@@ -65,6 +66,7 @@ class PlaceOrderGuardsTest {
 
     when(userRepo.findByEmailIgnoreCase("guards@test.com")).thenReturn(Optional.of(user));
     when(accountRepo.findFirstByUserIdOrderByIdAsc(1L)).thenReturn(Optional.of(ta));
+    when(accountRepo.findFirstIdByUserId(1L)).thenReturn(Optional.of(7L));
     when(accountRepo.findByIdForUpdate(7L)).thenReturn(Optional.of(ta));
     when(symbolRepo.findByCode(anyString())).thenReturn(Optional.of(symbol(true)));
     when(priceService.getLivePrice(anyString())).thenReturn(90_000.0);
@@ -175,5 +177,68 @@ class PlaceOrderGuardsTest {
     when(marginLoanService.tryCoverShortfall(eq(ta), any(), any(), any())).thenReturn(true);
 
     assertEquals(200, place("BTCUSD", "0.01", "LIMIT", "80000").getStatusCode().value());
+  }
+
+  private ResponseEntity<?> placeWithKey(String qty, String key) {
+    MockHttpServletRequest req = new MockHttpServletRequest();
+    req.addHeader("Idempotency-Key", key);
+    return controller.placeOrder(auth, new BrokerApiController.PlaceOrderRequest(
+        "BTCUSD", "BUY", "LIMIT", new BigDecimal(qty), new BigDecimal("80000"),
+        null, null, null, null, null), req);
+  }
+
+  @Test
+  void repeatedKeyReturnsTheFirstOrderAndReservesNothing() {
+    BrokerOrder first = new BrokerOrder();
+    first.setId(55L);
+    first.setSymbolCode("BTCUSD");
+    first.setSide("BUY");
+    first.setQuantity(new BigDecimal("0.01"));
+    first.setStatus("NEW");
+    when(orderRepo.findByTradingAccountIdAndIdempotencyKey(7L, "click-1")).thenReturn(Optional.of(first));
+
+    ResponseEntity<?> r = placeWithKey("0.01", "click-1");
+
+    assertEquals(200, r.getStatusCode().value());
+    assertEquals(55L, ((Map<?, ?>) r.getBody()).get("orderId"));
+    assertEquals(true, ((Map<?, ?>) r.getBody()).get("duplicate"));
+    verify(marginLoanService, never()).tryCoverShortfall(any(), any(), any(), any());
+    verify(orderRepo, never()).save(any(BrokerOrder.class));
+  }
+
+  @Test
+  void sameKeyForADifferentOrderIsRefused() {
+    BrokerOrder first = new BrokerOrder();
+    first.setId(55L);
+    first.setSymbolCode("BTCUSD");
+    first.setSide("BUY");
+    first.setQuantity(new BigDecimal("0.01"));
+    when(orderRepo.findByTradingAccountIdAndIdempotencyKey(7L, "click-1")).thenReturn(Optional.of(first));
+
+    ResponseEntity<?> r = placeWithKey("0.02", "click-1");
+
+    assertEquals(409, r.getStatusCode().value());
+    assertEquals("idempotency_key_reused", error(r));
+    verify(orderRepo, never()).save(any(BrokerOrder.class));
+  }
+
+  @Test
+  void newKeyIsStoredWithTheOrder() {
+    when(marginLoanService.tryCoverShortfall(eq(ta), any(), any(), any())).thenReturn(true);
+
+    assertEquals(200, placeWithKey("0.01", "click-2").getStatusCode().value());
+
+    ArgumentCaptor<BrokerOrder> saved = ArgumentCaptor.forClass(BrokerOrder.class);
+    verify(orderRepo).save(saved.capture());
+    assertEquals("click-2", saved.getValue().getIdempotencyKey());
+  }
+
+  @Test
+  void malformedKeyIsRefusedBeforeTheAccountIsLocked() {
+    ResponseEntity<?> r = placeWithKey("0.01", "x".repeat(65));
+
+    assertEquals(400, r.getStatusCode().value());
+    assertEquals("invalid_idempotency_key", error(r));
+    verify(accountRepo, never()).findByIdForUpdate(any());
   }
 }

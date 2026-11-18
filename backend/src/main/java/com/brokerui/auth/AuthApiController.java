@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthApiController {
   private final AppUserRepository repo;
   private final PasswordEncoder encoder;
+  private final SessionRegistryService sessionRegistry;
 
   /**
    * Constructs the AuthApiController.
@@ -37,9 +38,11 @@ public class AuthApiController {
    * @param repo the user accounts database repository
    * @param encoder password hashing utility encoder
    */
-  public AuthApiController(AppUserRepository repo, PasswordEncoder encoder) {
+  public AuthApiController(AppUserRepository repo, PasswordEncoder encoder,
+      SessionRegistryService sessionRegistry) {
     this.repo = repo;
     this.encoder = encoder;
+    this.sessionRegistry = sessionRegistry;
   }
 
   /**
@@ -134,7 +137,7 @@ public class AuthApiController {
     u.setPasswordHash(encoder.encode(next));
     repo.save(u);
     HttpSession here = request == null ? null : request.getSession(false);
-    SessionRegistryService.invalidateUserExcept(u.getEmail(), here == null ? null : here.getId());
+    sessionRegistry.invalidateUserExcept(u.getEmail(), here == null ? null : here.getId());
     return ResponseEntity.ok(Map.of("ok", true));
   }
 }

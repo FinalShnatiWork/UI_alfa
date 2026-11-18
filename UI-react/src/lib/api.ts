@@ -132,6 +132,7 @@ async function postWithCsrfRetry(
   path: string,
   contentType: string,
   body: string,
+  extraHeaders: Record<string, string> = {},
 ): Promise<Response> {
   const isLogin = path.endsWith('/api/auth/login');
   const doReq = async (): Promise<Response> => {
@@ -139,6 +140,7 @@ async function postWithCsrfRetry(
     const headers: Record<string, string> = {
       'Content-Type': contentType,
       Accept: 'application/json',
+      ...extraHeaders,
       ...xsrf,
     };
     const tabSid = getTabSessionId();
@@ -176,18 +178,29 @@ async function postWithCsrfRetry(
  *
  * @param path request path target URL
  * @param body payload object
+ * @param extraHeaders sent on the first try and on the CSRF retry alike (e.g. Idempotency-Key)
  * @returns HTTP response object
  */
-export async function apiPostJson(path: string, body: unknown): Promise<Response> {
+export async function apiPostJson(
+  path: string,
+  body: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
   if (IS_MOCK) {
     return mockPost(path, body);
   }
 
-  const res = await postWithCsrfRetry(path, 'application/json', JSON.stringify(body));
+  const res = await postWithCsrfRetry(path, 'application/json', JSON.stringify(body), extraHeaders);
   if (res.status === 401) {
     onUnauthorized.forEach((fn) => fn());
   }
   return res;
+}
+
+/** A fresh key per order click; the server turns a repeat of the same request into a no-op. */
+export function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
 /**

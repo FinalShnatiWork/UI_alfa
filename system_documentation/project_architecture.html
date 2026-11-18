@@ -96,11 +96,11 @@
   <h2 class="ru">1. Слои — широко</h2>
   <h2 class="en">1. Layers — wide view</h2>
   <div class="band"><b class="ru">Браузер</b><b class="en">Browser</b><div class="chips"><span class="chip">React SPA</span><span class="chip">/admin localhost only</span></div></div>
-  <div class="band"><b class="ru">Балансировщик</b><b class="en">Load balancer</b><div class="chips"><span class="chip">Nginx :8080 (docker compose --profile lb)</span><span class="chip ru">копия «a» :8081</span><span class="chip en">copy "a" :8081</span><span class="chip ru">копия «b» :8082</span><span class="chip en">copy "b" :8082</span><span class="chip ru">сессия возвращается на свою копию (.a / .b)</span><span class="chip en">a session returns to its own copy (.a / .b)</span><span class="chip ru">фоновые задачи — только у копии с advisory lock</span><span class="chip en">background jobs only on the copy holding the advisory lock</span></div></div>
+  <div class="band"><b class="ru">Балансировщик</b><b class="en">Load balancer</b><div class="chips"><span class="chip">Nginx :8080 (docker compose --profile lb)</span><span class="chip ru">копия «a» :8081</span><span class="chip en">copy "a" :8081</span><span class="chip ru">копия «b» :8082</span><span class="chip en">copy "b" :8082</span><span class="chip ru">сессии в PostgreSQL (spring_session) — любая копия обслуживает любую вкладку</span><span class="chip en">sessions in PostgreSQL (spring_session) — any copy serves any tab</span><span class="chip ru">Idempotency-Key: повтор заявки не создаёт вторую</span><span class="chip en">Idempotency-Key: a repeated order is not placed twice</span><span class="chip ru">фоновые задачи — только у копии с advisory lock</span><span class="chip en">background jobs only on the copy holding the advisory lock</span></div></div>
   <div class="band"><b>HTTP :8080</b><div class="chips"><span class="chip">/api/auth</span><span class="chip">/api/broker</span><span class="chip">/api/market</span><span class="chip">/api/admin</span><span class="chip">/api/health</span></div></div>
   <div class="band"><b class="ru">Мозг</b><b class="en">Domain</b><div class="chips"><span class="chip">OrderExecutionService</span><span class="chip">MarginLoanService</span><span class="chip">TradingFees</span><span class="chip">PositionCloseMath</span><span class="chip">MarketPriceService</span></div></div>
   <div class="band"><b class="ru">Снаружи</b><b class="en">Outside</b><div class="chips"><span class="chip">Binance</span><span class="chip">Yahoo / Finnhub</span><span class="chip">NN Predictor</span><span class="chip">MT5 bridge</span></div></div>
-  <div class="band"><b class="ru">Память</b><b class="en">Storage</b><div class="chips"><span class="chip">PostgreSQL broker_ui</span><span class="chip">Flyway V1–V39</span><span class="chip">JPA entities</span></div></div>
+  <div class="band"><b class="ru">Память</b><b class="en">Storage</b><div class="chips"><span class="chip">PostgreSQL broker_ui</span><span class="chip">Flyway V1–V41</span><span class="chip">JPA entities</span></div></div>
 </section>
 
 <section id="simple">
@@ -267,6 +267,7 @@
     <tr><td><code>nn_route_recommendation</code></td><td>VARCHAR</td><td class="ru">INTERNAL / EXTERNAL / LEGACY</td><td class="en">INTERNAL / EXTERNAL / LEGACY</td></tr>
     <tr><td><code>nn_match_prob</code> / <code>nn_expected_savings</code></td><td>float / num</td><td class="ru">цифры от модели маршрутизации</td><td class="en">routing-model scores</td></tr>
     <tr><td><code>client_tag</code></td><td>VARCHAR</td><td class="ru">метка клиента, почти не используется</td><td class="en">client tag, barely used</td></tr>
+    <tr><td><code>idempotency_key</code></td><td>VARCHAR(64)</td><td class="ru">ключ из заголовка Idempotency-Key; один ключ — одна заявка на счёт</td><td class="en">key from the Idempotency-Key header; one key, one order per account</td></tr>
     <tr><td><code>created_at</code> / <code>updated_at</code> / <code>filled_at</code></td><td>ts</td><td class="ru">создали / трогали / исполнили</td><td class="en">created / touched / filled</td></tr>
   </table>
   <p class="simple ru">Просто: чек из магазина. Один чек на покупку, другой на продажу. История покупок = стопка этих чеков, а не отдельный журнал.</p>
@@ -555,6 +556,8 @@
     <tr><td>V34–V36</td><td class="ru">закрытие через книгу; размер SOL равен 1; на позицию одно открытое закрытие</td><td class="en">close through the book; SOL size is 1; one open close per position</td></tr>
     <tr><td>V37–V38</td><td class="ru">убраны хранимая занятая маржа и пустая прибыль на позиции</td><td class="en">dropped stored margin-used and the empty profit column on a position</td></tr>
     <tr><td>V39</td><td class="ru">убраны хранимые капитал и свободные деньги; сведение ссылается на строку символа. Номеров 7 и 9 не было</td><td class="en">dropped stored equity and free cash; a match points at the symbol row. Versions 7 and 9 never existed</td></tr>
+    <tr><td>V40</td><td class="ru">таблицы <code>spring_session</code> и <code>spring_session_attributes</code>: сессии входа общие для обеих копий</td><td class="en"><code>spring_session</code> and <code>spring_session_attributes</code>: sign-in sessions shared by both copies</td></tr>
+    <tr><td>V41</td><td class="ru"><code>broker_order.idempotency_key</code>, уникален в пределах счёта: повтор той же заявки не создаёт вторую</td><td class="en"><code>broker_order.idempotency_key</code>, unique per account: a repeat of the same order does not create a second one</td></tr>
   </table>
 </section>
 

@@ -5,7 +5,7 @@ import {
   CandlestickSeries, HistogramSeries,
   type IChartApi, type ISeriesApi, type UTCTimestamp,
 } from 'lightweight-charts';
-import { apiPostJson } from '@/lib/api';
+import { apiPostJson, newIdempotencyKey } from '@/lib/api';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { BackPageHeader } from '@/components/BackPageHeader';
@@ -286,6 +286,7 @@ export function ChartsPage() {
   const sessionOpenPriceRef = useRef<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const orderInFlightRef = useRef(false);
 
   const [searchParams] = useSearchParams();
   const paramSymbol = searchParams.get('symbol');
@@ -781,6 +782,9 @@ export function ChartsPage() {
   }
 
   async function placeOrder(side: 'BUY' | 'SELL', acceptLoan = false) {
+    // A double click must not become two orders.
+    if (orderInFlightRef.current) return;
+    orderInFlightRef.current = true;
     const qty = Number(volume);
     try {
       const payload: Record<string, unknown> = {
@@ -793,7 +797,7 @@ export function ChartsPage() {
         acceptLoan: acceptLoan ? true : undefined,
       };
       if (orderType === 'LIMIT') payload.limitPrice = Number(entryPrice);
-      const res = await apiPostJson('/api/broker/orders', payload);
+      const res = await apiPostJson('/api/broker/orders', payload, { 'Idempotency-Key': newIdempotencyKey() });
       const data = await res.json() as PlaceOrderResponse & {
         shortfall?: number;
         required?: number;
@@ -847,7 +851,11 @@ export function ChartsPage() {
         const message = (data.error && knownErrors[data.error]) || (t('trading.errOrderFailed') + ': ' + (data.error ?? ''));
         toast.show(message, { variant: 'error' });
       }
-    } catch { toast.show(t('trading.errOrderFailed'), { variant: 'error' }); }
+    } catch {
+      toast.show(t('trading.errOrderFailed'), { variant: 'error' });
+    } finally {
+      orderInFlightRef.current = false;
+    }
   }
 
 

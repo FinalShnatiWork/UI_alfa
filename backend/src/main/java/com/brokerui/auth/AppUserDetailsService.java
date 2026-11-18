@@ -9,7 +9,6 @@ import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.authentication.DisabledException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -36,7 +35,7 @@ public class AppUserDetailsService implements UserDetailsService {
    * @param email user email address
    * @return Spring Security UserDetails representation of the authenticated user
    * @throws UsernameNotFoundException if user or password hash is not found
-   * @throws DisabledException if the user has been banned
+   * A banned user is returned disabled, so the login fails with DisabledException.
    */
   @Override
   public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
@@ -46,12 +45,12 @@ public class AppUserDetailsService implements UserDetailsService {
     if (u.getPasswordHash() == null || u.getPasswordHash().isBlank()) {
       throw new UsernameNotFoundException("no password");
     }
-    if (u.isBanned()) {
-      throw new DisabledException("banned");
-    }
-    return new User(
-        u.getEmail(),
-        u.getPasswordHash(),
-        List.of(new SimpleGrantedAuthority("ROLE_" + u.getRole().name())));
+    // A disabled user makes Spring throw DisabledException itself, so the login answers "banned".
+    // Throwing it from here would be wrapped and reported as wrong credentials.
+    return User.withUsername(u.getEmail())
+        .password(u.getPasswordHash())
+        .disabled(u.isBanned())
+        .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + u.getRole().name())))
+        .build();
   }
 }

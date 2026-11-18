@@ -123,6 +123,18 @@ public class BrokerOrder {
   @Column(name = "nn_shadow_correct")
   private Boolean nnShadowCorrect;
 
+  /** Idempotency-Key the client sent when placing this order; unique per account. */
+  @Column(name = "idempotency_key", length = 64)
+  private String idempotencyKey;
+
+  public String getIdempotencyKey() {
+    return idempotencyKey;
+  }
+
+  public void setIdempotencyKey(String idempotencyKey) {
+    this.idempotencyKey = idempotencyKey;
+  }
+
   public Long getId() {
     return id;
   }

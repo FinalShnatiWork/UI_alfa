@@ -38,7 +38,7 @@ New-Item -ItemType Directory -Force $logDir | Out-Null
 # Copy "a" starts alone first so Flyway checks the migrations only once.
 foreach ($copy in @(@{ Name = 'a'; Port = 8081 }, @{ Name = 'b'; Port = 8082 })) {
   Start-Process java -WindowStyle Hidden -ArgumentList @('-jar', $jar.FullName, '--spring.profiles.active=postgres',
-    "--server.port=$($copy.Port)", "--broker.node-name=$($copy.Name)") `
+    "--server.port=$($copy.Port)") `
     -RedirectStandardOutput "$logDir\copy-$($copy.Name).log" -RedirectStandardError "$logDir\copy-$($copy.Name).err.log"
   Wait-Health $copy.Port
   Write-Host "Copy $($copy.Name) is up on port $($copy.Port)"

@@ -30,16 +30,20 @@ import org.springframework.web.server.ResponseStatusException;
 public class AdminUserController {
   private final AppUserRepository repo;
   private final AuditLogService auditLogService;
+  private final SessionRegistryService sessionRegistry;
 
   /**
    * Constructs the AdminUserController with the user repository.
    *
    * @param repo the user repository
    * @param auditLogService records who did what to which user
+   * @param sessionRegistry ends the sessions of a banned, deleted or renamed user
    */
-  public AdminUserController(AppUserRepository repo, AuditLogService auditLogService) {
+  public AdminUserController(AppUserRepository repo, AuditLogService auditLogService,
+      SessionRegistryService sessionRegistry) {
     this.repo = repo;
     this.auditLogService = auditLogService;
+    this.sessionRegistry = sessionRegistry;
   }
 
   /** Logs under the acting admin; the target user is named in the detail. */
@@ -91,7 +95,7 @@ public class AdminUserController {
     u.setBannedAt(Instant.now());
     u.setBannedReason(req == null ? null : req.reason());
     repo.save(u);
-    int ended = SessionRegistryService.invalidateUser(u.getEmail());
+    int ended = sessionRegistry.invalidateUser(u.getEmail());
     audit(auth, "ADMIN_USER_BANNED", u,
         (req == null || req.reason() == null ? "" : "reason: " + req.reason() + "; ") + ended + " session(s) ended", request);
     return Map.of("ok", true, "sessionsEnded", ended);
@@ -126,7 +130,7 @@ public class AdminUserController {
   @Transactional
   public Map<String, Object> deleteUser(@PathVariable Long id, Authentication auth, HttpServletRequest request) {
     AppUser u = findOrThrow(id);
-    int ended = SessionRegistryService.invalidateUser(u.getEmail());
+    int ended = sessionRegistry.invalidateUser(u.getEmail());
     audit(auth, "ADMIN_USER_DELETED", u, ended + " session(s) ended", request);
     repo.deleteById(id);
     return Map.of("ok", true);
@@ -154,7 +158,10 @@ public class AdminUserController {
       if (repo.existsByEmailIgnoreCase(req.email()) && !req.email().equalsIgnoreCase(u.getEmail())) {
         throw new ResponseStatusException(HttpStatus.CONFLICT, "email already in use");
       }
+      String oldEmail = u.getEmail();
       u.setEmail(req.email());
+      // Sessions remember the email they signed in with; the user signs in again with the new one.
+      if (!req.email().equals(oldEmail)) sessionRegistry.invalidateUser(oldEmail);
     }
     repo.save(u);
     audit(auth, "ADMIN_USER_UPDATED", u, "was " + before, request);

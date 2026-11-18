@@ -124,8 +124,8 @@ The same by hand:
 ```bash
 cd backend
 .\mvnw.cmd -DskipTests package
-java -jar target\backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=postgres --server.port=8081 --broker.node-name=a
-java -jar target\backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=postgres --server.port=8082 --broker.node-name=b
+java -jar target\backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=postgres --server.port=8081
+java -jar target\backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=postgres --server.port=8082
 docker compose --profile lb up -d
 ```
 
@@ -133,22 +133,22 @@ Start copy "b" only after copy "a" prints `Started BackendApplication`, so the d
 
 ### How it works
 
-1. **Routing.** Nginx (`backend/nginx/nginx.conf`) sends requests without a session to both copies in turn.
-2. **Sessions stay on their copy.** Sign-in sessions are kept in the memory of the copy that created them. With `--broker.node-name=a` every session id ends with `.a`, and Nginx reads that ending from the `X-Session-Id` header and sends the tab back to copy "a".
-3. **Health check.** If a copy does not answer, Nginx marks it down for 10 seconds and uses the other copy. Requests without a session continue at once. A tab that was signed in on the stopped copy is asked to sign in again, and the new session is created on the working copy.
+1. **Routing.** Nginx (`backend/nginx/nginx.conf`) sends every request to the two copies in turn.
+2. **Sessions are in PostgreSQL.** A sign-in session is a row in the `spring_session` table (Spring Session JDBC, migration V40), so both copies know every signed-in tab. The tab sends its session id in the `X-Session-Id` header (`HeaderSessionIdResolver`); two users can still be signed in side by side in one browser.
+3. **Health check.** If a copy does not answer, Nginx marks it down for 10 seconds and uses the other copy. Signed-in users stay signed in; at most one request is retried by Nginx on the working copy.
 4. **Background jobs run once.** Order execution, SL/TP, liquidation, interest and the simulated liquidity run only on the copy that holds a PostgreSQL advisory lock (`SchedulerLeader`). If that copy stops, the database releases the lock and the other copy takes over within a few seconds. So interest is never charged twice and a position is never liquidated twice.
-5. **Bans.** A ban or a deleted user ends that user's sessions on both copies within 5 seconds.
-6. **Which copy answered.** Every response through Nginx has an `X-Upstream` header with the copy's port.
-7. **Admin.** Admin pages still work only from this computer: Nginx runs in Docker on the same machine and reaches the copies from 127.0.0.1.
+5. **Bans.** A ban, a deleted user, a password change (other tabs) and an admin email change delete the user's session rows at once, so the user is signed out on both copies with the next request. Every 5 seconds the copy that runs the schedulers also removes sessions of banned or missing users as a safety net.
+6. **A repeated order is not placed twice.** The site sends a fresh `Idempotency-Key` header with every order click (migration V41). If the same request arrives again (a retry after a lost answer, a proxy retry), the server returns the first order and reserves no money. The same key with a different order is refused with 409. A second click while the first order is still on its way is ignored by the page.
+7. **Which copy answered.** Every response through Nginx has an `X-Upstream` header with the copy's port.
+8. **Admin.** Admin pages still work only from this computer: Nginx runs in Docker on the same machine and reaches the copies from 127.0.0.1.
 
 ### Demo: the service keeps working when one copy stops
 
-1. Sign in on http://localhost:3001 in two browsers with two different users. In DevTools → Network, the `X-Upstream` header shows `:8081` for one tab and `:8082` for the other (sign in again if both landed on the same copy).
-2. Refresh a tab. It stays on the same copy and stays signed in.
-3. Stop one copy: find its process with `netstat -ano | findstr :8081` and end it in Task Manager, or close its window.
-4. The site keeps working. The tab on the other copy does not notice anything. The tab on the stopped copy shows the sign-in page, and after signing in it continues on the working copy.
-5. In `target/lb-logs/copy-b.log` the line `This copy now runs the broker schedulers` shows that the background jobs moved to the working copy.
-6. Start the stopped copy again with its `java -jar ...` line. Nginx starts sending new sessions to it within 10 seconds.
+1. Sign in on http://localhost:3001. In DevTools → Network, the `X-Upstream` header changes between `:8081` and `:8082` from request to request, and the tab stays signed in.
+2. Stop one copy: find its process with `netstat -ano | findstr :8081` and end it in Task Manager, or close its window.
+3. The site keeps working and nobody has to sign in again. All responses now show the other port.
+4. In `target/lb-logs/copy-b.log` the line `This copy now runs the broker schedulers` shows that the background jobs moved to the working copy.
+5. Start the stopped copy again with its `java -jar ...` line. Nginx starts sending requests to it within 10 seconds.
 
 ---
 

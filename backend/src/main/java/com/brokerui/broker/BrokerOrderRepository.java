@@ -52,6 +52,8 @@ public interface BrokerOrderRepository extends JpaRepository<BrokerOrder, Long> 
 
   List<BrokerOrder> findByTradingAccountIdAndStatusInOrderByCreatedAtDesc(Long tradingAccountId, Collection<String> statuses);
 
+  Optional<BrokerOrder> findByTradingAccountIdAndIdempotencyKey(Long tradingAccountId, String idempotencyKey);
+
   List<BrokerOrder> findByClosesPositionIdAndStatusIn(Long closesPositionId, Collection<String> statuses);
 
   /** Share of recently filled netting-era quantity that crossed internally: [internal, filled]. */

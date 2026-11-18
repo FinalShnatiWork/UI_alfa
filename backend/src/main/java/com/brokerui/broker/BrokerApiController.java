@@ -2,6 +2,8 @@ package com.brokerui.broker;
 
 import com.brokerui.user.AppUser;
 import com.brokerui.user.AppUserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -38,6 +40,10 @@ public class BrokerApiController {
   private final MarginLoanService marginLoanService;
   private final MarginLoanLedgerRepository ledgerRepo;
   private final CommissionLedger commissionLedger;
+
+  /** Present in the running app. Unit tests construct the controller and leave this empty. */
+  @PersistenceContext
+  private EntityManager entityManager;
 
   public BrokerApiController(
       AppUserRepository userRepo,
@@ -95,6 +101,27 @@ public class BrokerApiController {
       return accountRepo.findById(id).orElseThrow();
     }
     return createPrimaryAccount(user);
+  }
+
+  /**
+   * The account row locked, with the balance as it is after every earlier order has committed.
+   * Loading the row first and locking it afterwards keeps the old balance in memory, so a burst
+   * of orders all spend the same cash.
+   */
+  private TradingAccount lockPrimaryAccount(AppUser user) {
+    Long id = accountRepo.findFirstIdByUserId(user.getId()).orElse(null);
+    if (id == null) {
+      TradingAccount created = createPrimaryAccount(user);
+      id = created.getId();
+      if (entityManager != null && entityManager.contains(created)) {
+        entityManager.detach(created);
+      }
+    }
+    TradingAccount locked = accountRepo.findByIdForUpdate(id).orElseThrow();
+    if (entityManager != null) {
+      entityManager.refresh(locked);
+    }
+    return locked;
   }
 
   private TradingAccount createPrimaryAccount(AppUser user) {
@@ -161,8 +188,7 @@ public class BrokerApiController {
   public ResponseEntity<?> createTransaction(Authentication auth,
       @RequestBody Map<String, Object> body, HttpServletRequest request) {
     AppUser u = requireUser(auth);
-    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId())
-        .orElseGet(() -> ensurePrimaryAccount(u));
+    TradingAccount ta = lockPrimaryAccount(u);
 
     Object rawType = body.get("txType");
     Object rawAmount = body.get("amount");
@@ -360,8 +386,19 @@ public class BrokerApiController {
 
   private Placement reserveAndStore(Authentication auth, PlaceOrderRequest body, HttpServletRequest request) {
     AppUser u = requireUser(auth);
-    TradingAccount ta = accountRepo.findByIdForUpdate(ensurePrimaryAccount(u).getId())
-        .orElseGet(() -> ensurePrimaryAccount(u));
+    String idempotencyKey = request == null ? null : request.getHeader(IDEMPOTENCY_HEADER);
+    if (idempotencyKey != null && idempotencyKey.isBlank()) idempotencyKey = null;
+    if (idempotencyKey != null && !IDEMPOTENCY_KEY.matcher(idempotencyKey.trim()).matches()) {
+      return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "invalid_idempotency_key")));
+    }
+    if (idempotencyKey != null) idempotencyKey = idempotencyKey.trim();
+    TradingAccount ta = lockPrimaryAccount(u);
+    // Checked under the account lock, so a second copy of the same click waits for the first and
+    // then finds its order instead of reserving the money again.
+    if (idempotencyKey != null) {
+      BrokerOrder earlier = orderRepo.findByTradingAccountIdAndIdempotencyKey(ta.getId(), idempotencyKey).orElse(null);
+      if (earlier != null) return done(repeatedOrder(earlier, body, ta));
+    }
 
     if (body.symbolCode() == null || body.side() == null || body.quantity() == null) {
       return done(ResponseEntity.badRequest().body(Map.of("ok", false, "error", "missing_fields")));
@@ -458,6 +495,7 @@ public class BrokerApiController {
       order.setTakeProfit(body.takeProfit());
       order.setStopLoss(body.stopLoss());
       order.setReserveRemaining(reserved);
+      order.setIdempotencyKey(idempotencyKey);
       order = orderRepo.save(order);
       auditLogService.log(u, "ORDER_PENDING", side + " " + qty + " " + symbolCode + " type=" + mappedOrderType, request);
       if (strictLimit) {
@@ -523,8 +561,44 @@ public class BrokerApiController {
     order.setTakeProfit(body.takeProfit());
     order.setStopLoss(body.stopLoss());
     order.setReserveRemaining(required);
+    order.setIdempotencyKey(idempotencyKey);
     order = orderRepo.save(order);
     return new Placement(null, order.getId(), "ORDER_PLACED");
+  }
+
+  static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
+  private static final java.util.regex.Pattern IDEMPOTENCY_KEY =
+      java.util.regex.Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
+
+  /**
+   * Answer to a repeated click: the order placed the first time, nothing reserved again.
+   * The same key with a different order is refused, so a client bug cannot hide a real order.
+   */
+  private static ResponseEntity<?> repeatedOrder(BrokerOrder o, PlaceOrderRequest body, TradingAccount ta) {
+    boolean same = body.symbolCode() != null && body.side() != null && body.quantity() != null
+        && o.getSymbolCode().equalsIgnoreCase(body.symbolCode().trim())
+        && o.getSide().equalsIgnoreCase(body.side().trim())
+        && o.getQuantity().compareTo(body.quantity()) == 0;
+    if (!same) {
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("ok", false, "error", "idempotency_key_reused",
+          "orderId", o.getId()));
+    }
+    if ("REJECTED".equals(o.getStatus())) {
+      return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "credit_limit_exceeded",
+          "orderId", o.getId(), "duplicate", true));
+    }
+    Map<String, Object> resp = new java.util.LinkedHashMap<>();
+    resp.put("ok", true);
+    resp.put("duplicate", true);
+    resp.put("orderId", o.getId());
+    resp.put("status", o.getStatus());
+    if (o.getEntryPrice() != null) resp.put("fillPrice", o.getEntryPrice());
+    resp.put("newBalance", ta.getBalance());
+    if (o.getRouting() != null) resp.put("routing", o.getRouting());
+    resp.put("filledQty", o.getFilledQty());
+    resp.put("internalQty", o.getInternalQty());
+    resp.put("externalQty", o.getExternalQty());
+    return ResponseEntity.ok(resp);
   }
 
   /**
@@ -674,7 +748,13 @@ public class BrokerApiController {
         || "CLOSE".equalsIgnoreCase(order.getOrderType())) {
       return ResponseEntity.badRequest().body(Map.of("ok", false, "error", "order_not_cancellable"));
     }
+    if (entityManager != null && entityManager.contains(owned)) {
+      entityManager.detach(owned);
+    }
     TradingAccount ta = accountRepo.findByIdForUpdate(owned.getId()).orElseThrow();
+    if (entityManager != null) {
+      entityManager.refresh(ta);
+    }
     // Refund what is still reserved for the unfilled part (whole reserve if nothing filled yet).
     if ("BUY".equalsIgnoreCase(order.getSide()) || "SELL".equalsIgnoreCase(order.getSide())) {
       BigDecimal refund = com.brokerui.broker.netting.FillBooking.outstandingReserve(order, ta);

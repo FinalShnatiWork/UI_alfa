@@ -13,6 +13,10 @@ public interface TradingAccountRepository extends JpaRepository<TradingAccount, 
 
   Optional<TradingAccount> findFirstByUserIdOrderByIdAsc(Long userId);
 
+  /** The id only, so the locking load below is the first time the row enters this transaction. */
+  @Query("SELECT MIN(ta.id) FROM TradingAccount ta WHERE ta.user.id = :userId")
+  Optional<Long> findFirstIdByUserId(@Param("userId") Long userId);
+
   /**
    * Pessimistic write lock – use inside @Transactional methods that modify balance
    * to prevent lost-update race conditions when multiple requests hit the same account.

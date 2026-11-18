@@ -1,58 +1,52 @@
 package com.brokerui.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextImpl;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.MapSession;
 
 class SessionRegistryInvalidateUserTest {
 
-  private static MockHttpSession signedIn(String email) {
-    MockHttpSession s = new MockHttpSession();
-    s.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-        new SecurityContextImpl(new UsernamePasswordAuthenticationToken(email, "x")));
-    SessionRegistryService.register(s);
-    return s;
-  }
+  @SuppressWarnings("unchecked")
+  private final FindByIndexNameSessionRepository<MapSession> sessions =
+      mock(FindByIndexNameSessionRepository.class);
+  private final SessionRegistryService registry =
+      new SessionRegistryService(sessions, mock(JdbcTemplate.class));
 
   @Test
-  void endsEveryTabOfThatUser_andLeavesOthersSignedIn() {
-    MockHttpSession tab1 = signedIn("banned@test.local");
-    MockHttpSession tab2 = signedIn("Banned@Test.local");
-    MockHttpSession other = signedIn("other@test.local");
+  void endsEveryTabOfThatUser() {
+    when(sessions.findByPrincipalName("banned@test.local"))
+        .thenReturn(Map.of("tab1", new MapSession("tab1"), "tab2", new MapSession("tab2")));
 
-    int ended = SessionRegistryService.invalidateUser("banned@test.local");
+    int ended = registry.invalidateUser("banned@test.local");
 
     assertEquals(2, ended);
-    assertTrue(tab1.isInvalid());
-    assertTrue(tab2.isInvalid());
-    assertNull(SessionRegistryService.getSession(tab1.getId()));
-    assertFalse(other.isInvalid());
-    assertNotNull(SessionRegistryService.getSession(other.getId()));
-    SessionRegistryService.unregister(other.getId());
+    verify(sessions).deleteById("tab1");
+    verify(sessions).deleteById("tab2");
   }
 
   @Test
   void passwordChangeKeepsTheTabThatChangedIt() {
-    MockHttpSession here = signedIn("week1-check@test.local");
-    MockHttpSession otherTab = signedIn("week1-check@test.local");
-    MockHttpSession stranger = signedIn("other@test.local");
+    when(sessions.findByPrincipalName("week1-check@test.local"))
+        .thenReturn(Map.of("here", new MapSession("here"), "other", new MapSession("other")));
 
-    int ended = SessionRegistryService.invalidateUserExcept("week1-check@test.local", here.getId());
+    int ended = registry.invalidateUserExcept("week1-check@test.local", "here");
 
     assertEquals(1, ended);
-    assertFalse(here.isInvalid());
-    assertNotNull(SessionRegistryService.getSession(here.getId()));
-    assertTrue(otherTab.isInvalid());
-    assertFalse(stranger.isInvalid());
-    SessionRegistryService.unregister(here.getId());
-    SessionRegistryService.unregister(stranger.getId());
+    verify(sessions).deleteById("other");
+    verify(sessions, never()).deleteById("here");
+  }
+
+  @Test
+  void blankEmailEndsNothing() {
+    assertEquals(0, registry.invalidateUser(" "));
+    verify(sessions, never()).findByPrincipalName(" ");
   }
 }

@@ -23,6 +23,9 @@ spring:
     locations: classpath:db/migration
     ignore-missing-migrations: false
     validate-on-migrate: true
+  session:
+    jdbc:
+      initialize-schema: never     # tables come from Flyway V40
 
 broker:
   # Real netting (client vs client / client vs computer) — see buysellmodel/NETTING_IMPLEMENTATION_PLAN.md
